@@ -29,7 +29,7 @@ ON CONFLICT (id) DO NOTHING;
 
 ```bash
 npx supabase secrets set \
-  TELEGRAM_BOT_TOKEN=8781931871:AAGZXi1yN6TbkbF4rqHntWrlD6k3FeOSHhI \
+  TELEGRAM_BOT_TOKEN=<your-telegram-bot-token> \
   ANTHROPIC_API_KEY=<your-anthropic-key> \
   TELEGRAM_WEBHOOK_SECRET=<generate-random-32-char-string> \
   CRON_SECRET=<generate-another-random-string>
@@ -56,14 +56,14 @@ https://bitodtrjpebcqolpubgq.supabase.co/functions/v1/telegram-cron
 
 Replace `<WEBHOOK_SECRET>` with the value you set above:
 ```bash
-curl "https://api.telegram.org/bot8781931871:AAGZXi1yN6TbkbF4rqHntWrlD6k3FeOSHhI/setWebhook" \
+curl "https://api.telegram.org/bot<your-telegram-bot-token>/setWebhook" \
   -d "url=https://bitodtrjpebcqolpubgq.supabase.co/functions/v1/telegram-webhook" \
   -d "secret_token=<WEBHOOK_SECRET>"
 ```
 
 Verify:
 ```bash
-curl "https://api.telegram.org/bot8781931871:AAGZXi1yN6TbkbF4rqHntWrlD6k3FeOSHhI/getWebhookInfo"
+curl "https://api.telegram.org/bot<your-telegram-bot-token>/getWebhookInfo"
 ```
 
 ## 6. Set up cron (Supabase Dashboard)

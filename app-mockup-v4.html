@@ -1,0 +1,3318 @@
+<!DOCTYPE html>
+<html lang="sl">
+<head>
+<meta charset="UTF-8">
+<title>Renderspace — Invoice Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --p:#7c3aed;--ph:#6d28d9;--pl:#ede9fe;--pll:#f5f3ff;
+  --c0:#09090b;--c1:#18181b;--c2:#3f3f46;--c3:#71717a;--c4:#a1a1aa;--c5:#d4d4d8;--c6:#e4e4e7;--c7:#f4f4f5;--c8:#fafafa;
+  --bg:#f1f1f4;
+  --r:10px;--rp:100px;
+  --sh:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+  --shm:0 20px 60px rgba(0,0,0,.14),0 4px 16px rgba(0,0,0,.08);
+}
+body{font-family:'Figtree',-apple-system,sans-serif;font-size:14px;background:var(--bg);color:var(--c1);}
+
+/* Preview tab bar */
+.tabs{display:flex;gap:2px;padding:0 14px;overflow-x:auto;background:#fff;border-bottom:1px solid var(--c6);}
+.tab{padding:10px 14px;font-size:12px;font-weight:600;background:transparent;border:none;border-bottom:2.5px solid transparent;cursor:pointer;color:var(--c4);white-space:nowrap;transition:all .12s;letter-spacing:-.1px;margin-bottom:-1px;}
+.tab:hover{color:var(--c2);}
+.tab.active{color:var(--p);border-bottom-color:var(--p);}
+
+/* Layout */
+.app{display:flex;min-height:calc(100vh - 44px);}
+
+/* Sidebar */
+.sb{width:220px;background:#fff;border-right:1px solid var(--c6);display:flex;flex-direction:column;flex-shrink:0;}
+.sb-logo{padding:18px 16px 14px;border-bottom:1px solid var(--c7);}
+.sb-logo-t{font-size:15px;font-weight:800;letter-spacing:-.5px;color:var(--c0);}
+.sb-logo-s{font-size:11px;color:var(--c4);margin-top:1px;font-weight:500;}
+.sb-nav{padding:10px 8px;flex:1;overflow-y:auto;}
+.sb-lbl{font-size:10px;font-weight:700;color:var(--c5);text-transform:uppercase;letter-spacing:.8px;padding:8px 8px 3px;}
+.sb-item{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:8px;font-size:13px;font-weight:500;color:var(--c3);cursor:pointer;margin-bottom:1px;transition:all .12s;}
+.sb-item:hover{background:var(--c7);color:var(--c1);}
+.sb-item.active{background:var(--pll);color:var(--p);font-weight:700;}
+.sb-item svg{flex-shrink:0;opacity:.7;}
+.sb-item.active svg{opacity:1;}
+.sb-foot{padding:8px 8px 14px;border-top:1px solid var(--c7);}
+.av{width:28px;height:28px;background:var(--p);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0;}
+.main{flex:1;overflow:auto;}
+
+/* Page header */
+.ph{padding:20px 28px 16px;background:#fff;border-bottom:1px solid var(--c7);display:flex;align-items:flex-start;justify-content:space-between;gap:16px;}
+.ph-t{font-size:20px;font-weight:800;letter-spacing:-.5px;color:var(--c0);}
+.ph-s{font-size:13px;color:var(--c4);margin-top:3px;font-weight:400;}
+.ph-crumb{font-size:12px;color:var(--c4);margin-bottom:4px;cursor:pointer;font-weight:500;}
+.ph-crumb span{color:var(--p);}
+.ph-crumb span:hover{text-decoration:underline;}
+
+/* Buttons */
+.btn{padding:8px 16px;border-radius:var(--rp);font-size:13px;font-weight:700;border:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-family:inherit;transition:all .14s ease;white-space:nowrap;letter-spacing:-.1px;}
+.btn-p{background:var(--p);color:#fff;box-shadow:0 1px 4px rgba(124,58,237,.25);}
+.btn-p:hover{background:var(--ph);box-shadow:0 3px 12px rgba(124,58,237,.35);transform:translateY(-1px);}
+.btn-g{background:#fff;color:var(--c2);border:1px solid var(--c6);box-shadow:var(--sh);}
+.btn-g:hover{background:var(--c7);border-color:var(--c5);}
+.btn-sm{padding:7px 14px;font-size:12px;}
+.btn-xs{padding:4px 11px;font-size:11px;font-weight:700;}
+.btn-green{background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;}
+.btn-green:hover{background:#dcfce7;}
+
+/* Stats strip */
+.stats{display:grid;gap:10px;padding:16px 28px;}
+.sc{background:#fff;border:1px solid var(--c6);border-radius:var(--r);padding:14px 16px;border-left:3px solid var(--c,var(--c5));box-shadow:var(--sh);}
+.sc-l{font-size:10px;color:var(--c3);text-transform:uppercase;letter-spacing:.7px;margin-bottom:5px;font-weight:700;}
+.sc-v{font-size:21px;font-weight:800;letter-spacing:-.6px;font-variant-numeric:tabular-nums;}
+.sc-s{font-size:11px;color:var(--c4);margin-top:2px;font-weight:500;}
+
+/* Sections */
+.sec{padding:0 28px 28px;}
+.sec-bar{display:flex;align-items:center;justify-content:space-between;padding:16px 0 8px;}
+.sec-bar h3{font-size:14px;font-weight:700;color:var(--c1);}
+
+/* Cards */
+.card{background:#fff;border:1px solid var(--c6);border-radius:var(--r);overflow:hidden;margin-bottom:12px;box-shadow:var(--sh);}
+.ch{padding:12px 16px;border-bottom:1px solid var(--c7);display:flex;align-items:center;justify-content:space-between;}
+.ch h3{font-size:13px;font-weight:700;color:var(--c1);}
+.ch .note{font-size:11px;color:var(--c4);font-weight:400;margin-left:8px;}
+
+/* Tables */
+table{width:100%;border-collapse:collapse;}
+th{text-align:left;padding:9px 16px;background:var(--c8);border-bottom:1px solid var(--c6);color:var(--c3);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.6px;}
+td{padding:11px 16px;border-bottom:1px solid var(--c7);color:var(--c2);vertical-align:middle;font-size:13px;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:var(--c8);}
+.num{font-variant-numeric:tabular-nums;}
+.lnk{font-weight:700;color:var(--c0);cursor:pointer;transition:color .12s;}
+.lnk:hover{color:var(--p);}
+
+/* Badges */
+.badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:100px;font-size:11px;font-weight:700;white-space:nowrap;}
+.bg{background:var(--c7);color:var(--c3);}
+.bgreen{background:#f0fdf4;color:#16a34a;}
+.bblue{background:#eff6ff;color:#2563eb;}
+.bpurple{background:var(--pll);color:var(--p);}
+.bamber{background:#fffbeb;color:#d97706;}
+.bred{background:#fef2f2;color:#dc2626;}
+.tbadge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:100px;font-size:10px;font-weight:600;background:var(--c7);color:var(--c4);letter-spacing:.1px;}
+
+/* Progress bar */
+.pbar{height:3px;background:var(--c6);border-radius:2px;margin-top:5px;width:80px;}
+.pfill{height:100%;border-radius:2px;}
+
+/* Planning grid */
+.gw{background:#fff;border:1px solid var(--c6);border-radius:var(--r);overflow:hidden;box-shadow:var(--sh);}
+table.grid th{text-align:center;min-width:92px;}
+table.grid th:first-child{text-align:left;min-width:200px;padding-left:14px;}
+table.grid td{padding:0;border-bottom:1px solid #f1f1f4;}
+table.grid td:first-child{border-right:1px solid var(--c6);}
+table.grid tfoot td{padding:8px 12px;background:var(--c8);border-top:2px solid var(--c6);font-size:11px;font-weight:700;}
+.rrev td{background:#fff;}
+.rcost td{background:#fafafa;}
+.rcost-sep td{border-bottom:2px solid var(--c6) !important;}
+.ri{padding:10px 14px;}
+.rpn{font-size:13px;font-weight:700;cursor:pointer;transition:color .12s;}
+.rpn:hover{color:var(--p);}
+.rpc{font-size:11px;color:var(--c4);margin-top:2px;font-weight:500;}
+.rcost-lbl{font-size:10px;color:var(--c4);padding:10px 14px;display:block;font-weight:700;text-transform:uppercase;letter-spacing:.5px;}
+.cell{display:flex;align-items:center;justify-content:center;padding:10px 5px;border:none;background:transparent;font-size:12px;font-weight:600;color:var(--c5);width:100%;cursor:pointer;min-height:40px;font-family:inherit;transition:background .1s;font-variant-numeric:tabular-nums;}
+.cell:hover{background:var(--c7);}
+.cp{color:#16a34a;font-weight:700;background:#f0fdf4;}.cp:hover{background:#dcfce7;}
+.ci{color:#2563eb;font-weight:700;background:#eff6ff;}.ci:hover{background:#dbeafe;}
+.cpl{color:var(--p);font-weight:600;background:var(--pll);}.cpl:hover{background:#ddd6fe;}
+.cre{color:#d97706;font-weight:600;background:#fffbeb;}.cre:hover{background:#fef3c7;}
+.cc{color:#dc2626;font-weight:600;background:#fef2f2;}.cc:hover{background:#fee2e2;}
+.leg{display:flex;gap:14px;padding:10px 16px;border-top:1px solid var(--c7);flex-wrap:wrap;}
+.le{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--c4);font-weight:500;}
+.ld{width:9px;height:9px;border-radius:3px;}
+
+/* Period controls */
+.psel{background:#fff;border:1px solid var(--c6);color:var(--c2);padding:6px 12px;border-radius:var(--rp);font-size:13px;font-family:inherit;font-weight:600;box-shadow:var(--sh);cursor:pointer;}
+.pbtn{background:#fff;border:1px solid var(--c6);color:var(--c3);width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh);transition:all .12s;line-height:1;}
+.pbtn:hover{background:var(--c7);}
+
+/* Project detail field grid */
+.fg{display:grid;grid-template-columns:repeat(3,1fr);background:#fff;border-bottom:1px solid var(--c6);}
+.fgf{padding:14px 28px;border-right:1px solid var(--c7);}
+.fgf:nth-child(3n){border-right:none;}
+.fgf:nth-child(n+4){border-top:1px solid var(--c7);}
+.fl{font-size:10px;color:var(--c3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px;font-weight:700;}
+.fv{font-size:13px;font-weight:600;color:var(--c1);}
+
+/* Screens */
+.screen{display:none;}.screen.active{display:block;}
+
+/* Modal overlay */
+.moverlay{position:fixed;inset:0;background:rgba(0,0,0,.28);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;z-index:100;padding:20px;}
+.moverlay.open{display:flex;}
+.modal{background:#fff;border-radius:14px;width:100%;max-width:520px;box-shadow:var(--shm);max-height:90vh;display:flex;flex-direction:column;}
+.modal-wide{max-width:660px;}
+.mh{padding:20px 24px 14px;border-bottom:1px solid var(--c7);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.mh h2{font-size:16px;font-weight:800;letter-spacing:-.3px;color:var(--c0);}
+.mclose{background:none;border:none;cursor:pointer;color:var(--c4);width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;transition:all .12s;font-family:inherit;}
+.mclose:hover{background:var(--c7);color:var(--c2);}
+.mb{padding:20px 24px;overflow-y:auto;flex:1;}
+.mf{padding:14px 24px;border-top:1px solid var(--c7);display:flex;justify-content:flex-end;gap:8px;flex-shrink:0;}
+
+/* Form groups */
+.fg2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
+.fg3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;}
+.fgrp{margin-bottom:0;}
+.fgrp label{font-size:10px;font-weight:700;color:var(--c3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;}
+.fgrp input,.fgrp select,.fgrp textarea{width:100%;padding:9px 12px;border:1.5px solid var(--c6);border-radius:8px;font-size:13px;font-family:inherit;color:var(--c0);background:#fff;transition:border-color .12s;font-weight:500;}
+.fgrp input:focus,.fgrp select:focus,.fgrp textarea:focus{outline:none;border-color:var(--p);}
+.fgrp textarea{resize:none;}
+
+/* Modal context strip */
+.m-ctx{font-size:13px;color:var(--c3);margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--c7);display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.m-ctx strong{color:var(--c0);}
+
+/* Modal tab switcher */
+.mtabs{display:flex;gap:0;border:1.5px solid var(--c6);border-radius:8px;overflow:hidden;margin-bottom:18px;}
+.mtab{flex:1;padding:8px 12px;font-size:13px;font-weight:600;border:none;cursor:pointer;background:#fff;color:var(--c4);font-family:inherit;transition:all .12s;}
+.mtab+.mtab{border-left:1.5px solid var(--c6);}
+.mtab.active{background:var(--p);color:#fff;}
+
+/* Project type pills */
+.tpills{display:flex;gap:8px;margin-bottom:16px;}
+.tpill{flex:1;padding:12px 8px;border:1.5px solid var(--c6);border-radius:var(--r);cursor:pointer;text-align:center;transition:all .12s;}
+.tpill .pn{font-size:13px;font-weight:700;margin-top:5px;}
+.tpill .pd{font-size:11px;color:var(--c4);margin-top:2px;}
+.tpill.sel-f{border-color:#16a34a;background:#f0fdf4;}.tpill.sel-f .pn{color:#16a34a;}
+.tpill.sel-m{border-color:#2563eb;background:#eff6ff;}.tpill.sel-m .pn{color:#2563eb;}
+.tpill.sel-r{border-color:#d97706;background:#fffbeb;}.tpill.sel-r .pn{color:#d97706;}
+
+/* Info box */
+.info-box{background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px 14px;font-size:12px;color:#0369a1;display:flex;align-items:flex-start;gap:8px;font-weight:500;line-height:1.5;margin-top:4px;}
+.info-box svg{flex-shrink:0;margin-top:1px;}
+
+/* Probability pills */
+.prob-pill{flex:1;padding:9px 4px;font-size:12px;font-weight:700;border:1.5px solid var(--c6);border-radius:8px;background:#fff;color:var(--c3);cursor:pointer;font-family:inherit;text-align:center;line-height:1.3;transition:all .12s;}
+.prob-pill:hover{border-color:var(--c5);background:var(--c7);}
+.pp-sel{border-color:var(--p);background:var(--pll);color:var(--p);}
+.prob-pct{font-size:10px;font-weight:500;opacity:.65;display:block;margin-top:2px;}
+
+/* Actual amount input */
+.actual-in{padding:6px 10px;border:1.5px solid var(--c6);border-radius:8px;font-size:13px;font-family:inherit;width:120px;transition:border-color .12s;font-weight:500;font-variant-numeric:tabular-nums;}
+.actual-in:focus{outline:none;border-color:var(--p);}
+
+/* ---- Statistics screen ---- */
+.stat-body{padding:16px 28px 32px;}
+.stat-kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px;}
+.skpi{background:#fff;border:1px solid var(--c6);border-radius:var(--r);padding:14px 16px;box-shadow:var(--sh);}
+.skpi-l{font-size:10px;color:var(--c4);text-transform:uppercase;letter-spacing:.7px;margin-bottom:5px;font-weight:700;}
+.skpi-v{font-size:22px;font-weight:800;letter-spacing:-.6px;font-variant-numeric:tabular-nums;color:var(--c0);}
+.skpi-s{font-size:11px;color:var(--c4);margin-top:3px;font-weight:500;}
+.stat-row{display:grid;gap:16px;margin-bottom:16px;}
+.stat-row-2{grid-template-columns:2fr 1fr;}
+.stat-row-eq{grid-template-columns:1fr 1fr;}
+.schart{background:#fff;border:1px solid var(--c6);border-radius:var(--r);padding:16px 18px 14px;box-shadow:var(--sh);}
+.schart-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;}
+.schart-title{font-size:13px;font-weight:700;color:var(--c1);}
+.schart-sub{font-size:11px;color:var(--c4);}
+.bar-leg{display:flex;gap:14px;margin-top:10px;}
+.bar-le{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--c4);font-weight:500;}
+.bar-ld{width:10px;height:10px;border-radius:3px;}
+.cbar-row{display:flex;align-items:center;gap:10px;margin-bottom:9px;}
+.cbar-row:last-child{margin-bottom:0;}
+.cbar-name{font-size:12px;font-weight:600;color:var(--c2);width:130px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cbar-track{flex:1;height:7px;background:var(--c7);border-radius:4px;overflow:hidden;}
+.cbar-fill{height:100%;border-radius:4px;}
+.cbar-val{font-size:12px;font-weight:700;color:var(--c1);font-variant-numeric:tabular-nums;width:56px;text-align:right;flex-shrink:0;}
+.fc-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--c7);font-size:13px;}
+.fc-row:last-child{border-bottom:none;}
+.fc-month{font-weight:600;color:var(--c1);}
+.fc-prob{font-size:11px;color:var(--c4);margin-top:2px;}
+.fc-amt{font-weight:700;font-variant-numeric:tabular-nums;color:var(--c1);}
+.donut-wrap{display:flex;flex-direction:column;align-items:center;gap:12px;}
+.donut-legend{display:flex;flex-direction:column;gap:7px;width:100%;}
+.donut-le{display:flex;align-items:center;gap:8px;font-size:12px;}
+.donut-ld{width:10px;height:10px;border-radius:3px;flex-shrink:0;}
+.donut-ln{color:var(--c2);font-weight:600;flex:1;}
+.donut-lv{color:var(--c3);font-weight:500;font-variant-numeric:tabular-nums;}
+
+/* Monthly rows in Add Plan modal */
+.month-rows-wrap{max-height:280px;overflow-y:auto;border:1.5px solid var(--c6);border-radius:8px;margin-bottom:12px;}
+.month-rows-wrap table{font-size:12px;}
+.month-rows-wrap th{font-size:10px;position:sticky;top:0;z-index:1;background:var(--c8);}
+.month-rows-wrap td{padding:8px 12px;font-size:12px;}
+.month-rows-wrap tr:last-child td{border-bottom:none;}
+.mri{width:100%;padding:5px 8px;border:1.5px solid var(--c6);border-radius:6px;font-size:12px;font-family:inherit;font-weight:500;font-variant-numeric:tabular-nums;transition:border-color .12s;background:#fff;color:var(--c0);}
+.mri:focus{outline:none;border-color:var(--p);}
+.mrs{width:100%;padding:5px 8px;border:1.5px solid var(--c6);border-radius:6px;font-size:12px;font-family:inherit;font-weight:500;background:#fff;color:var(--c0);transition:border-color .12s;cursor:pointer;}
+.mrs:focus{outline:none;border-color:var(--p);}
+.total-row td{background:var(--c8)!important;font-weight:700;border-top:2px solid var(--c6)!important;}
+
+/* Pending row highlight */
+.row-pending{background:#fffcf0!important;}
+.row-pending td{border-bottom-color:#fef3c7!important;}
+/* Infrastructure tabs */
+.infra-tabs{display:flex;gap:0;border-bottom:2px solid var(--c6);padding:0 28px;background:#fff;}
+.infra-tab{padding:10px 18px;font-size:13px;font-weight:600;color:var(--c4);border:none;background:transparent;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;font-family:inherit;display:flex;align-items:center;gap:7px;transition:all .12s;}
+.infra-tab:hover{color:var(--c1);}
+.infra-tab.active{color:var(--p);border-bottom-color:var(--p);}
+.itab-badge{font-size:10px;font-weight:700;padding:1px 7px;border-radius:100px;}
+/* Domain groups */
+.dom-group{margin-bottom:10px;}
+.dom-ghdr{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--c8);border:1px solid var(--c6);border-radius:var(--r);cursor:pointer;user-select:none;transition:border-color .12s;}
+.dom-ghdr:hover{border-color:var(--c5);}
+.dom-ghdr.open{border-radius:var(--r) var(--r) 0 0;border-color:var(--c5);}
+.dom-garrow{font-size:11px;color:var(--c4);transition:transform .15s;display:inline-block;}
+.dom-ghdr.open .dom-garrow{transform:rotate(0deg);}
+.dom-ghdr:not(.open) .dom-garrow{transform:rotate(-90deg);}
+.dom-gbody{display:none;background:#fff;border:1px solid var(--c5);border-top:none;border-radius:0 0 var(--r) var(--r);}
+.dom-gbody.open{display:block;}
+.dom-row{display:flex;align-items:center;padding:10px 14px;border-bottom:1px solid var(--c7);font-size:13px;gap:0;}
+.dom-row:last-child{border-bottom:none;}
+.dom-name{font-weight:600;color:var(--c1);flex:1;font-variant-numeric:tabular-nums;}
+.dom-exp{font-size:12px;color:var(--c4);width:160px;flex-shrink:0;}
+.dom-status{flex-shrink:0;width:130px;text-align:right;}
+/* Revenue planner section rows */
+.rsec td{background:var(--c7)!important;padding:5px 14px!important;font-size:10px!important;font-weight:700!important;color:var(--c4)!important;text-transform:uppercase!important;letter-spacing:.8px!important;border-top:2px solid var(--c6)!important;border-bottom:1px solid var(--c6)!important;}
+.rsec:first-child td{border-top:none!important;}
+.rother td{background:#fafaf9;}
+.cell-ro{display:block;width:100%;text-align:center;font-size:12px;font-weight:500;color:var(--c3);font-variant-numeric:tabular-nums;padding:6px 4px;cursor:default;user-select:none;}
+
+/* Email tool */
+.ew{padding:20px 28px;display:grid;grid-template-columns:1fr 1fr;gap:24px;}
+.fin{width:100%;padding:9px 12px;background:#fff;border:1.5px solid var(--c6);border-radius:8px;font-size:13px;font-family:inherit;margin-bottom:12px;transition:border-color .12s;font-weight:500;color:var(--c0);}
+.fin:focus{outline:none;border-color:var(--p);}
+.elbl{font-size:10px;font-weight:700;color:var(--c3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;}
+.eout{background:var(--c8);border:1.5px solid var(--c6);border-radius:8px;padding:16px 18px;font-size:12px;font-family:'SF Mono','Fira Code',monospace;color:var(--c2);line-height:1.9;white-space:pre-wrap;min-height:280px;}
+/* ---- Tools screen ---- */
+.tools-body{padding:28px;max-width:760px;margin:0 auto;}
+/* Project row in AI timesheet */
+.ts-proj-row{display:grid;grid-template-columns:130px 1fr 148px 28px;gap:10px;align-items:start;padding:12px 18px;border-bottom:1px solid var(--c7);}
+.ts-proj-row:last-child{border-bottom:none;}
+.ts-proj-row:hover{background:var(--c8);}
+.ts-alloc-wrap{display:flex;flex-direction:column;gap:5px;}
+.ts-alloc-toggle{display:flex;border:1.5px solid var(--c6);border-radius:7px;overflow:hidden;width:100%;background:#fff;}
+.ts-alloc-toggle button{flex:1;padding:5px 8px;font-size:11px;font-weight:700;border:none;cursor:pointer;font-family:inherit;transition:all .12s;color:var(--c4);background:transparent;}
+.ts-alloc-toggle button.on{background:var(--p);color:#fff;}
+.ts-alloc-inp-row{display:flex;align-items:center;gap:6px;}
+.ts-alloc-inp-row input{width:62px;padding:5px 8px;border:1.5px solid var(--c6);border-radius:6px;font-size:12px;font-family:inherit;text-align:center;font-variant-numeric:tabular-nums;background:#fff;color:var(--c0);}
+.ts-alloc-inp-row input:focus{outline:none;border-color:var(--p);}
+.ts-hrs-badge{font-size:11px;font-weight:700;color:var(--p);min-width:40px;}
+.ts-fin{width:100%;padding:6px 10px;border:1.5px solid var(--c6);border-radius:7px;font-size:12px;font-family:inherit;color:var(--c0);background:#fff;transition:border-color .12s;}
+.ts-fin:focus{outline:none;border-color:var(--p);}
+.ts-pn-tag{font-size:10px;font-weight:700;color:var(--c3);background:var(--c7);padding:2px 7px;border-radius:100px;white-space:nowrap;margin-top:4px;display:inline-block;}
+.ts-alloc-bar{height:4px;border-radius:2px;background:var(--c6);margin:10px 18px 0;overflow:hidden;}
+.ts-alloc-bar-fill{height:100%;border-radius:2px;background:var(--p);transition:width .25s;}
+.ts-alloc-summary{padding:8px 18px 12px;display:flex;align-items:center;justify-content:space-between;}
+.ts-proj-add-row{padding:12px 18px;}
+.ts-proj-select{width:100%;padding:6px 10px;border:1.5px solid var(--c6);border-radius:7px;font-size:12px;font-family:inherit;color:var(--c0);background:#fff;cursor:pointer;transition:border-color .12s;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;padding-right:28px;}
+.ts-proj-select:focus{outline:none;border-color:var(--p);}
+.ts-col-hd{font-size:10px;font-weight:700;color:var(--c4);text-transform:uppercase;letter-spacing:.5px;}
+.ts-proj-hdr{display:grid;grid-template-columns:130px 1fr 148px 28px;gap:10px;padding:8px 18px 6px;border-bottom:1px solid var(--c7);background:var(--c8);}
+.ts-remove-btn{width:24px;height:24px;border:none;background:transparent;cursor:pointer;color:var(--c4);display:flex;align-items:center;justify-content:center;border-radius:5px;transition:all .12s;margin-top:2px;}
+.ts-remove-btn:hover{background:var(--c7);color:#dc2626;}
+.tool-card{display:flex;align-items:center;gap:16px;background:#fff;border:1px solid var(--c6);border-radius:var(--r);padding:18px 20px;margin-bottom:10px;cursor:pointer;transition:all .14s;box-shadow:var(--sh);}
+.tool-card:hover{border-color:var(--p);box-shadow:0 4px 16px rgba(124,58,237,.1);transform:translateY(-1px);}
+.tool-icon{width:44px;height:44px;border-radius:10px;background:var(--p);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.tool-body{flex:1;min-width:0;}
+.tool-title{font-size:14px;font-weight:700;color:var(--c0);display:flex;align-items:center;gap:8px;margin-bottom:3px;}
+.tool-desc{font-size:12px;color:var(--c3);line-height:1.5;}
+.tool-arrow{color:var(--c5);flex-shrink:0;}
+.tool-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:100px;background:var(--pll);color:var(--p);}
+.tool-badge-draft{background:var(--c7);color:var(--c3);}
+.tool-section-head{font-size:11px;font-weight:700;color:var(--c4);text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px;margin-top:8px;}
+/* New client inline input */
+.nc-wrap{margin-top:8px;display:none;}
+.nc-wrap.show{display:block;}
+.nc-wrap input{width:100%;padding:9px 12px;border:1.5px solid var(--p);border-radius:8px;font-size:13px;font-family:inherit;color:var(--c0);background:#fff;font-weight:500;}
+.nc-wrap input:focus{outline:none;box-shadow:0 0 0 3px rgba(124,58,237,.1);}
+.nc-wrap-label{font-size:11px;color:var(--p);font-weight:600;margin-bottom:5px;display:flex;align-items:center;gap:5px;}
+/* AI Timesheet screen */
+.ts-body{padding:20px 28px 32px;display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start;}
+.ts-panel{background:#fff;border:1px solid var(--c6);border-radius:var(--r);overflow:hidden;box-shadow:var(--sh);}
+.ts-ph{padding:14px 18px;border-bottom:1px solid var(--c7);display:flex;align-items:center;justify-content:space-between;}
+.ts-ph h3{font-size:13px;font-weight:700;color:var(--c1);}
+.ts-body-in{padding:16px 18px;}
+.ts-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--c7);font-size:12px;}
+.ts-row:last-child{border-bottom:none;}
+.ts-pn{font-weight:600;color:var(--c1);flex:1;}
+.ts-desc{color:var(--c3);font-size:11px;margin-top:2px;line-height:1.4;}
+.ts-hrs{font-weight:700;font-variant-numeric:tabular-nums;color:var(--p);white-space:nowrap;margin-left:12px;}
+.ts-status-badge{font-size:10px;padding:2px 7px;border-radius:100px;font-weight:700;}
+.ts-status-ai{background:var(--pll);color:var(--p);}
+.ts-status-empty{background:var(--c7);color:var(--c4);}
+.pn-table{width:100%;border-collapse:collapse;margin-top:8px;}
+.pn-table th{font-size:10px;color:var(--c3);font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:6px 10px;background:var(--c8);border-bottom:1px solid var(--c6);}
+.pn-table td{padding:8px 10px;border-bottom:1px solid var(--c7);font-size:12px;vertical-align:middle;}
+.pn-table tr:last-child td{border-bottom:none;}
+.pn-table input[type=number]{width:62px;padding:5px 8px;border:1.5px solid var(--c6);border-radius:6px;font-size:12px;font-family:inherit;text-align:center;font-variant-numeric:tabular-nums;}
+.pn-table input[type=number]:focus{outline:none;border-color:var(--p);}
+</style>
+</head>
+<body>
+
+<!-- Preview tab bar -->
+<div class="tabs">
+  <div class="tab active" onclick="go('planning',this,'planning')">Revenue Planner</div>
+  <div class="tab" onclick="go('inv-month',this,'inv-month')">This Month</div>
+  <div class="tab" onclick="go('clients',this,'clients')">Clients</div>
+  <div class="tab" onclick="go('client-detail',this,'clients')">Single Client</div>
+  <div class="tab" onclick="go('projects',this,'projects')">Projects</div>
+  <div class="tab" onclick="go('project-detail',this,'projects')">Single Project</div>
+  <div class="tab" onclick="go('email',this,'email')">Email Tool</div>
+  <div class="tab" onclick="go('stats',this,'stats')">Statistics</div>
+  <div class="tab" onclick="go('tools',this,'tools')">Tools</div>
+  <div class="tab" onclick="go('ai-timesheet',this,'tools')">AI Timesheet</div>
+  <div class="tab" onclick="go('infrastructure',this,'infrastructure')">Infrastructure</div>
+  <div class="tab" onclick="go('domains',this,'domains')">Domains</div>
+</div>
+
+<div class="app">
+
+<!-- Sidebar -->
+<div class="sb">
+  <div class="sb-logo">
+    <div class="sb-logo-t">Renderspace</div>
+    <div class="sb-logo-s">Invoice Tracker</div>
+  </div>
+  <div class="sb-nav">
+    <div class="sb-lbl">Overview</div>
+    <div class="sb-item" id="n-stats" onclick="go('stats',null,'stats')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18.4 9.4l-4.9 4.9-2.8-2.8L6 16"/></svg>
+      Statistics
+    </div>
+    <div class="sb-lbl" style="margin-top:8px">Clients &amp; Projects</div>
+    <div class="sb-item" id="n-clients" onclick="go('clients',null,'clients')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+      Clients
+    </div>
+    <div class="sb-item" id="n-projects" onclick="go('projects',null,'projects')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
+      Projects
+    </div>
+    <div class="sb-item" id="n-infrastructure" onclick="go('infrastructure',null,'infrastructure')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+      Infrastructure
+    </div>
+    <div class="sb-item" id="n-domains" onclick="go('domains',null,'domains')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      Domains <span style="font-size:9px;font-weight:700;background:#fee2e2;color:#dc2626;padding:1px 5px;border-radius:100px;margin-left:2px">2</span>
+    </div>
+    <div class="sb-lbl" style="margin-top:8px">Invoices</div>
+    <div class="sb-item active" id="n-planning" onclick="go('planning',null,'planning')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      Revenue Planner
+    </div>
+    <div class="sb-item" id="n-inv-month" onclick="go('inv-month',null,'inv-month')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+      This Month
+    </div>
+    <div class="sb-lbl" style="margin-top:8px">Tools</div>
+    <div class="sb-item" id="n-tools" onclick="go('tools',null,'tools')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+      Tools
+    </div>
+  </div>
+  <div class="sb-foot">
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;">
+      <div class="av">N</div>
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--c0)">Nino</div>
+        <div style="font-size:11px;color:var(--c4)">Admin</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+
+<!-- ====================================================== -->
+<!-- SCREEN 1: INVOICE PLANNING                              -->
+<!-- ====================================================== -->
+<div class="screen active" id="screen-planning">
+  <div class="ph">
+    <div>
+      <div class="ph-t">Revenue Planner</div>
+      <div class="ph-s">Plan revenue, costs &amp; forecasts across projects &mdash; H1 2026</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <div style="display:flex;align-items:center;gap:5px">
+        <button class="pbtn">&#8249;</button>
+        <select class="psel"><option>H1 2026</option><option>H2 2026</option><option>FY 2026</option></select>
+        <button class="pbtn">&#8250;</button>
+      </div>
+      <button class="btn btn-g btn-sm">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export
+      </button>
+      <button class="btn btn-p btn-sm" onclick="openAddPlan()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Entry
+      </button>
+    </div>
+  </div>
+  <div class="stats" style="grid-template-columns:repeat(5,1fr)">
+    <div class="sc" style="--c:var(--c5)"><div class="sc-l">Total Planned H1</div><div class="sc-v">&#8364;196k</div></div>
+    <div class="sc" style="--c:#16a34a"><div class="sc-l">Fixed</div><div class="sc-v" style="color:#16a34a">&#8364;108k</div><div class="sc-s">3 projects</div></div>
+    <div class="sc" style="--c:#2563eb"><div class="sc-l">Maintenance</div><div class="sc-v" style="color:#2563eb">&#8364;36k</div><div class="sc-s">Recurring</div></div>
+    <div class="sc" style="--c:#d97706"><div class="sc-l">Retainer (~70%)</div><div class="sc-v" style="color:#d97706">&#8364;52k</div></div>
+    <div class="sc" style="--c:var(--p)"><div class="sc-l">Issued YTD</div><div class="sc-v" style="color:var(--p)">&#8364;42k</div></div>
+  </div>
+  <div class="sec">
+    <div class="gw">
+      <div style="overflow-x:auto">
+        <table class="grid">
+          <thead><tr>
+            <th>Project / Client</th>
+            <th>Jan 26</th><th>Feb 26</th><th>Mar 26</th><th>Apr 26</th><th>May 26</th><th>Jun 26</th>
+            <th style="text-align:right;padding-right:16px">Total</th>
+          </tr></thead>
+          <tbody>
+            <!-- ── PROJECTS section ── -->
+            <tr class="rsec"><td colspan="8">Projects</td></tr>
+            <tr class="rrev">
+              <td><div class="ri">
+                <div style="display:flex;align-items:center;gap:7px"><span class="rpn" onclick="go('project-detail',null,'projects')">MG+MSUM Prenova</span><span class="tbadge">Fixed</span></div>
+                <div class="rpc">Moderna galerija</div>
+              </div></td>
+              <td><button class="cell cp">&#8364;11.9k</button></td><td><button class="cell cp">&#8364;14.3k</button></td><td><button class="cell ci">&#8364;10.3k</button></td><td><button class="cell cpl">&#8364;2.5k</button></td><td><button class="cell cpl">&#8364;10.3k</button></td><td><button class="cell">&mdash;</button></td>
+              <td style="text-align:right;padding-right:16px;font-weight:700;font-variant-numeric:tabular-nums">&#8364;49.3k</td>
+            </tr>
+            <tr class="rcost rcost-sep">
+              <td><span class="rcost-lbl">Costs</span></td>
+              <td><button class="cell cc">&#8364;800</button></td><td><button class="cell cc">&#8364;1.2k</button></td><td><button class="cell cc">&#8364;600</button></td><td><button class="cell">&mdash;</button></td><td><button class="cell">&mdash;</button></td><td><button class="cell">&mdash;</button></td>
+              <td style="text-align:right;padding-right:16px;font-weight:500;color:var(--c5);font-variant-numeric:tabular-nums">&#8364;2.6k</td>
+            </tr>
+            <tr class="rrev">
+              <td><div class="ri">
+                <div style="display:flex;align-items:center;gap:7px"><span class="rpn">Unichem Digitalizacija</span><span class="tbadge">Maintenance</span></div>
+                <div class="rpc">Unichem d.o.o.</div>
+              </div></td>
+              <td><button class="cell cp">&#8364;4.0k</button></td><td><button class="cell cp">&#8364;4.0k</button></td><td><button class="cell ci">&#8364;4.0k</button></td><td><button class="cell cpl">&#8364;4.0k</button></td><td><button class="cell cpl">&#8364;4.0k</button></td><td><button class="cell cpl">&#8364;4.0k</button></td>
+              <td style="text-align:right;padding-right:16px;font-weight:700;font-variant-numeric:tabular-nums">&#8364;24.0k</td>
+            </tr>
+            <tr class="rcost rcost-sep">
+              <td><span class="rcost-lbl">Costs</span></td>
+              <td><button class="cell">&mdash;</button></td><td><button class="cell cc">&#8364;200</button></td><td><button class="cell">&mdash;</button></td><td><button class="cell">&mdash;</button></td><td><button class="cell">&mdash;</button></td><td><button class="cell">&mdash;</button></td>
+              <td style="text-align:right;padding-right:16px;font-weight:500;color:var(--c5);font-variant-numeric:tabular-nums">&#8364;200</td>
+            </tr>
+            <tr class="rrev">
+              <td><div class="ri">
+                <div style="display:flex;align-items:center;gap:7px"><span class="rpn">OKS TV Broadcast</span><span class="tbadge">Retainer</span></div>
+                <div class="rpc">OKS</div>
+              </div></td>
+              <td><button class="cell">&mdash;</button></td><td><button class="cell">&mdash;</button></td><td><button class="cell cre">&#8364;18.3k</button></td><td><button class="cell cre">&#8364;18.3k</button></td><td><button class="cell cre">&#8364;12.2k</button></td><td><button class="cell cre">&#8364;12.2k</button></td>
+              <td style="text-align:right;padding-right:16px;font-weight:700;font-variant-numeric:tabular-nums">&#8364;61.0k</td>
+            </tr>
+            <tr class="rcost">
+              <td><span class="rcost-lbl">Costs</span></td>
+              <td><button class="cell">&mdash;</button></td><td><button class="cell">&mdash;</button></td><td><button class="cell cc">&#8364;2.1k</button></td><td><button class="cell">&mdash;</button></td><td><button class="cell">&mdash;</button></td><td><button class="cell">&mdash;</button></td>
+              <td style="text-align:right;padding-right:16px;font-weight:500;color:var(--c5);font-variant-numeric:tabular-nums">&#8364;2.1k</td>
+            </tr>
+            <!-- ── OTHERS section ── -->
+            <tr class="rsec"><td colspan="8">Others &nbsp;<span style="font-weight:400;text-transform:none;letter-spacing:0;opacity:.6;font-size:10px">auto-populated from Infrastructure &amp; Domains</span></td></tr>
+            <tr class="rother">
+              <td><div class="ri">
+                <div style="display:flex;align-items:center;gap:7px">
+                  <span style="font-weight:600;color:var(--c1)">Hosting</span>
+                  <span class="tbadge" style="background:var(--pll);color:var(--p);border-color:#ddd6fe;cursor:pointer" onclick="go('infrastructure',null,'infrastructure')">&#8599; Infrastructure</span>
+                </div>
+                <div class="rpc">4 active clients · monthly equiv.</div>
+              </div></td>
+              <td><span class="cell-ro">&#8364;336</span></td><td><span class="cell-ro">&#8364;336</span></td><td><span class="cell-ro">&#8364;336</span></td><td><span class="cell-ro">&#8364;336</span></td><td><span class="cell-ro">&#8364;336</span></td><td><span class="cell-ro">&#8364;336</span></td>
+              <td style="text-align:right;padding-right:16px;font-weight:500;color:var(--c3);font-variant-numeric:tabular-nums;font-size:12px">&#8364;2.0k</td>
+            </tr>
+            <tr class="rother">
+              <td><div class="ri">
+                <div style="display:flex;align-items:center;gap:7px">
+                  <span style="font-weight:600;color:var(--c1)">Domain renewals</span>
+                  <span class="tbadge" style="background:var(--pll);color:var(--p);border-color:#ddd6fe;cursor:pointer" onclick="go('domains',null,'domains')">&#8599; Domains</span>
+                  <span style="background:#fef2f2;color:#dc2626;padding:2px 7px;border-radius:100px;font-size:10px;font-weight:700">2 due Mar</span>
+                </div>
+                <div class="rpc">PN 1159 · modernagalerija.si + oks.si expiring this month</div>
+              </div></td>
+              <td><span class="cell-ro" style="color:#dc2626;font-weight:700">&#8364;45</span></td><td><span class="cell-ro">—</span></td><td><span class="cell-ro">—</span></td><td><span class="cell-ro">—</span></td><td><span class="cell-ro">—</span></td><td><span class="cell-ro">—</span></td>
+              <td style="text-align:right;padding-right:16px;font-weight:500;color:var(--c3);font-variant-numeric:tabular-nums;font-size:12px">&#8364;45</td>
+            </tr>
+          </tbody>
+          <tfoot><tr>
+            <td style="padding-left:14px;color:var(--c4);font-size:10px;letter-spacing:.6px;text-transform:uppercase;font-weight:700">Monthly Total</td>
+            <td style="text-align:center"><div style="color:#16a34a;font-weight:700;font-size:12px;font-variant-numeric:tabular-nums">&#8364;16.2k</div><div style="color:var(--c4);font-size:10px;margin-top:1px;font-variant-numeric:tabular-nums">costs &#8364;0.8k</div></td>
+            <td style="text-align:center"><div style="color:#16a34a;font-weight:700;font-size:12px;font-variant-numeric:tabular-nums">&#8364;18.6k</div><div style="color:var(--c4);font-size:10px;margin-top:1px;font-variant-numeric:tabular-nums">costs &#8364;1.4k</div></td>
+            <td style="text-align:center"><div style="color:#16a34a;font-weight:700;font-size:12px;font-variant-numeric:tabular-nums">&#8364;33.0k</div><div style="color:var(--c4);font-size:10px;margin-top:1px;font-variant-numeric:tabular-nums">costs &#8364;2.7k</div></td>
+            <td style="text-align:center"><div style="color:#16a34a;font-weight:700;font-size:12px;font-variant-numeric:tabular-nums">&#8364;25.1k</div></td>
+            <td style="text-align:center"><div style="color:#16a34a;font-weight:700;font-size:12px;font-variant-numeric:tabular-nums">&#8364;26.8k</div></td>
+            <td style="text-align:center"><div style="color:#16a34a;font-weight:700;font-size:12px;font-variant-numeric:tabular-nums">&#8364;16.5k</div></td>
+            <td style="text-align:right;padding-right:16px;color:var(--p);font-weight:700;font-size:13px;font-variant-numeric:tabular-nums">&#8364;136.3k</td>
+          </tr></tfoot>
+        </table>
+      </div>
+      <div class="leg">
+        <div class="le"><div class="ld" style="background:#dcfce7;border:1px solid #16a34a"></div>Paid</div>
+        <div class="le"><div class="ld" style="background:#dbeafe;border:1px solid #2563eb"></div>Issued</div>
+        <div class="le"><div class="ld" style="background:#ede9fe;border:1px solid var(--p)"></div>Planned</div>
+        <div class="le"><div class="ld" style="background:#fef3c7;border:1px solid #d97706"></div>Retainer</div>
+        <div class="le"><div class="ld" style="background:#fee2e2;border:1px solid #dc2626"></div>Costs</div>
+        <div style="margin-left:auto;font-size:11px;color:var(--c5)">Click any cell to view details</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ====================================================== -->
+<!-- SCREEN 9: STATISTICS                                    -->
+<!-- ====================================================== -->
+<div class="screen" id="screen-stats">
+  <div class="ph">
+    <div>
+      <div class="ph-t">Statistics</div>
+      <div class="ph-s">Revenue performance &amp; forecasts</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <select class="psel" id="stat-period" onchange="renderStats()">
+        <option value="ytd">YTD 2026</option>
+        <option value="h1">H1 2026</option>
+        <option value="h2">H2 2026</option>
+        <option value="fy">Full Year 2026</option>
+      </select>
+      <button class="btn btn-g btn-sm">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export
+      </button>
+    </div>
+  </div>
+  <div class="stat-body">
+    <!-- KPI row -->
+    <div class="stat-kpi">
+      <div class="skpi">
+        <div class="skpi-l">Revenue issued</div>
+        <div class="skpi-v" id="sk-issued">€48.5k</div>
+        <div class="skpi-s">Jan–Mar 2026</div>
+      </div>
+      <div class="skpi">
+        <div class="skpi-l">Avg / month</div>
+        <div class="skpi-v" id="sk-avg">€16.2k</div>
+        <div class="skpi-s">issued months only</div>
+      </div>
+      <div class="skpi">
+        <div class="skpi-l">Collection rate</div>
+        <div class="skpi-v" id="sk-rate" style="color:#16a34a">91%</div>
+        <div class="skpi-s">of planned that was issued</div>
+      </div>
+      <div class="skpi">
+        <div class="skpi-l">Costs ratio</div>
+        <div class="skpi-v" id="sk-costs" style="color:#d97706">4.8%</div>
+        <div class="skpi-s">costs vs revenue</div>
+      </div>
+    </div>
+
+    <!-- Bar chart + Donut -->
+    <div class="stat-row stat-row-2">
+      <div class="schart">
+        <div class="schart-head">
+          <div>
+            <div class="schart-title">Monthly Revenue</div>
+            <div class="schart-sub">Planned vs Issued — H1 2026</div>
+          </div>
+        </div>
+        <div id="bar-chart"></div>
+        <div class="bar-leg">
+          <div class="bar-le"><div class="bar-ld" style="background:#ede9fe;border:1.5px solid #c4b5fd"></div> Planned</div>
+          <div class="bar-le"><div class="bar-ld" style="background:#7c3aed"></div> Issued</div>
+          <div class="bar-le"><div class="bar-ld" style="background:#fbbf24"></div> Costs</div>
+        </div>
+      </div>
+      <div class="schart" style="display:flex;flex-direction:column;">
+        <div class="schart-head">
+          <div>
+            <div class="schart-title">Revenue by Type</div>
+            <div class="schart-sub">Portfolio mix YTD</div>
+          </div>
+        </div>
+        <div class="donut-wrap" style="flex:1;justify-content:center;">
+          <div id="donut-chart"></div>
+          <div class="donut-legend">
+            <div class="donut-le"><div class="donut-ld" style="background:#7c3aed"></div><span class="donut-ln">Fixed</span><span class="donut-lv">€108k · 55%</span></div>
+            <div class="donut-le"><div class="donut-ld" style="background:#a78bfa"></div><span class="donut-ln">Maintenance</span><span class="donut-lv">€36k · 18%</span></div>
+            <div class="donut-le"><div class="donut-ld" style="background:#ddd6fe"></div><span class="donut-ln">Retainer</span><span class="donut-lv">€52k · 27%</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Client bars + Forecast -->
+    <div class="stat-row stat-row-eq">
+      <div class="schart">
+        <div class="schart-head">
+          <div class="schart-title">Revenue by Client</div>
+          <div class="schart-sub">YTD issued</div>
+        </div>
+        <div id="client-bars"></div>
+      </div>
+      <div class="schart">
+        <div class="schart-head">
+          <div class="schart-title">Upcoming Forecast</div>
+          <div class="schart-sub" style="font-size:11px;color:var(--c4)">Next 3 months</div>
+        </div>
+        <div class="fc-row">
+          <div>
+            <div class="fc-month">April 2026</div>
+            <div class="fc-prob">Fixed + Retainer (70%)</div>
+          </div>
+          <div class="fc-amt">€24,800</div>
+        </div>
+        <div class="fc-row">
+          <div>
+            <div class="fc-month">May 2026</div>
+            <div class="fc-prob">Fixed + Retainer (50%)</div>
+          </div>
+          <div class="fc-amt">€26,500</div>
+        </div>
+        <div class="fc-row">
+          <div>
+            <div class="fc-month">June 2026</div>
+            <div class="fc-prob">Maintenance + Retainer (50%)</div>
+          </div>
+          <div class="fc-amt">€16,200</div>
+        </div>
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--c7);display:flex;justify-content:space-between;align-items:baseline;">
+          <span style="font-size:11px;color:var(--c4);font-weight:600;text-transform:uppercase;letter-spacing:.5px">3-month total</span>
+          <span style="font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--c0)">€67,500</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================== -->
+<!-- SCREEN 2: THIS MONTH                                    -->
+<!-- ====================================================== -->
+<div class="screen" id="screen-inv-month">
+  <div class="ph">
+    <div>
+      <div class="ph-t">March 2026 &mdash; Invoices</div>
+      <div class="ph-s">Confirm or defer planned invoices for this month</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <button class="pbtn" onclick="changeMonth(-1)">&#8249;</button>
+      <span id="cur-month-label" style="font-size:14px;font-weight:600;padding:0 8px;min-width:130px;text-align:center;color:var(--c1)">March 2026</span>
+      <button class="pbtn" onclick="changeMonth(1)">&#8250;</button>
+    </div>
+  </div>
+  <div class="stats" style="grid-template-columns:repeat(4,1fr)">
+    <div class="sc" style="--c:var(--c5)"><div class="sc-l">Planned this month</div><div class="sc-v num">&#8364;32,600</div></div>
+    <div class="sc" style="--c:#2563eb"><div class="sc-l">Issued</div><div class="sc-v num" style="color:#2563eb">&#8364;14,250</div><div class="sc-s">2 invoices</div></div>
+    <div class="sc" style="--c:#d97706"><div class="sc-l">Not yet issued</div><div class="sc-v num" style="color:#d97706">&#8364;22,500</div><div class="sc-s">2 pending</div></div>
+    <div class="sc" style="--c:var(--p)"><div class="sc-l">Delta plan vs actual</div><div class="sc-v num" style="color:var(--p)">&#8722;&#8364;18,350</div></div>
+  </div>
+  <div class="sec">
+    <div class="sec-bar">
+      <h3>Planned invoices</h3>
+      <button class="btn btn-g btn-sm" onclick="document.getElementById('m-adhoc-month').classList.add('open')">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Ad-hoc invoice
+      </button>
+    </div>
+    <div class="card">
+      <table>
+        <thead><tr>
+          <th>Project</th>
+          <th>Client</th>
+          <th style="text-align:right">Planned</th>
+          <th style="text-align:right">Actual amount</th>
+          <th>Status</th>
+          <th style="width:190px"></th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="lnk" onclick="go('project-detail',null,'projects')">MG+MSUM Prenova</span></td>
+            <td style="color:var(--c4)">Moderna galerija</td>
+            <td style="text-align:right" class="num">&#8364;10,250</td>
+            <td style="text-align:right;color:#2563eb;font-weight:700" class="num">&#8364;10,250</td>
+            <td><span class="badge bblue">Issued</span></td>
+            <td><button class="btn btn-g btn-xs">Edit</button></td>
+          </tr>
+          <tr>
+            <td><span class="lnk">Unichem Digitalizacija</span></td>
+            <td style="color:var(--c4)">Unichem d.o.o.</td>
+            <td style="text-align:right" class="num">&#8364;4,000</td>
+            <td style="text-align:right;color:#2563eb;font-weight:700" class="num">&#8364;4,000</td>
+            <td><span class="badge bblue">Issued</span></td>
+            <td><button class="btn btn-g btn-xs">Edit</button></td>
+          </tr>
+          <tr class="row-pending" id="row-oks">
+            <td><span class="lnk">OKS TV Broadcast</span></td>
+            <td style="color:var(--c4)">OKS</td>
+            <td style="text-align:right" class="num">&#8364;14,000</td>
+            <td style="text-align:right"><input class="actual-in" id="oks-actual" placeholder="0.00" style="text-align:right;width:130px"></td>
+            <td><span class="badge bamber">Not issued</span></td>
+            <td>
+              <div style="display:flex;gap:5px;align-items:center">
+                <button class="btn btn-green btn-xs" onclick="confirmInvRow('row-oks','oks-actual')">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  Confirm
+                </button>
+                <button class="btn btn-g btn-xs" onclick="openNotInv('OKS TV Broadcast','&#8364;14,000','March 2026')">Not Invoiced</button>
+              </div>
+            </td>
+          </tr>
+          <tr class="row-pending" id="row-pristop">
+            <td><span class="lnk">Pristop E-trgovina</span></td>
+            <td style="color:var(--c4)">Pristop d.o.o.</td>
+            <td style="text-align:right" class="num">&#8364;8,500</td>
+            <td style="text-align:right"><input class="actual-in" id="pristop-actual" placeholder="0.00" style="text-align:right;width:130px"></td>
+            <td><span class="badge bamber">Not issued</span></td>
+            <td>
+              <div style="display:flex;gap:5px;align-items:center">
+                <button class="btn btn-green btn-xs" onclick="confirmInvRow('row-pristop','pristop-actual')">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  Confirm
+                </button>
+                <button class="btn btn-g btn-xs" onclick="openNotInv('Pristop E-trgovina','&#8364;8,500','March 2026')">Not Invoiced</button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="sec-bar">
+      <h3>Costs this month</h3>
+      <button class="btn btn-g btn-sm" onclick="document.getElementById('m-add-cost').classList.add('open')">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add cost
+      </button>
+    </div>
+    <div class="card">
+      <table>
+        <thead><tr>
+          <th>Project</th>
+          <th>Description</th>
+          <th style="text-align:right">Planned</th>
+          <th style="text-align:right">Actual</th>
+          <th style="width:80px"></th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="lnk">MG+MSUM Prenova</span></td>
+            <td style="color:var(--c3)">Hosting setup</td>
+            <td style="text-align:right;color:var(--c3);font-weight:500" class="num">&#8364;700</td>
+            <td style="text-align:right;color:#dc2626;font-weight:600" class="num">&#8364;600</td>
+            <td><button class="btn btn-g btn-xs">Edit</button></td>
+          </tr>
+          <tr>
+            <td><span class="lnk">OKS TV Broadcast</span></td>
+            <td style="color:var(--c3)">Subcontracting</td>
+            <td style="text-align:right;color:var(--c3);font-weight:500" class="num">&#8364;2,500</td>
+            <td style="text-align:right;color:#dc2626;font-weight:600" class="num">&#8364;2,100</td>
+            <td><button class="btn btn-g btn-xs">Edit</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+
+<!-- ====================================================== -->
+<!-- SCREEN 3: CLIENTS                                       -->
+<!-- ====================================================== -->
+<div class="screen" id="screen-clients">
+  <div class="ph">
+    <div>
+      <div class="ph-t">Clients</div>
+      <div class="ph-s">Manage client relationships and invoice history</div>
+    </div>
+    <button class="btn btn-p" onclick="document.getElementById('m-client').classList.add('open')">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      New Client
+    </button>
+  </div>
+  <div class="sec" style="padding-top:20px">
+    <div class="card">
+      <table>
+        <thead><tr>
+          <th>Client name</th>
+          <th>Projects</th>
+          <th style="text-align:right">Active value</th>
+          <th style="text-align:right">Invoiced YTD</th>
+          <th style="width:80px"></th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="lnk" onclick="go('client-detail',null,'clients')">Moderna galerija</span></td>
+            <td style="color:var(--c4)">2 projects</td>
+            <td style="text-align:right;font-weight:600" class="num">&#8364;43,840</td>
+            <td style="text-align:right;color:#16a34a;font-weight:600" class="num">&#8364;36,502</td>
+            <td><button class="btn btn-g btn-sm" onclick="go('client-detail',null,'clients')">View</button></td>
+          </tr>
+          <tr>
+            <td><span class="lnk">Unichem d.o.o.</span></td>
+            <td style="color:var(--c4)">1 project</td>
+            <td style="text-align:right;font-weight:600" class="num">&#8364;4k/mo</td>
+            <td style="text-align:right;color:#16a34a;font-weight:600" class="num">&#8364;8,000</td>
+            <td><button class="btn btn-g btn-sm">View</button></td>
+          </tr>
+          <tr>
+            <td><span class="lnk">OKS</span></td>
+            <td style="color:var(--c4)">1 project</td>
+            <td style="text-align:right;font-weight:600" class="num">&#8364;87,200</td>
+            <td style="text-align:right;color:#16a34a;font-weight:600" class="num">&#8364;17,700</td>
+            <td><button class="btn btn-g btn-sm">View</button></td>
+          </tr>
+          <tr>
+            <td><span class="lnk">Pristop d.o.o.</span></td>
+            <td style="color:var(--c4)">1 project</td>
+            <td style="text-align:right;font-weight:600" class="num">&#8364;8,550</td>
+            <td style="text-align:right;color:var(--c4)" class="num">&#8364;0</td>
+            <td><button class="btn btn-g btn-sm">View</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+
+<!-- ====================================================== -->
+<!-- SCREEN 4: SINGLE CLIENT                                 -->
+<!-- ====================================================== -->
+<div class="screen" id="screen-client-detail">
+  <div class="ph">
+    <div>
+      <div class="ph-crumb"><span onclick="go('clients',null,'clients')">&#8592; Clients</span></div>
+      <div class="ph-t">Moderna galerija</div>
+      <div class="ph-s">Client since 2024 &middot; 2 active projects</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-g btn-sm">Edit</button>
+      <button class="btn btn-p btn-sm" onclick="document.getElementById('m-project').classList.add('open')">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New Project
+      </button>
+    </div>
+  </div>
+  <div class="stats" style="grid-template-columns:repeat(4,1fr)">
+    <div class="sc" style="--c:var(--c5)"><div class="sc-l">Projects</div><div class="sc-v">2</div><div class="sc-s">Both active</div></div>
+    <div class="sc" style="--c:var(--p)"><div class="sc-l">Total Value</div><div class="sc-v num" style="color:var(--p)">&#8364;91,840</div></div>
+    <div class="sc" style="--c:#16a34a"><div class="sc-l">Invoiced YTD</div><div class="sc-v num" style="color:#16a34a">&#8364;36,502</div></div>
+    <div class="sc" style="--c:#dc2626"><div class="sc-l">Total Costs</div><div class="sc-v num" style="color:#dc2626">&#8364;2,600</div></div>
+  </div>
+  <div class="sec">
+    <div class="sec-bar"><h3>Projects</h3></div>
+    <div class="card">
+      <table>
+        <thead><tr>
+          <th>Project</th><th>Type</th><th style="text-align:right">Value</th><th>PM</th><th>Invoiced</th><th>Status</th><th style="width:70px"></th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="lnk" onclick="go('project-detail',null,'projects')">MG+MSUM Prenova</span></td>
+            <td><span class="tbadge">Fixed</span></td>
+            <td style="text-align:right;font-weight:600" class="num">&#8364;43,840</td>
+            <td style="color:var(--c4)">Nino</td>
+            <td><div style="color:#16a34a;font-size:13px;font-weight:600" class="num">&#8364;36,502</div><div class="pbar"><div class="pfill" style="width:83%;background:#16a34a"></div></div></td>
+            <td><span class="badge bgreen">Active</span></td>
+            <td><button class="btn btn-g btn-xs" onclick="go('project-detail',null,'projects')">View</button></td>
+          </tr>
+          <tr>
+            <td><span class="lnk">MG &mdash; Vzdr&#382;evanje</span></td>
+            <td><span class="tbadge">Maintenance</span></td>
+            <td style="text-align:right;font-weight:600" class="num">&#8364;2,000/mo</td>
+            <td style="color:var(--c4)">Ana</td>
+            <td><div style="color:#2563eb;font-size:13px;font-weight:600" class="num">&#8364;4,000</div><div class="pbar"><div class="pfill" style="width:20%;background:#2563eb"></div></div></td>
+            <td><span class="badge bgreen">Active</span></td>
+            <td><button class="btn btn-g btn-xs">View</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="sec-bar"><h3>Recent invoices</h3></div>
+    <div class="card">
+      <table>
+        <thead><tr>
+          <th>Month</th><th>Project</th><th style="text-align:right">Planned</th><th style="text-align:right">Actual</th><th>Status</th><th style="width:80px"></th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td style="color:var(--c4)">Feb 2026</td>
+            <td>MG+MSUM Prenova</td>
+            <td style="text-align:right" class="num">&#8364;14,300</td>
+            <td style="text-align:right;color:#16a34a;font-weight:600" class="num">&#8364;14,300</td>
+            <td><span class="badge bgreen">Paid</span></td>
+            <td><button class="btn btn-g btn-xs">Email</button></td>
+          </tr>
+          <tr>
+            <td style="color:var(--c4)">Mar 2026</td>
+            <td>MG+MSUM Prenova</td>
+            <td style="text-align:right" class="num">&#8364;10,250</td>
+            <td style="text-align:right;color:#2563eb;font-weight:600" class="num">&#8364;10,250</td>
+            <td><span class="badge bblue">Issued</span></td>
+            <td><button class="btn btn-g btn-xs">Email</button></td>
+          </tr>
+          <tr>
+            <td style="color:var(--c4)">Mar 2026</td>
+            <td>MG &mdash; Vzdr&#382;evanje</td>
+            <td style="text-align:right" class="num">&#8364;2,000</td>
+            <td style="text-align:right;color:var(--c4)">&mdash;</td>
+            <td><span class="badge bpurple">Planned</span></td>
+            <td><button class="btn btn-green btn-xs">Confirm</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="sec-bar">
+      <h3>Other revenue streams</h3>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-g btn-xs" onclick="go('infrastructure',null,'infrastructure')" style="font-size:11px;gap:4px">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+          Infrastructure
+        </button>
+        <button class="btn btn-g btn-xs" onclick="go('domains',null,'domains')" style="font-size:11px;gap:4px">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          Domains
+        </button>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:12px">
+      <table>
+        <thead><tr>
+          <th>Type</th><th>Project #</th><th>Description</th><th style="text-align:right">Amount</th><th>Billing</th><th>Next billing</th><th>Status</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="tbadge" style="background:#eff6ff;color:#2563eb">Hosting</span></td>
+            <td><span class="tbadge">RS-2026-GOT</span></td>
+            <td style="color:var(--c2)">VPS + cPanel hosting</td>
+            <td style="text-align:right;font-weight:700;color:#16a34a" class="num">&#8364;120<span style="font-size:11px;font-weight:400;color:var(--c4)">/mo</span></td>
+            <td><span class="tbadge" style="background:#f0fdf4;color:#16a34a;border-color:#bbf7d0">Monthly</span></td>
+            <td style="color:var(--c5);font-size:12px">—</td>
+            <td><span class="badge bgreen">Active</span></td>
+          </tr>
+          <tr style="background:#fafaf9">
+            <td><span class="tbadge" style="background:#f5f3ff;color:#7c3aed;border-color:#ddd6fe">Domain</span></td>
+            <td><span class="tbadge">1159</span></td>
+            <td style="color:var(--c2)">modernagalerija.si</td>
+            <td style="text-align:right;font-weight:700;color:#16a34a" class="num">&#8364;25<span style="font-size:11px;font-weight:400;color:var(--c4)">/yr</span></td>
+            <td><span class="tbadge" style="background:#fffbeb;color:#d97706;border-color:#fcd34d">Yearly</span></td>
+            <td style="font-size:12px"><span style="background:#fee2e2;color:#991b1b;padding:2px 7px;border-radius:100px;font-weight:700;font-size:11px">14 Mar 2026</span></td>
+            <td><span class="badge" style="background:#fee2e2;color:#991b1b">Expires soon</span></td>
+          </tr>
+          <tr style="background:#fafaf9">
+            <td><span class="tbadge" style="background:#f5f3ff;color:#7c3aed;border-color:#ddd6fe">Domain</span></td>
+            <td><span class="tbadge">1159</span></td>
+            <td style="color:var(--c2)">modernagalerija.com</td>
+            <td style="text-align:right;font-weight:700;color:#16a34a" class="num">&#8364;20<span style="font-size:11px;font-weight:400;color:var(--c4)">/yr</span></td>
+            <td><span class="tbadge" style="background:#fffbeb;color:#d97706;border-color:#fcd34d">Yearly</span></td>
+            <td style="color:var(--c4);font-size:12px">20 Sep 2026</td>
+            <td><span class="badge bgreen">Active</span></td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="3" style="text-align:right;font-size:11px;font-weight:700;color:var(--c3);text-transform:uppercase;letter-spacing:.5px;padding:10px 16px">Monthly equiv.</td>
+            <td style="text-align:right;font-weight:800;color:#16a34a;padding:10px 16px" class="num">&#8364;124<span style="font-size:11px;font-weight:400;color:var(--c4)">/mo</span></td>
+            <td colspan="3"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+    <div class="sec-bar"><h3>Costs</h3></div>
+    <div class="card">
+      <table>
+        <thead><tr>
+          <th>Month</th><th>Project</th><th>Description</th><th style="text-align:right">Amount</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td style="color:var(--c4)">Jan 2026</td>
+            <td style="color:var(--c3)">MG+MSUM Prenova</td>
+            <td>Zunanji fotograf</td>
+            <td style="text-align:right;font-weight:600" class="num">&#8364;800</td>
+          </tr>
+          <tr>
+            <td style="color:var(--c4)">Feb 2026</td>
+            <td style="color:var(--c3)">MG+MSUM Prenova</td>
+            <td>Stock fotografije</td>
+            <td style="text-align:right;font-weight:600" class="num">&#8364;1,200</td>
+          </tr>
+          <tr>
+            <td style="color:var(--c4)">Mar 2026</td>
+            <td style="color:var(--c3)">MG+MSUM Prenova</td>
+            <td>Strežnik za render</td>
+            <td style="text-align:right;font-weight:600" class="num">&#8364;600</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="3" style="text-align:right;font-size:11px;font-weight:700;color:var(--c3);text-transform:uppercase;letter-spacing:.5px;padding:10px 16px">Total costs</td>
+            <td style="text-align:right;font-weight:800;color:#dc2626;padding:10px 16px" class="num">&#8364;2,600</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+</div>
+
+
+<!-- ====================================================== -->
+<!-- SCREEN 5: PROJECTS                                      -->
+<!-- ====================================================== -->
+<div class="screen" id="screen-projects">
+  <div class="ph">
+    <div>
+      <div class="ph-t">Projects</div>
+      <div class="ph-s">Manage your project portfolio</div>
+    </div>
+    <button class="btn btn-p" onclick="document.getElementById('m-project').classList.add('open')">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      New Project
+    </button>
+  </div>
+  <div class="stats" style="grid-template-columns:repeat(4,1fr)">
+    <div class="sc" style="--c:var(--c5)"><div class="sc-l">Total projects</div><div class="sc-v">4</div><div class="sc-s">3 active</div></div>
+    <div class="sc" style="--c:var(--p)"><div class="sc-l">Portfolio value</div><div class="sc-v num" style="color:var(--p)">&#8364;187k</div></div>
+    <div class="sc" style="--c:#16a34a"><div class="sc-l">Invoiced YTD</div><div class="sc-v num" style="color:#16a34a">&#8364;62k</div></div>
+    <div class="sc" style="--c:#dc2626"><div class="sc-l">Costs YTD</div><div class="sc-v num" style="color:#dc2626">&#8364;4.9k</div></div>
+  </div>
+  <div class="sec">
+    <div class="card">
+      <table>
+        <thead><tr>
+          <th>#</th><th>Project</th><th>Client</th><th>Type</th><th style="text-align:right">Value</th><th>PM</th><th>Invoiced</th><th>Status</th><th style="width:70px"></th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td style="color:var(--c4);font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap">RS-2026-001</td>
+            <td><span class="lnk" onclick="go('project-detail',null,'projects')">MG+MSUM Prenova</span></td>
+            <td style="color:var(--c4)">Moderna galerija</td>
+            <td><span class="tbadge">Fixed</span></td>
+            <td style="text-align:right;font-weight:600" class="num">&#8364;43,840</td>
+            <td style="color:var(--c4)">Nino</td>
+            <td><div style="color:#16a34a;font-weight:600;font-size:13px" class="num">&#8364;36,502</div><div class="pbar"><div class="pfill" style="width:83%;background:#16a34a"></div></div></td>
+            <td><span class="badge bgreen">Active</span></td>
+            <td><button class="btn btn-g btn-xs">Edit</button></td>
+          </tr>
+          <tr>
+            <td style="color:var(--c4);font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap">RS-2026-002</td>
+            <td><span class="lnk">Unichem Digitalizacija</span></td>
+            <td style="color:var(--c4)">Unichem d.o.o.</td>
+            <td><span class="tbadge">Maintenance</span></td>
+            <td style="text-align:right;font-weight:600" class="num">&#8364;4k/mo</td>
+            <td style="color:var(--c4)">Ana</td>
+            <td><div style="color:#2563eb;font-weight:600;font-size:13px" class="num">&#8364;8,000</div><div class="pbar"><div class="pfill" style="width:17%;background:#2563eb"></div></div></td>
+            <td><span class="badge bgreen">Active</span></td>
+            <td><button class="btn btn-g btn-xs">Edit</button></td>
+          </tr>
+          <tr>
+            <td style="color:var(--c4);font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap">RS-2026-003</td>
+            <td><span class="lnk">OKS TV Broadcast</span></td>
+            <td style="color:var(--c4)">OKS</td>
+            <td><span class="tbadge">Retainer</span></td>
+            <td style="text-align:right;font-weight:600" class="num">&#8364;87,200</td>
+            <td style="color:var(--c4)">Nino</td>
+            <td><div style="color:#d97706;font-weight:600;font-size:13px" class="num">&#8364;17,700</div><div class="pbar"><div class="pfill" style="width:20%;background:#d97706"></div></div></td>
+            <td><span class="badge bgreen">Active</span></td>
+            <td><button class="btn btn-g btn-xs">Edit</button></td>
+          </tr>
+          <tr>
+            <td style="color:var(--c4);font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap">RS-2026-004</td>
+            <td><span class="lnk">Pristop E-trgovina</span></td>
+            <td style="color:var(--c4)">Pristop d.o.o.</td>
+            <td><span class="tbadge">Fixed</span></td>
+            <td style="text-align:right;font-weight:600" class="num">&#8364;8,550</td>
+            <td style="color:var(--c4)">Maja</td>
+            <td><div style="color:var(--c4);font-size:13px" class="num">&#8364;0</div><div class="pbar"><div class="pfill" style="width:0%"></div></div></td>
+            <td><span class="badge bpurple">Planned</span></td>
+            <td><button class="btn btn-g btn-xs">Edit</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+
+<!-- ====================================================== -->
+<!-- SCREEN 6: SINGLE PROJECT                                -->
+<!-- ====================================================== -->
+<div class="screen" id="screen-project-detail">
+  <div class="ph">
+    <div>
+      <div class="ph-crumb"><span onclick="go('projects',null,'projects')">&#8592; Projects</span></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="ph-t">MG+MSUM Prenova</div>
+        <div style="font-size:12px;font-weight:600;color:var(--c4);background:var(--c7);padding:3px 10px;border-radius:100px;margin-top:2px">RS-2026-001</div>
+      </div>
+      <div class="ph-s" style="display:flex;align-items:center;gap:6px;margin-top:4px">
+        Moderna galerija
+        <span style="color:var(--c6)">&middot;</span>
+        <span class="tbadge">Fixed</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-g btn-sm">Edit</button>
+      <button class="btn btn-p btn-sm" onclick="openAddPlan()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add invoice plan
+      </button>
+    </div>
+  </div>
+  <div class="fg">
+    <div class="fgf"><div class="fl">Client</div><div class="fv">Moderna galerija</div></div>
+    <div class="fgf"><div class="fl">Project Manager</div><div class="fv">Nino</div></div>
+    <div class="fgf"><div class="fl">Type</div><div class="fv"><span class="tbadge">Fixed</span></div></div>
+    <div class="fgf"><div class="fl">Value</div><div class="fv num" style="color:#16a34a">&#8364;43,840</div></div>
+    <div class="fgf"><div class="fl">Total Invoiced</div><div class="fv num">&#8364;36,502 <span style="font-size:12px;color:var(--c4)">(83%)</span></div></div>
+    <div class="fgf"><div class="fl">Total Costs</div><div class="fv num" style="color:#dc2626">&#8364;2,600</div></div>
+  </div>
+  <div class="sec" style="padding-top:20px">
+    <div class="card">
+      <div class="ch">
+        <div style="display:flex;align-items:center">
+          <h3>Invoice Plans</h3>
+          <span class="note">synced with planning grid</span>
+        </div>
+      </div>
+      <table>
+        <thead><tr>
+          <th>Month</th><th>Description</th><th style="text-align:right">Planned</th><th style="text-align:right">Actual</th><th>Status</th><th style="width:185px"></th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td style="color:var(--c4)">Jan 2026</td>
+            <td>Faza 1 &mdash; UX Research</td>
+            <td style="text-align:right" class="num">&#8364;11,952</td>
+            <td style="text-align:right;color:#2563eb;font-weight:700" class="num">&#8364;11,952</td>
+            <td><span class="badge bblue">Issued</span></td>
+            <td><button class="btn btn-g btn-xs">Edit</button></td>
+          </tr>
+          <tr>
+            <td style="color:var(--c4)">Feb 2026</td>
+            <td>Faza 2 &mdash; UX/UI Design</td>
+            <td style="text-align:right" class="num">&#8364;14,300</td>
+            <td style="text-align:right;color:#2563eb;font-weight:700" class="num">&#8364;14,300</td>
+            <td><span class="badge bblue">Issued</span></td>
+            <td><button class="btn btn-g btn-xs">Edit</button></td>
+          </tr>
+          <tr>
+            <td style="color:var(--c4)">Mar 2026</td>
+            <td>Faza 3 &mdash; Development</td>
+            <td style="text-align:right" class="num">&#8364;10,250</td>
+            <td style="text-align:right;color:#2563eb;font-weight:700" class="num">&#8364;10,250</td>
+            <td><span class="badge bblue">Issued</span></td>
+            <td><button class="btn btn-g btn-xs">Edit</button></td>
+          </tr>
+          <tr class="row-pending">
+            <td style="color:var(--c4)">Apr 2026</td>
+            <td>Dodatek &mdash; CR</td>
+            <td style="text-align:right" class="num">&#8364;2,500</td>
+            <td style="text-align:right"><input class="actual-in" value="2500" style="text-align:right"></td>
+            <td><span class="badge bamber">Not issued</span></td>
+            <td>
+              <div style="display:flex;gap:5px;align-items:center">
+                <button class="btn btn-green btn-xs">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  Confirm
+                </button>
+                <button class="btn btn-g btn-xs" onclick="openNotInv('MG+MSUM Prenova','&#8364;2,500','April 2026')">Not Invoiced</button>
+              </div>
+            </td>
+          </tr>
+          <tr class="row-pending">
+            <td style="color:var(--c4)">May 2026</td>
+            <td>Faza 4 &mdash; QA + Launch</td>
+            <td style="text-align:right" class="num">&#8364;10,250</td>
+            <td style="text-align:right"><input class="actual-in" value="10250" style="text-align:right"></td>
+            <td><span class="badge bamber">Not issued</span></td>
+            <td>
+              <div style="display:flex;gap:5px;align-items:center">
+                <button class="btn btn-green btn-xs">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  Confirm
+                </button>
+                <button class="btn btn-g btn-xs" onclick="openNotInv('MG+MSUM Prenova','&#8364;10,250','May 2026')">Not Invoiced</button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <div class="ch">
+        <h3>Project Costs</h3>
+        <button class="btn btn-g btn-sm" onclick="document.getElementById('m-add-cost').classList.add('open')">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add cost
+        </button>
+      </div>
+      <table>
+        <thead><tr>
+          <th>Month</th><th>Description</th><th style="text-align:right">Amount</th><th style="width:70px"></th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td style="color:var(--c4)">Jan 2026</td>
+            <td>Subcontracting &mdash; copywriting</td>
+            <td style="text-align:right;color:#dc2626;font-weight:600" class="num">&#8364;800</td>
+            <td><button class="btn btn-g btn-xs">Edit</button></td>
+          </tr>
+          <tr>
+            <td style="color:var(--c4)">Feb 2026</td>
+            <td>Stock photography</td>
+            <td style="text-align:right;color:#dc2626;font-weight:600" class="num">&#8364;1,200</td>
+            <td><button class="btn btn-g btn-xs">Edit</button></td>
+          </tr>
+          <tr>
+            <td style="color:var(--c4)">Mar 2026</td>
+            <td>Hosting setup</td>
+            <td style="text-align:right;color:#dc2626;font-weight:600" class="num">&#8364;600</td>
+            <td><button class="btn btn-g btn-xs">Edit</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+
+<!-- ====================================================== -->
+<!-- SCREEN 7: EMAIL TOOL                                    -->
+<!-- ====================================================== -->
+<div class="screen" id="screen-email">
+  <div class="ph">
+    <div>
+      <div class="ph-t">Email Tool</div>
+      <div class="ph-s">Generate a Slovenian invoice request for your accountant</div>
+    </div>
+  </div>
+  <div class="ew">
+    <div>
+      <h3 style="font-size:14px;font-weight:700;color:var(--c1);margin-bottom:16px">Invoice request for accounting</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <label class="elbl">Date of service (month)</label>
+          <input class="fin" type="month" id="e-service-month" value="2026-03" onchange="generateEmail()">
+        </div>
+        <div>
+          <label class="elbl">Payment terms (days)</label>
+          <input class="fin" type="number" id="e-paydays" value="30" oninput="generateEmail()" placeholder="e.g. 30">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <label class="elbl">Client / Company</label>
+          <input class="fin" id="e-client" value="Moderna galerija" oninput="generateEmail()" placeholder="e.g. Moderna galerija">
+        </div>
+        <div>
+          <label class="elbl">Project ref (optional)</label>
+          <input class="fin" id="e-project" value="RS-2026-001" oninput="generateEmail()" placeholder="e.g. RS-2026-001">
+        </div>
+      </div>
+      <!-- Line items -->
+      <label class="elbl" style="margin-top:4px">Services / line items</label>
+      <div style="border:1.5px solid var(--c6);border-radius:8px;overflow:hidden;margin-bottom:10px">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead>
+            <tr style="background:var(--c8)">
+              <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--c4);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--c6)">Ref #</th>
+              <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--c4);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--c6)">Description</th>
+              <th style="padding:7px 10px;text-align:right;font-size:10px;font-weight:700;color:var(--c4);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--c6)">Amount (EUR)</th>
+              <th style="width:30px;border-bottom:1px solid var(--c6)"></th>
+            </tr>
+          </thead>
+          <tbody id="e-lines">
+            <tr>
+              <td style="padding:6px 8px;border-bottom:1px solid var(--c7)"><input style="width:90px;padding:5px 7px;border:1.5px solid var(--c6);border-radius:6px;font-size:12px;font-family:inherit;font-weight:500;" value="RS-2026-001" oninput="generateEmail()"></td>
+              <td style="padding:6px 8px;border-bottom:1px solid var(--c7)"><input style="width:100%;padding:5px 7px;border:1.5px solid var(--c6);border-radius:6px;font-size:12px;font-family:inherit;font-weight:500;" value="Razvoj faza 1 — Marec 2026" oninput="generateEmail()"></td>
+              <td style="padding:6px 8px;border-bottom:1px solid var(--c7)"><input type="number" style="width:100%;padding:5px 7px;border:1.5px solid var(--c6);border-radius:6px;font-size:12px;font-family:inherit;font-weight:500;text-align:right;" value="10300" oninput="generateEmail()"></td>
+              <td style="padding:6px 8px;border-bottom:1px solid var(--c7);text-align:center"><button onclick="removeEmailLine(this)" style="background:none;border:none;cursor:pointer;color:var(--c4);font-size:14px;padding:2px 4px;" title="Remove">×</button></td>
+            </tr>
+          </tbody>
+        </table>
+        <div style="padding:6px 10px;border-top:1px solid var(--c7);display:flex;align-items:center;justify-content:space-between">
+          <button class="btn btn-g btn-xs" onclick="addEmailLine()">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add line
+          </button>
+          <span style="font-size:12px;font-weight:700;color:var(--c1)">Total: <span id="e-total" style="font-variant-numeric:tabular-nums">10.300,00 EUR</span></span>
+        </div>
+      </div>
+      <button class="btn btn-p" style="width:100%;justify-content:center;margin-top:4px" onclick="generateEmail()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
+        Generate email
+      </button>
+    </div>
+    <div>
+      <h3 style="font-size:14px;font-weight:700;color:var(--c1);margin-bottom:16px">Generated email</h3>
+      <div class="eout" id="e-preview"></div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn btn-g" style="flex:1;justify-content:center" onclick="copyEmailText(this)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+          Copy
+        </button>
+        <button class="btn btn-p" style="flex:1;justify-content:center">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          Open in Mail
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ====================================================== -->
+<!-- SCREEN 10: TOOLS                                        -->
+<!-- ====================================================== -->
+<div class="screen" id="screen-tools">
+  <div class="ph">
+    <div>
+      <div class="ph-t">Tools</div>
+      <div class="ph-s">Utilities &amp; AI-powered helpers for Renderspace</div>
+    </div>
+  </div>
+  <div class="tools-body">
+    <div class="tool-section-head">AI Tools</div>
+    <div class="tool-card" onclick="go('ai-timesheet',null,'tools')">
+      <div class="tool-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="14" x2="8" y2="14"/><line x1="12" y1="14" x2="12" y2="14"/><line x1="16" y1="14" x2="16" y2="14"/></svg>
+      </div>
+      <div class="tool-body">
+        <div class="tool-title">
+          AI Hour Distribution Tool
+          <span class="tool-badge">AI</span>
+          <span class="tool-badge tool-badge-draft">Draft</span>
+        </div>
+        <div class="tool-desc">Paste your active PN projects, set percentage allocations, pick a month &amp; total hours — AI generates a filled Časovnice timesheet ready to export as .xlsx. Descriptions are written per project type by Claude.</div>
+        <div style="margin-top:6px;font-size:11px;color:var(--c4);font-weight:500;">Owner: Nino Erjavec &nbsp;·&nbsp; Target: April 2026 &nbsp;·&nbsp; Personal tool</div>
+      </div>
+      <div class="tool-arrow">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+    </div>
+    <div class="tool-section-head" style="margin-top:20px">Utilities</div>
+    <div class="tool-card" onclick="go('email',null,'email')">
+      <div class="tool-icon" style="background:var(--c2)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+      </div>
+      <div class="tool-body">
+        <div class="tool-title">Email Tool</div>
+        <div class="tool-desc">Generate Slovenian invoice request emails for your accountant. Supports multiple line items with project reference numbers and automatic totals.</div>
+      </div>
+      <div class="tool-arrow">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+    </div>
+    <div class="tool-card">
+      <div class="tool-icon" style="background:#0369a1">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+      </div>
+      <div class="tool-body">
+        <div class="tool-title">
+          Hosting Invoice Generator
+          <span class="tool-badge tool-badge-draft">Draft</span>
+        </div>
+        <div class="tool-desc">Build the monthly "Gostovanja" table for accounting — add hosting clients, PN numbers, services and prices. Generates a structured list ready to email to your accountant for invoice issuance.</div>
+        <div style="margin-top:6px;font-size:11px;color:var(--c4);font-weight:500;">Columns: Naročnik · PN · Storitev · Število · Cena/kos · Vrednost · Rok plačila</div>
+      </div>
+      <div class="tool-arrow">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================== -->
+<!-- SCREEN 11: AI HOUR DISTRIBUTION TOOL                    -->
+<!-- ====================================================== -->
+<div class="screen" id="screen-ai-timesheet">
+  <div class="ph">
+    <div>
+      <div class="ph-crumb" onclick="go('tools',null,'tools')">← <span>Tools</span></div>
+      <div class="ph-t">AI Hour Distribution Tool</div>
+      <div class="ph-s">Generate a filled Časovnice timesheet from your project allocations</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn btn-g btn-sm">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export .xlsx
+      </button>
+    </div>
+  </div>
+  <!-- Top bar: Month + Hours -->
+  <div style="padding:16px 28px;background:#fff;border-bottom:1px solid var(--c6);display:flex;align-items:flex-end;gap:20px">
+    <div>
+      <label style="font-size:10px;font-weight:700;color:var(--c3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px;">Month</label>
+      <input type="month" value="2026-03" id="ts-month" style="padding:8px 12px;border:1.5px solid var(--c6);border-radius:8px;font-size:13px;font-family:inherit;color:var(--c0);background:#fff;width:180px;" oninput="tsUpdate()">
+    </div>
+    <div>
+      <label style="font-size:10px;font-weight:700;color:var(--c3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px;">Total hours</label>
+      <input type="number" value="160" id="ts-hours" placeholder="160" style="padding:8px 12px;border:1.5px solid var(--c6);border-radius:8px;font-size:13px;font-family:inherit;color:var(--c0);background:#fff;width:110px;" oninput="tsUpdate()">
+    </div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+      <div id="ts-alloc-chip" style="font-size:12px;font-weight:700;padding:6px 12px;border-radius:100px;background:var(--c7);color:var(--c3)">0 / 160 h</div>
+    </div>
+  </div>
+
+  <div class="ts-body">
+    <!-- Left panel: Project list -->
+    <div>
+      <div class="ts-panel" style="margin-bottom:16px">
+        <div class="ts-ph">
+          <h3>Projects</h3>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span id="ts-pct-warn" style="display:none;font-size:11px;color:#dc2626;font-weight:700;">⚠ Not 100%</span>
+            <span id="ts-pct-ok" style="display:none;font-size:11px;color:#16a34a;font-weight:700;">✓ 100%</span>
+          </div>
+        </div>
+        <!-- Column headers -->
+        <div class="ts-proj-hdr">
+          <span class="ts-col-hd">Project</span>
+          <span class="ts-col-hd">Description</span>
+          <span class="ts-col-hd">Allocation</span>
+          <span></span>
+        </div>
+        <!-- Project rows -->
+        <div id="ts-proj-list"></div>
+        <!-- Allocation bar -->
+        <div class="ts-alloc-bar"><div class="ts-alloc-bar-fill" id="ts-alloc-fill" style="width:0%"></div></div>
+        <div class="ts-alloc-summary">
+          <div style="font-size:11px;color:var(--c4);font-weight:500;" id="ts-alloc-text">0 h allocated of 160 h</div>
+          <div id="ts-remaining" style="font-size:11px;font-weight:700;color:var(--c3)">160 h remaining</div>
+        </div>
+        <!-- Add project row -->
+        <div class="ts-proj-add-row" style="border-top:1px solid var(--c7);display:flex;gap:8px">
+          <button class="btn btn-g btn-sm" onclick="tsAddProject()" style="flex:1;justify-content:center">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add Project
+          </button>
+          <button class="btn btn-sm" style="background:var(--pll);color:var(--p);border:1px solid #ddd6fe;font-weight:700;justify-content:center;white-space:nowrap" onclick="tsSmartDistribute()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            Smart distribute
+          </button>
+        </div>
+      </div>
+      <!-- Generate button -->
+      <button class="btn btn-p" style="width:100%;justify-content:center;padding:12px 16px;font-size:14px;" onclick="tsGenerate()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        Generate with AI (Claude)
+      </button>
+      <div style="margin-top:8px;font-size:11px;color:var(--c4);text-align:center;font-weight:500;">AI writes Slovenian descriptions per project type · Powered by Claude API</div>
+    </div>
+
+    <!-- Right panel: Preview -->
+    <div>
+      <div class="ts-panel">
+        <div class="ts-ph">
+          <h3>Preview — Časovnice</h3>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span id="ts-preview-month" style="font-size:11px;color:var(--c4);font-weight:500;">March 2026</span>
+            <span id="ts-ai-badge" style="display:none;font-size:10px;padding:2px 7px;border-radius:100px;background:var(--pll);color:var(--p);font-weight:700;">AI ✓</span>
+          </div>
+        </div>
+        <div id="ts-preview-empty" style="padding:40px 20px;text-align:center;color:var(--c4)">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto 10px;display:block;opacity:.35"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="12" y2="18"/></svg>
+          <div style="font-size:13px;font-weight:600;color:var(--c3)">No preview yet</div>
+          <div style="font-size:12px;margin-top:4px;">Add projects and click Generate</div>
+        </div>
+        <div id="ts-preview-table" style="display:none">
+          <div style="overflow-x:auto">
+            <table>
+              <thead><tr>
+                <th style="min-width:70px">Datum</th>
+                <th style="min-width:110px">Številka PN</th>
+                <th style="min-width:60px">Ur</th>
+                <th>Opis časovnice</th>
+                <th style="min-width:120px">Končni PN</th>
+              </tr></thead>
+              <tbody id="ts-preview-tbody"></tbody>
+            </table>
+          </div>
+          <div style="padding:10px 16px;border-top:1px solid var(--c7);display:flex;align-items:center;justify-content:space-between">
+            <div style="font-size:11px;color:var(--c4);font-weight:500;" id="ts-total-hrs-label">Total: 160 hours</div>
+            <button class="btn btn-g btn-xs">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              Edit
+            </button>
+          </div>
+        </div>
+      </div>
+      <!-- Column mapping info -->
+      <div class="info-box" style="margin-top:12px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Output maps to existing Renderspace Excel template columns: <strong>Datum · Številka PN · Število ur · Opis časovnice · Končni PN</strong>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+<!-- ====================================================== -->
+<!-- SCREEN 12: INFRASTRUCTURE                               -->
+<!-- ====================================================== -->
+<div class="screen" id="screen-infrastructure">
+  <div class="ph">
+    <div>
+      <div class="ph-t">Infrastructure</div>
+      <div class="ph-s">Hosting costs, client hosting revenue &amp; domains</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;background:var(--pll);border:1px solid #ddd6fe;border-radius:8px;padding:8px 14px;">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--p)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
+      <span style="font-size:11px;font-weight:700;color:var(--p);text-transform:uppercase;letter-spacing:.5px">Default hosting PN</span>
+      <input id="default-hosting-pn" value="RS-2026-GOT" style="font-size:13px;font-weight:700;color:var(--p);background:transparent;border:none;outline:none;width:130px;font-family:inherit;" oninput="syncDefaultPN()">
+      <span style="font-size:11px;color:var(--p);opacity:.6">· pre-filled on new hosting clients · editable per client</span>
+    </div>
+  </div>
+
+  <div class="sec" style="padding-top:16px">
+
+    <!-- Section 1: Client Hosting Revenue -->
+    <div class="sec-bar">
+      <h3>Client Hosting Revenue <span style="font-size:11px;font-weight:500;color:var(--c4)">What clients pay you</span></h3>
+      <button class="btn btn-g btn-sm" onclick="openAddHostingClient()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Client
+      </button>
+    </div>
+    <!-- Yearly renewal warning strip -->
+    <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span style="font-size:13px;color:#92400e;flex:1"><strong>1 yearly client due in April:</strong> Unichem d.o.o. — €900/yr &nbsp;·&nbsp; <span style="color:#92400e;opacity:.8">Renews Apr 2026</span></span>
+      <button class="btn btn-xs" style="background:#fef3c7;border:1px solid #fcd34d;color:#92400e;font-weight:700;">Create invoice</button>
+    </div>
+    <div class="card" style="margin-bottom:24px">
+      <table>
+        <thead><tr>
+          <th>Client</th><th>Project #</th><th>Description</th><th>Cycle</th><th style="text-align:right">Amount</th><th>Billing since</th><th>Next invoice</th><th>Status</th><th style="width:60px"></th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td style="font-weight:700">Moderna galerija</td>
+            <td><span class="tbadge">RS-2026-002</span></td>
+            <td style="color:var(--c2)">VPS + cPanel hosting</td>
+            <td><span class="tbadge" style="background:#f0fdf4;color:#16a34a;border-color:#bbf7d0">Monthly</span></td>
+            <td style="text-align:right;font-weight:700;color:#16a34a" class="num">&#8364;120<span style="font-weight:400;font-size:11px;color:var(--c4)">/mo</span></td>
+            <td style="color:var(--c4);font-size:12px">Jan 2025</td>
+            <td style="color:var(--c5);font-size:12px">—</td>
+            <td><span class="badge bgreen">Active</span></td>
+            <td><button class="btn btn-g btn-xs">Edit</button></td>
+          </tr>
+          <tr style="background:#fffdf5">
+            <td style="font-weight:700">Unichem d.o.o.</td>
+            <td><span class="tbadge">RS-2025-008</span></td>
+            <td style="color:var(--c2)">Managed WordPress hosting</td>
+            <td><span class="tbadge" style="background:#fffbeb;color:#d97706;border-color:#fcd34d">Yearly</span></td>
+            <td style="text-align:right;font-weight:700;color:#16a34a" class="num">&#8364;900<span style="font-weight:400;font-size:11px;color:var(--c4)">/yr</span></td>
+            <td style="color:var(--c4);font-size:12px">Mar 2024</td>
+            <td style="font-size:12px"><span style="background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:100px;font-weight:700;font-size:11px">&#9888; Apr 2026</span></td>
+            <td><span class="badge bgreen">Active</span></td>
+            <td><button class="btn btn-g btn-xs">Edit</button></td>
+          </tr>
+          <tr>
+            <td style="font-weight:700">OKS</td>
+            <td><span class="tbadge">RS-2026-003</span></td>
+            <td style="color:var(--c2)">CDN + media storage</td>
+            <td><span class="tbadge" style="background:#f0fdf4;color:#16a34a;border-color:#bbf7d0">Monthly</span></td>
+            <td style="text-align:right;font-weight:700;color:#16a34a" class="num">&#8364;95<span style="font-weight:400;font-size:11px;color:var(--c4)">/mo</span></td>
+            <td style="color:var(--c4);font-size:12px">Nov 2025</td>
+            <td style="color:var(--c5);font-size:12px">—</td>
+            <td><span class="badge bgreen">Active</span></td>
+            <td><button class="btn btn-g btn-xs">Edit</button></td>
+          </tr>
+          <tr style="background:#fffdf5">
+            <td style="font-weight:700">Pristop d.o.o.</td>
+            <td><span class="tbadge">RS-2025-012</span></td>
+            <td style="color:var(--c2)">Shared hosting + SSL</td>
+            <td><span class="tbadge" style="background:#fffbeb;color:#d97706;border-color:#fcd34d">Yearly</span></td>
+            <td style="text-align:right;font-weight:700;color:#16a34a" class="num">&#8364;550<span style="font-weight:400;font-size:11px;color:var(--c4)">/yr</span></td>
+            <td style="color:var(--c4);font-size:12px">Jun 2024</td>
+            <td style="font-size:12px"><span class="tbadge" style="font-size:11px">Jun 2026</span></td>
+            <td><span class="badge bgreen">Active</span></td>
+            <td><button class="btn btn-g btn-xs">Edit</button></td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="4" style="text-align:right;font-size:11px;font-weight:700;color:var(--c3);text-transform:uppercase;letter-spacing:.5px">Monthly equiv. revenue</td>
+            <td style="text-align:right;font-size:16px;font-weight:800;color:#16a34a;font-variant-numeric:tabular-nums" class="num">&#8364;336<span style="font-size:11px;font-weight:400;color:var(--c4)">/mo</span></td>
+            <td colspan="4"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <!-- Section 2: Infrastructure Costs -->
+    <div class="sec-bar" style="padding-top:8px">
+      <h3>Infrastructure Costs <span style="font-size:11px;font-weight:500;color:var(--c4)">What you pay providers</span></h3>
+      <button class="btn btn-g btn-sm" onclick="document.getElementById('m-add-provider').classList.add('open')">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Provider Cost
+      </button>
+    </div>
+    <div class="card" style="margin-bottom:0;border-radius:var(--r) var(--r) 0 0">
+      <table>
+        <thead><tr>
+          <th>Provider</th><th>Service description</th><th style="text-align:right">Monthly €</th><th style="width:60px"></th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td style="font-weight:700">Hetzner</td>
+            <td style="color:var(--c2)">VPS CX31 — 3 instances</td>
+            <td style="text-align:right;font-weight:700" class="num">&#8364;29.70</td>
+            <td><button class="btn btn-g btn-xs">Edit</button></td>
+          </tr>
+          <tr>
+            <td style="font-weight:700">cPanel</td>
+            <td style="color:var(--c2)">WHM/cPanel license</td>
+            <td style="text-align:right;font-weight:700" class="num">&#8364;22.00</td>
+            <td><button class="btn btn-g btn-xs">Edit</button></td>
+          </tr>
+          <tr>
+            <td style="font-weight:700">Cloudflare</td>
+            <td style="color:var(--c2)">Pro plan + additional domains</td>
+            <td style="text-align:right;font-weight:700" class="num">&#8364;24.00</td>
+            <td><button class="btn btn-g btn-xs">Edit</button></td>
+          </tr>
+          <tr>
+            <td style="font-weight:700">AWS</td>
+            <td style="color:var(--c2)">S3 + CloudFront CDN</td>
+            <td style="text-align:right;font-weight:700" class="num">&#8364;18.40</td>
+            <td><button class="btn btn-g btn-xs">Edit</button></td>
+          </tr>
+          <tr>
+            <td style="font-weight:700">Mailgun</td>
+            <td style="color:var(--c2)">Transactional email</td>
+            <td style="text-align:right;font-weight:700" class="num">&#8364;15.00</td>
+            <td><button class="btn btn-g btn-xs">Edit</button></td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="2" style="text-align:right;font-size:11px;font-weight:700;color:var(--c3);text-transform:uppercase;letter-spacing:.5px">Total infrastructure / month</td>
+            <td style="text-align:right;font-size:16px;font-weight:800;color:#dc2626;font-variant-numeric:tabular-nums" class="num">&#8364;109.10</td>
+            <td colspan="2"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <!-- Margin strip -->
+    <div style="background:#fff;border-left:1px solid var(--c6);border-right:1px solid var(--c6);border-bottom:1px solid var(--c6);padding:10px 20px;display:flex;align-items:center;justify-content:space-between;border-top:2px dashed var(--c6);border-radius:0 0 var(--r) var(--r);margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:700;color:var(--c3)">
+        MARGIN &nbsp;·&nbsp; hosting revenue minus infrastructure costs
+      </div>
+      <div style="display:flex;align-items:baseline;gap:8px">
+        <span style="font-size:18px;font-weight:800;color:#16a34a;font-variant-numeric:tabular-nums">&#8364;340.90 / month</span>
+        <span style="font-size:11px;color:var(--c4);font-weight:500">(76% margin)</span>
+      </div>
+    </div>
+
+    <div class="info-box">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      Active client entries auto-generate monthly invoice rows in Revenue Planner under their linked Project #. No manual entry needed.
+    </div>
+  </div>
+
+</div>
+
+<!-- ====================================================== -->
+<!-- SCREEN: DOMAINS                                         -->
+<!-- ====================================================== -->
+<div class="screen" id="screen-domains">
+  <div class="ph">
+    <div>
+      <div class="ph-t">Domains</div>
+      <div class="ph-s">Track client domain expiries &mdash; never let one lapse</div>
+    </div>
+    <button class="btn btn-p btn-sm" onclick="document.getElementById('m-add-domains').classList.add('open')">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Add Client Domains
+    </button>
+  </div>
+  <div style="padding:20px 28px 32px">
+
+    <!-- Urgent alerts -->
+    <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <span style="font-size:13px;color:#991b1b;flex:1"><strong>2 domains expiring in 7 days:</strong> modernagalerija.si (Mar 14) &nbsp;·&nbsp; oks.si (Mar 18)</span>
+      <button class="btn btn-xs" style="background:#fee2e2;border:1px solid #fecaca;color:#991b1b;font-weight:700">Send renewals</button>
+    </div>
+    <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;margin-bottom:16px;display:flex;align-items:center;gap:10px">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span style="font-size:13px;color:#92400e;flex:1"><strong>1 domain expiring within 30 days:</strong> pirnar.si (Apr 5)</span>
+    </div>
+
+    <!-- Header bar -->
+    <div class="sec-bar" style="margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <h3 style="margin:0">Client Domains</h3>
+        <span class="tbadge" style="font-size:11px">PN 1159</span>
+        <span style="font-size:11px;color:var(--c4)">All domain invoices billed under PN 1159</span>
+      </div>
+      <button class="btn btn-p btn-sm" onclick="document.getElementById('m-add-domains').classList.add('open')">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Client Domains
+      </button>
+    </div>
+
+    <!-- Groups -->
+    <!-- PIRNAR -->
+    <div class="dom-group">
+      <div class="dom-ghdr open" id="dom-hdr-pirnar" onclick="domToggle('pirnar')">
+        <span class="dom-garrow">▾</span>
+        <span style="font-weight:700;font-size:13px;color:var(--c1);flex:1">PIRNAR</span>
+        <span style="font-size:11px;color:var(--c4);margin-right:8px">3 domains</span>
+        <span class="itab-badge" style="background:#fffbeb;color:#d97706">1 amber</span>
+      </div>
+      <div class="dom-gbody open" id="dom-body-pirnar">
+        <div class="dom-row">
+          <span class="dom-name">pirnar.si</span>
+          <span class="dom-exp">expires 05 Apr 2026</span>
+          <span class="dom-status"><span style="background:#fffbeb;color:#92400e;padding:3px 9px;border-radius:100px;font-size:11px;font-weight:700">24 days</span></span>
+        </div>
+        <div class="dom-row">
+          <span class="dom-name">pirnar.com</span>
+          <span class="dom-exp">expires 02 Jan 2027</span>
+          <span class="dom-status"><span style="background:#f0fdf4;color:#166534;padding:3px 9px;border-radius:100px;font-size:11px;font-weight:700">Safe</span></span>
+        </div>
+        <div class="dom-row">
+          <span class="dom-name">pirnar.eu</span>
+          <span class="dom-exp">expires 02 Jan 2027</span>
+          <span class="dom-status"><span style="background:#f0fdf4;color:#166534;padding:3px 9px;border-radius:100px;font-size:11px;font-weight:700">Safe</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Moderna galerija -->
+    <div class="dom-group">
+      <div class="dom-ghdr open" id="dom-hdr-mg" onclick="domToggle('mg')">
+        <span class="dom-garrow">▾</span>
+        <span style="font-weight:700;font-size:13px;color:var(--c1);flex:1">Moderna galerija</span>
+        <span style="font-size:11px;color:var(--c4);margin-right:8px">2 domains</span>
+        <span class="itab-badge" style="background:#fee2e2;color:#dc2626">1 expiring</span>
+      </div>
+      <div class="dom-gbody open" id="dom-body-mg">
+        <div class="dom-row" style="background:#fff5f5">
+          <span class="dom-name">modernagalerija.si</span>
+          <span class="dom-exp">expires 14 Mar 2026</span>
+          <span class="dom-status"><span style="background:#fee2e2;color:#991b1b;padding:3px 9px;border-radius:100px;font-size:11px;font-weight:700">2 days</span></span>
+        </div>
+        <div class="dom-row">
+          <span class="dom-name">modernagalerija.com</span>
+          <span class="dom-exp">expires 20 Sep 2026</span>
+          <span class="dom-status"><span style="background:#f0fdf4;color:#166534;padding:3px 9px;border-radius:100px;font-size:11px;font-weight:700">Safe</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- OKS -->
+    <div class="dom-group">
+      <div class="dom-ghdr" id="dom-hdr-oks" onclick="domToggle('oks')">
+        <span class="dom-garrow">▾</span>
+        <span style="font-weight:700;font-size:13px;color:var(--c1);flex:1">OKS</span>
+        <span style="font-size:11px;color:var(--c4);margin-right:8px">2 domains</span>
+        <span class="itab-badge" style="background:#fee2e2;color:#dc2626">1 expiring</span>
+      </div>
+      <div class="dom-gbody" id="dom-body-oks">
+        <div class="dom-row" style="background:#fff5f5">
+          <span class="dom-name">oks.si</span>
+          <span class="dom-exp">expires 18 Mar 2026</span>
+          <span class="dom-status"><span style="background:#fee2e2;color:#991b1b;padding:3px 9px;border-radius:100px;font-size:11px;font-weight:700">6 days</span></span>
+        </div>
+        <div class="dom-row">
+          <span class="dom-name">oks.tv</span>
+          <span class="dom-exp">expires 01 Jun 2026</span>
+          <span class="dom-status"><span style="background:#f0fdf4;color:#166534;padding:3px 9px;border-radius:100px;font-size:11px;font-weight:700">Safe</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Unichem -->
+    <div class="dom-group">
+      <div class="dom-ghdr" id="dom-hdr-uni" onclick="domToggle('uni')">
+        <span class="dom-garrow">▾</span>
+        <span style="font-weight:700;font-size:13px;color:var(--c1);flex:1">Unichem d.o.o.</span>
+        <span style="font-size:11px;color:var(--c4);margin-right:8px">1 domain</span>
+        <span class="itab-badge" style="background:#f0fdf4;color:#166534">All safe</span>
+      </div>
+      <div class="dom-gbody" id="dom-body-uni">
+        <div class="dom-row">
+          <span class="dom-name">unichem.si</span>
+          <span class="dom-exp">expires 14 Nov 2026</span>
+          <span class="dom-status"><span style="background:#f0fdf4;color:#166534;padding:3px 9px;border-radius:100px;font-size:11px;font-weight:700">Safe</span></span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div><!-- /screen-domains -->
+
+</div><!-- /main -->
+</div><!-- /app -->
+
+
+<!-- ====================================================== -->
+<!-- MODAL: ADD CLIENT DOMAINS                               -->
+<!-- ====================================================== -->
+<div class="moverlay" id="m-add-domains" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal" style="max-width:540px">
+    <div class="mh">
+      <h2>Add Client Domains</h2>
+      <button class="mclose" onclick="document.getElementById('m-add-domains').classList.remove('open')">&#215;</button>
+    </div>
+    <div class="mb">
+      <div class="fg2" style="margin-bottom:16px">
+        <div class="fgrp">
+          <label>Client</label>
+          <select id="dom-client-sel" onchange="newClientChange('dom-client-sel','dom-client-nc')">
+            <option value="">— Select client —</option>
+            <option>PIRNAR</option>
+            <option>Moderna galerija</option>
+            <option>Unichem d.o.o.</option>
+            <option>OKS</option>
+            <option>Pristop d.o.o.</option>
+            <option value="__new__">+ New client...</option>
+          </select>
+          <div class="nc-wrap" id="dom-client-nc">
+            <div class="nc-wrap-label">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              New client name
+            </div>
+            <input type="text" placeholder="e.g. Petrol d.d.">
+          </div>
+        </div>
+        <div class="fgrp">
+          <label>Project #</label>
+          <input type="text" id="dom-project-pn" value="1159" placeholder="e.g. 1159" style="font-weight:700">
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <label style="font-size:10px;font-weight:700;color:var(--c3);text-transform:uppercase;letter-spacing:.5px;margin:0">Domains</label>
+        <button class="btn btn-g btn-xs" onclick="addDomainModalRow()">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add domain
+        </button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 140px 90px 28px;gap:4px;margin-bottom:4px;padding:0 2px">
+        <span style="font-size:10px;font-weight:700;color:var(--c4);text-transform:uppercase;letter-spacing:.4px">Domain</span>
+        <span style="font-size:10px;font-weight:700;color:var(--c4);text-transform:uppercase;letter-spacing:.4px">Expiry date</span>
+        <span style="font-size:10px;font-weight:700;color:var(--c4);text-transform:uppercase;letter-spacing:.4px">Amount €</span>
+        <span></span>
+      </div>
+      <div id="dom-modal-rows">
+        <!-- Rows added by JS -->
+        <div id="dom-mrow-0" style="display:grid;grid-template-columns:1fr 140px 90px 28px;align-items:center;gap:6px;margin-bottom:6px">
+          <input type="text" placeholder="e.g. example.si" style="padding:9px 12px;border:1.5px solid var(--c6);border-radius:8px;font-size:13px;font-family:inherit;color:var(--c0)">
+          <input type="date" value="2027-03-12" style="padding:9px 10px;border:1.5px solid var(--c6);border-radius:8px;font-size:12px;font-family:inherit;color:var(--c0)">
+          <input type="number" placeholder="25" step="0.01" style="padding:9px 10px;border:1.5px solid var(--c6);border-radius:8px;font-size:13px;font-family:inherit;color:var(--c0);text-align:right">
+          <button onclick="this.parentNode.remove()" style="width:28px;height:34px;border:1px solid var(--c6);background:#fff;border-radius:7px;cursor:pointer;color:var(--c4);font-size:15px;display:flex;align-items:center;justify-content:center">&#215;</button>
+        </div>
+      </div>
+      <div class="fgrp" style="margin-top:12px">
+        <label style="display:flex;align-items:center;gap:6px">
+          Contract / Order ID
+          <span style="font-size:10px;font-weight:400;color:var(--c4);text-transform:none;letter-spacing:0">(optional — required for invoicing)</span>
+        </label>
+        <input type="text" id="dom-contract-id" placeholder="e.g. 2026/0042 or PO-8812">
+      </div>
+      <div class="info-box" style="margin-top:10px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Domain invoices are billed under the specified Project #. Amount = yearly revenue charged to client.
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-g" onclick="document.getElementById('m-add-domains').classList.remove('open')">Cancel</button>
+      <button class="btn btn-g" onclick="document.getElementById('m-add-domains').classList.remove('open')">Save</button>
+      <button class="btn btn-p" onclick="domSaveWithInvoice()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        Save &amp; Send to Accountant
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================== -->
+<!-- MODAL: DOMAIN INVOICE EMAIL                             -->
+<!-- ====================================================== -->
+<div class="moverlay" id="m-domain-invoice" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal" style="max-width:580px">
+    <div class="mh">
+      <div>
+        <h2>Invoice Email — Accountant</h2>
+        <div style="font-size:12px;color:var(--c4);font-weight:400;margin-top:2px">Generated for PN 1159 · Ready to copy</div>
+      </div>
+      <button class="mclose" onclick="document.getElementById('m-domain-invoice').classList.remove('open')">&#215;</button>
+    </div>
+    <div class="mb">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+        <div>
+          <div style="font-size:10px;font-weight:700;color:var(--c3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">To</div>
+          <input type="text" id="dinv-to" value="racunovodja@renderspace.si" style="width:100%;padding:8px 12px;border:1.5px solid var(--c6);border-radius:8px;font-size:13px;font-family:inherit;color:var(--c0)">
+        </div>
+        <div>
+          <div style="font-size:10px;font-weight:700;color:var(--c3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Subject</div>
+          <input type="text" id="dinv-subject" style="width:100%;padding:8px 12px;border:1.5px solid var(--c6);border-radius:8px;font-size:13px;font-family:inherit;color:var(--c0)">
+        </div>
+      </div>
+      <div style="font-size:10px;font-weight:700;color:var(--c3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Email body</div>
+      <textarea id="dinv-body" rows="14" style="width:100%;padding:14px 16px;border:1.5px solid var(--c6);border-radius:8px;font-size:12px;font-family:'SF Mono','Fira Code',monospace;color:var(--c2);line-height:1.8;resize:vertical;background:var(--c8)"></textarea>
+    </div>
+    <div class="mf">
+      <button class="btn btn-g" onclick="document.getElementById('m-domain-invoice').classList.remove('open')">Close</button>
+      <button class="btn btn-g btn-sm" onclick="dinvCopy(false)">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        Copy email
+      </button>
+      <button class="btn btn-p" onclick="dinvCopy(true)">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/></svg>
+        Copy &amp; done
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================== -->
+<!-- MODAL: SMART DISTRIBUTE                                 -->
+<!-- ====================================================== -->
+<div class="moverlay" id="m-smart-dist" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal" style="max-width:500px">
+    <div class="mh">
+      <h2>Smart Distribute</h2>
+      <button class="mclose" onclick="document.getElementById('m-smart-dist').classList.remove('open')">&#215;</button>
+    </div>
+    <div class="mb">
+      <div style="font-size:13px;color:var(--c3);margin-bottom:16px;line-height:1.5">List all projects you worked on this month, then pick your <strong>top 3</strong> to assign the most hours. AI distributes the rest proportionally.</div>
+
+      <!-- Step 1: All projects -->
+      <div style="margin-bottom:14px">
+        <label style="font-size:10px;font-weight:700;color:var(--c3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:8px">All projects this month</label>
+        <div id="sd-proj-list" style="display:flex;flex-direction:column;gap:6px"></div>
+        <button class="btn btn-g btn-xs" style="margin-top:8px" onclick="sdAddRow()">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add project
+        </button>
+      </div>
+
+      <!-- Step 2: Top 3 -->
+      <div style="background:var(--pll);border:1px solid #ddd6fe;border-radius:8px;padding:12px 14px;margin-bottom:14px">
+        <label style="font-size:10px;font-weight:700;color:var(--p);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:8px">Top 3 projects (most hours)</label>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:11px;font-weight:800;color:var(--p);width:18px">1.</span>
+            <datalist id="sd-dl-top"><option value="RS-2026-001">RS-2026-001 · MG+MSUM</option><option value="RS-2026-004">RS-2026-004 · Unichem</option><option value="RS-2026-005">RS-2026-005 · OKS TV</option><option value="RS-2025-010">RS-2025-010 · Pristop</option></datalist>
+            <input type="text" list="sd-dl-top" placeholder="PN or project name…" id="sd-top1" class="ts-fin" style="font-size:12px;font-weight:600;flex:1">
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:11px;font-weight:800;color:var(--p);width:18px">2.</span>
+            <input type="text" list="sd-dl-top" placeholder="PN or project name…" id="sd-top2" class="ts-fin" style="font-size:12px;font-weight:600;flex:1">
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:11px;font-weight:800;color:var(--p);width:18px">3.</span>
+            <input type="text" list="sd-dl-top" placeholder="PN or project name…" id="sd-top3" class="ts-fin" style="font-size:12px;font-weight:600;flex:1">
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--p);opacity:.7;margin-top:8px">Top 3 get ~65% of total hours · rest split equally</div>
+      </div>
+
+      <!-- Preview -->
+      <div id="sd-preview" style="display:none;background:var(--c8);border:1px solid var(--c6);border-radius:8px;padding:12px 14px">
+        <div style="font-size:10px;font-weight:700;color:var(--c3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Distribution preview</div>
+        <div id="sd-preview-rows"></div>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-g" onclick="document.getElementById('m-smart-dist').classList.remove('open')">Cancel</button>
+      <button class="btn btn-g btn-sm" onclick="sdPreview()">Preview</button>
+      <button class="btn btn-p" onclick="sdApply()">Apply to timesheet</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================== -->
+<!-- MODAL: ADD PROVIDER COST                                -->
+<!-- ====================================================== -->
+<div class="moverlay" id="m-add-provider" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal" style="max-width:480px">
+    <div class="mh">
+      <h2>Add Provider Cost</h2>
+      <button class="mclose" onclick="document.getElementById('m-add-provider').classList.remove('open')">&#215;</button>
+    </div>
+    <div class="mb">
+      <div class="fgrp" style="margin-bottom:12px">
+        <label>Provider name</label>
+        <input type="text" placeholder="e.g. Hetzner, Cloudflare, AWS...">
+      </div>
+      <div class="fgrp" style="margin-bottom:12px">
+        <label>Service description</label>
+        <input type="text" placeholder="e.g. VPS CX31 — 3 instances">
+      </div>
+      <div class="fg2">
+        <div class="fgrp">
+          <label>Monthly cost (€)</label>
+          <input type="number" placeholder="0.00" step="0.01">
+        </div>
+        <div class="fgrp">
+          <label>Billing cycle</label>
+          <select>
+            <option>Monthly</option>
+            <option>Annual (divided by 12)</option>
+            <option>Variable (avg)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-g" onclick="document.getElementById('m-add-provider').classList.remove('open')">Cancel</button>
+      <button class="btn btn-p">Add provider</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================== -->
+<!-- MODAL: ADD HOSTING CLIENT                               -->
+<!-- ====================================================== -->
+<div class="moverlay" id="m-add-hosting-client" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal" style="max-width:520px">
+    <div class="mh">
+      <h2>Add Hosting Client</h2>
+      <button class="mclose" onclick="document.getElementById('m-add-hosting-client').classList.remove('open')">&#215;</button>
+    </div>
+    <div class="mb">
+      <div class="fg2">
+        <div class="fgrp">
+          <label>Client</label>
+          <select id="hc-client-sel" onchange="newClientChange('hc-client-sel','hc-client-nc')">
+            <option value="">— Select client —</option>
+            <option>Moderna galerija</option>
+            <option>Unichem d.o.o.</option>
+            <option>OKS</option>
+            <option>Pristop d.o.o.</option>
+            <option value="__new__">+ New client...</option>
+          </select>
+          <div class="nc-wrap" id="hc-client-nc">
+            <div class="nc-wrap-label">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              New client name
+            </div>
+            <input type="text" placeholder="e.g. Petrol d.d.">
+          </div>
+        </div>
+        <div class="fgrp">
+          <label>Project # <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--c5)">(linked PN)</span></label>
+          <div style="position:relative">
+            <input type="text" id="hc-pn-input" style="width:100%;padding:9px 12px;border:1.5px solid var(--p);border-radius:8px;font-size:13px;font-family:inherit;color:var(--p);background:var(--pll);font-weight:700;" placeholder="RS-2026-GOT">
+            <span id="hc-pn-default-badge" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:10px;font-weight:700;background:var(--p);color:#fff;padding:2px 6px;border-radius:100px;">default</span>
+          </div>
+          <div style="margin-top:5px;font-size:11px;color:var(--c4)">Using default hosting PN &nbsp;·&nbsp; <span style="color:var(--p);cursor:pointer;font-weight:600;" onclick="document.getElementById('hc-pn-input').value='';document.getElementById('hc-pn-input').style.borderColor='var(--c6)';document.getElementById('hc-pn-input').style.background='#fff';document.getElementById('hc-pn-input').style.color='var(--c0)';document.getElementById('hc-pn-default-badge').style.display='none';document.getElementById('hc-pn-input').focus();">Use custom PN</span></div>
+        </div>
+      </div>
+      <div class="fgrp" style="margin-bottom:12px">
+        <label>Service description</label>
+        <input type="text" placeholder="e.g. VPS + cPanel hosting, Managed WordPress...">
+      </div>
+      <div class="fg2">
+        <div class="fgrp">
+          <label>Billing cycle</label>
+          <select id="hc-cycle" onchange="hcCycleChange()">
+            <option value="monthly">Monthly</option>
+            <option value="yearly">Yearly</option>
+          </select>
+        </div>
+        <div class="fgrp">
+          <label id="hc-amount-label">Monthly revenue (€)</label>
+          <input type="number" id="hc-amount" placeholder="0.00" step="0.01">
+        </div>
+      </div>
+      <div class="fg2">
+        <div class="fgrp">
+          <label>Billing since</label>
+          <input type="month" value="2026-03">
+        </div>
+        <div class="fgrp" id="hc-next-inv-wrap" style="display:none">
+          <label>Next invoice date</label>
+          <input type="month" id="hc-next-inv" value="2027-03">
+        </div>
+      </div>
+      <div class="info-box" style="margin-top:4px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Active entries auto-generate monthly invoice rows in Revenue Planner under the linked Project #.
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-g" onclick="document.getElementById('m-add-hosting-client').classList.remove('open')">Cancel</button>
+      <button class="btn btn-p">Add client</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================== -->
+<!-- MODAL 1: ADD PLANNED INVOICE                            -->
+<!-- ====================================================== -->
+<div class="moverlay" id="m-add-plan" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal" id="modal-add-plan">
+    <div class="mh">
+      <h2>Add planned invoice</h2>
+      <button class="mclose" onclick="document.getElementById('m-add-plan').classList.remove('open')">&#215;</button>
+    </div>
+    <div class="mb">
+      <div class="fgrp" style="margin-bottom:16px">
+        <label>Project</label>
+        <select style="width:100%;padding:9px 12px;border:1.5px solid var(--c6);border-radius:8px;font-size:13px;font-family:inherit;color:var(--c0);background:#fff;font-weight:500;">
+          <option value="">— Select project —</option>
+          <option>MG+MSUM Prenova · Moderna galerija (Fixed)</option>
+          <option>Unichem Digitalizacija · Unichem d.o.o. (Maintenance)</option>
+          <option>OKS TV Broadcast · OKS (Retainer)</option>
+          <option>Pristop E-trgovina · Pristop d.o.o. (Fixed)</option>
+        </select>
+      </div>
+      <div class="mtabs">
+        <button class="mtab active" id="apt-one" onclick="apTab('one')">One time</button>
+        <button class="mtab" id="apt-monthly" onclick="apTab('monthly')">Monthly</button>
+        <button class="mtab" id="apt-adhoc" onclick="apTab('adhoc')">Ad-hoc</button>
+      </div>
+
+      <!-- ONE TIME -->
+      <div id="ap-one">
+        <div class="fg2">
+          <div class="fgrp"><label>Month</label><input type="month" value="2026-06"></div>
+          <div class="fgrp"><label>Planned amount (&#8364;)</label><input type="number" placeholder="5000"></div>
+        </div>
+        <div class="fgrp" style="margin-bottom:12px">
+          <label>Probability</label>
+          <div style="display:flex;gap:6px;margin-top:5px">
+            <button class="prob-pill pp-sel" onclick="selProb(this)">Fixed<span class="prob-pct">100%</span></button>
+            <button class="prob-pill" onclick="selProb(this)">Maybe<span class="prob-pct">50%</span></button>
+            <button class="prob-pill" onclick="selProb(this)">Unlikely<span class="prob-pct">30%</span></button>
+            <button class="prob-pill" onclick="selProb(this)">Low<span class="prob-pct">10%</span></button>
+          </div>
+        </div>
+        <div class="fgrp">
+          <label>Description <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--c5)">(optional)</span></label>
+          <input type="text" placeholder="e.g. Faza 5 &mdash; Maintenance">
+        </div>
+      </div>
+
+      <!-- MONTHLY -->
+      <div id="ap-monthly" style="display:none">
+        <div class="fg2">
+          <div class="fgrp">
+            <label>From month</label>
+            <input type="month" id="ap-from" value="2026-06" onchange="generateMonthRows()">
+          </div>
+          <div class="fgrp">
+            <label>To month</label>
+            <input type="month" id="ap-to" value="2026-12" onchange="generateMonthRows()">
+          </div>
+        </div>
+        <div style="margin-bottom:12px">
+          <label style="font-size:10px;font-weight:700;color:var(--c3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:8px">Amount &amp; probability per month</label>
+          <div class="month-rows-wrap">
+            <table id="month-rows-table">
+              <thead><tr>
+                <th style="min-width:110px">Month</th>
+                <th style="min-width:130px">Amount (&#8364;)</th>
+                <th style="min-width:190px">Probability</th>
+              </tr></thead>
+              <tbody id="month-rows-body"></tbody>
+              <tfoot>
+                <tr class="total-row">
+                  <td style="color:var(--c3);font-size:10px;text-transform:uppercase;letter-spacing:.5px">Total</td>
+                  <td colspan="2" id="month-rows-total" class="num" style="color:var(--c0)"></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+        <div class="info-box">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          Each row creates one invoice plan entry in the planning grid. You can edit individual amounts and probabilities after saving.
+        </div>
+      </div>
+      <!-- AD-HOC TAB -->
+      <div id="ap-adhoc" style="display:none">
+        <div class="info-box" style="margin-bottom:16px;background:#fffbeb;border-color:#fde68a;color:#92400e;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          For one-time work not tied to an existing project. Creates a standalone invoice entry.
+        </div>
+        <div class="fg2">
+          <div class="fgrp">
+            <label>Client</label>
+            <select id="adhoc-client-sel" style="width:100%;padding:9px 12px;border:1.5px solid var(--c6);border-radius:8px;font-size:13px;font-family:inherit;color:var(--c0);background:#fff;" onchange="newClientChange('adhoc-client-sel','adhoc-client-nc')">
+              <option value="">— Select client —</option>
+              <option>Moderna galerija</option>
+              <option>Unichem d.o.o.</option>
+              <option>OKS</option>
+              <option>Pristop d.o.o.</option>
+              <option value="__new__">+ New client...</option>
+            </select>
+            <div class="nc-wrap" id="adhoc-client-nc">
+              <div class="nc-wrap-label">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                New client name
+              </div>
+              <input type="text" placeholder="e.g. Petrol d.d." autofocus>
+            </div>
+          </div>
+          <div class="fgrp">
+            <label>Month</label>
+            <input type="month" value="2026-04" style="width:100%;padding:9px 12px;border:1.5px solid var(--c6);border-radius:8px;font-size:13px;font-family:inherit;color:var(--c0);background:#fff;">
+          </div>
+        </div>
+        <div class="fgrp" style="margin-bottom:12px">
+          <label>Project / work description</label>
+          <input type="text" placeholder="e.g. Logo design, Consultation, Photo shoot..." style="width:100%;padding:9px 12px;border:1.5px solid var(--c6);border-radius:8px;font-size:13px;font-family:inherit;color:var(--c0);background:#fff;">
+        </div>
+        <div class="fg2">
+          <div class="fgrp">
+            <label>Amount (€)</label>
+            <input type="number" placeholder="0" style="width:100%;padding:9px 12px;border:1.5px solid var(--c6);border-radius:8px;font-size:13px;font-family:inherit;color:var(--c0);background:#fff;">
+          </div>
+          <div class="fgrp">
+            <label>Probability</label>
+            <select style="width:100%;padding:9px 12px;border:1.5px solid var(--c6);border-radius:8px;font-size:13px;font-family:inherit;color:var(--c0);background:#fff;">
+              <option>Fixed — 100%</option>
+              <option>Maybe — 50%</option>
+              <option>Unlikely — 30%</option>
+              <option>Low — 10%</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-g" onclick="document.getElementById('m-add-plan').classList.remove('open')">Cancel</button>
+      <button class="btn btn-p" id="btn-add-plan">Add invoice plan</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ====================================================== -->
+<!-- MODAL 2: NOT INVOICED                                   -->
+<!-- ====================================================== -->
+<div class="moverlay" id="m-not-inv" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal" style="max-width:460px">
+    <div class="mh">
+      <h2>Not Invoiced</h2>
+      <button class="mclose" onclick="document.getElementById('m-not-inv').classList.remove('open')">&#215;</button>
+    </div>
+    <div class="mb">
+      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px 14px;font-size:13px;color:#92400e;margin-bottom:16px;line-height:1.5">
+        <strong id="ni-project-name">OKS TV Broadcast</strong>
+        <span style="color:#ca8a04"> &middot; </span>
+        <span id="ni-amount">&#8364;14,000</span> planned for
+        <span id="ni-month">March 2026</span>
+      </div>
+      <div class="fgrp" style="margin-bottom:12px">
+        <label>Reason</label>
+        <textarea style="height:80px" placeholder="e.g. Client requested deferral to next month..."></textarea>
+      </div>
+      <div class="fgrp">
+        <label>Move to month <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--c5)">(optional)</span></label>
+        <select>
+          <option value="">&mdash; Don't move, mark as not invoiced</option>
+          <option>April 2026</option>
+          <option>May 2026</option>
+          <option>June 2026</option>
+          <option>July 2026</option>
+        </select>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-g" onclick="document.getElementById('m-not-inv').classList.remove('open')">Cancel</button>
+      <button class="btn btn-p">Save</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ====================================================== -->
+<!-- MODAL 3: ADD COST                                       -->
+<!-- ====================================================== -->
+<div class="moverlay" id="m-add-cost" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal" style="max-width:460px">
+    <div class="mh">
+      <h2>Add cost</h2>
+      <button class="mclose" onclick="document.getElementById('m-add-cost').classList.remove('open')">&#215;</button>
+    </div>
+    <div class="mb">
+      <div class="m-ctx">
+        <strong>MG+MSUM Prenova</strong>
+        <span style="color:var(--c5)">&middot;</span>
+        Moderna galerija
+      </div>
+      <div class="fg2">
+        <div class="fgrp"><label>Month</label><input type="month" value="2026-03"></div>
+        <div class="fgrp"><label>Amount (&#8364;)</label><input type="number" placeholder="800"></div>
+      </div>
+      <div class="fgrp" style="margin-bottom:12px">
+        <label>Description</label>
+        <input type="text" placeholder="e.g. Subcontracting &mdash; copywriting">
+      </div>
+      <div class="fgrp">
+        <label>Project <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--c5)">(if adding from This Month)</span></label>
+        <select>
+          <option>MG+MSUM Prenova</option>
+          <option>Unichem Digitalizacija</option>
+          <option>OKS TV Broadcast</option>
+          <option>Pristop E-trgovina</option>
+        </select>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-g" onclick="document.getElementById('m-add-cost').classList.remove('open')">Cancel</button>
+      <button class="btn btn-p">Add cost</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ====================================================== -->
+<!-- MODAL 4: NEW CLIENT                                     -->
+<!-- ====================================================== -->
+<div class="moverlay" id="m-client" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal" style="max-width:400px">
+    <div class="mh">
+      <h2>New Client</h2>
+      <button class="mclose" onclick="document.getElementById('m-client').classList.remove('open')">&#215;</button>
+    </div>
+    <div class="mb">
+      <div class="fgrp">
+        <label>Client name</label>
+        <input type="text" placeholder="e.g. Moderna galerija d.o.o.">
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-g" onclick="document.getElementById('m-client').classList.remove('open')">Cancel</button>
+      <button class="btn btn-p">Create client</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ====================================================== -->
+<!-- MODAL 5: NEW PROJECT                                    -->
+<!-- ====================================================== -->
+<div class="moverlay" id="m-project" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal" style="max-width:560px">
+    <div class="mh">
+      <h2>New Project</h2>
+      <button class="mclose" onclick="document.getElementById('m-project').classList.remove('open')">&#215;</button>
+    </div>
+    <div class="mb">
+      <div style="margin-bottom:16px">
+        <label style="font-size:10px;font-weight:700;color:var(--c3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:8px">Project type</label>
+        <div class="tpills">
+          <div class="tpill sel-f" onclick="selType(this,'f')">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            <div class="pn">Fixed</div><div class="pd">Known total</div>
+          </div>
+          <div class="tpill" onclick="selType(this,'m')">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
+            <div class="pn">Maintenance</div><div class="pd">Monthly recurring</div>
+          </div>
+          <div class="tpill" onclick="selType(this,'r')">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg>
+            <div class="pn">Retainer</div><div class="pd">Variable usage</div>
+          </div>
+        </div>
+      </div>
+      <div class="fg2">
+        <div class="fgrp"><label>Project name</label><input type="text" placeholder="e.g. Petrol &mdash; Prenova"></div>
+        <div class="fgrp"><label>Client</label>
+          <select id="proj-client-sel" onchange="newClientChange('proj-client-sel','proj-client-nc')">
+            <option value="">— Select client —</option>
+            <option>Moderna galerija</option><option>Unichem d.o.o.</option>
+            <option>OKS</option><option>Pristop d.o.o.</option>
+            <option value="__new__">+ New client...</option>
+          </select>
+          <div class="nc-wrap" id="proj-client-nc">
+            <div class="nc-wrap-label">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              New client name
+            </div>
+            <input type="text" placeholder="e.g. Petrol d.d.">
+          </div>
+        </div>
+      </div>
+      <div class="fg2">
+        <div class="fgrp"><label>Project Manager</label>
+          <select><option>Nino</option><option>Ana</option><option>Maja</option></select>
+        </div>
+        <div class="fgrp" id="mp-value"><label>Project value (&#8364;)</label><input type="number" placeholder="45000"></div>
+      </div>
+      <div id="mp-fixed">
+        <div class="fg2">
+          <div class="fgrp"><label>Start month <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--c5)">(optional)</span></label><input type="month"></div>
+          <div class="fgrp"><label>End month <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--c5)">(optional)</span></label><input type="month"></div>
+        </div>
+      </div>
+      <div id="mp-maint" style="display:none">
+        <div class="fg2">
+          <div class="fgrp"><label>Monthly amount (&#8364;)</label><input type="number" placeholder="2000"></div>
+          <div class="fgrp"><label>Starting from</label><input type="month" value="2026-04"></div>
+        </div>
+        <div class="info-box">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          Invoice plans will be auto-generated for every future month.
+        </div>
+      </div>
+      <div id="mp-retainer" style="display:none">
+        <div class="fg3">
+          <div class="fgrp"><label>Est. monthly (&#8364;)</label><input type="number" placeholder="8000"></div>
+          <div class="fgrp"><label>Probability (%)</label><input type="number" value="70"></div>
+          <div class="fgrp"><label>Starting from</label><input type="month" value="2026-04"></div>
+        </div>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-g" onclick="document.getElementById('m-project').classList.remove('open')">Cancel</button>
+      <button class="btn btn-p">Create project</button>
+    </div>
+  </div>
+</div>
+
+<!-- Ad-hoc invoice modal (from This Month) -->
+<div class="moverlay" id="m-adhoc-month">
+  <div class="modal">
+    <div class="mh">
+      <h2>Add ad-hoc invoice</h2>
+      <button class="mclose" onclick="document.getElementById('m-adhoc-month').classList.remove('open')">&#215;</button>
+    </div>
+    <div class="mb">
+      <div class="info-box" style="margin-bottom:16px;background:#fffbeb;border-color:#fde68a;color:#92400e;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        One-time invoice not tied to an existing project plan.
+      </div>
+      <div class="fg2">
+        <div class="fgrp">
+          <label>Client</label>
+          <select id="month-adhoc-client-sel" style="width:100%;padding:9px 12px;border:1.5px solid var(--c6);border-radius:8px;font-size:13px;font-family:inherit;color:var(--c0);background:#fff;" onchange="newClientChange('month-adhoc-client-sel','month-adhoc-client-nc')">
+            <option value="">— Select client —</option>
+            <option>Moderna galerija</option>
+            <option>Unichem d.o.o.</option>
+            <option>OKS</option>
+            <option>Pristop d.o.o.</option>
+            <option value="__new__">+ New client...</option>
+          </select>
+          <div class="nc-wrap" id="month-adhoc-client-nc">
+            <div class="nc-wrap-label">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              New client name
+            </div>
+            <input type="text" placeholder="e.g. Petrol d.d.">
+          </div>
+        </div>
+        <div class="fgrp">
+          <label>Month</label>
+          <input type="month" value="2026-03" style="width:100%;padding:9px 12px;border:1.5px solid var(--c6);border-radius:8px;font-size:13px;font-family:inherit;color:var(--c0);background:#fff;">
+        </div>
+      </div>
+      <div class="fgrp" style="margin-bottom:12px">
+        <label>Project / description</label>
+        <input type="text" placeholder="e.g. Logo design, Photo session, Consultation..." style="width:100%;padding:9px 12px;border:1.5px solid var(--c6);border-radius:8px;font-size:13px;font-family:inherit;color:var(--c0);background:#fff;">
+      </div>
+      <div class="fg2">
+        <div class="fgrp">
+          <label>Amount (€)</label>
+          <input type="number" placeholder="0" style="width:100%;padding:9px 12px;border:1.5px solid var(--c6);border-radius:8px;font-size:13px;font-family:inherit;color:var(--c0);background:#fff;">
+        </div>
+        <div class="fgrp">
+          <label>Project ref (optional)</label>
+          <input type="text" placeholder="e.g. RS-2026-005" style="width:100%;padding:9px 12px;border:1.5px solid var(--c6);border-radius:8px;font-size:13px;font-family:inherit;color:var(--c0);background:#fff;">
+        </div>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-g" onclick="document.getElementById('m-adhoc-month').classList.remove('open')">Cancel</button>
+      <button class="btn btn-p">Add invoice</button>
+    </div>
+  </div>
+</div>
+
+
+<script>
+/* Navigation map */
+var NAV_MAP={
+  'planning':'n-planning','inv-month':'n-inv-month',
+  'clients':'n-clients','client-detail':'n-clients',
+  'projects':'n-projects','project-detail':'n-projects',
+  'email':'n-tools','stats':'n-stats',
+  'tools':'n-tools','ai-timesheet':'n-tools',
+  'infrastructure':'n-infrastructure',
+  'domains':'n-domains'
+};
+
+function go(name,tabEl,nav){
+  document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
+  var sc=document.getElementById('screen-'+name);
+  if(sc){sc.classList.add('active');sc.scrollTop=0;}
+  if(tabEl){
+    document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active');});
+    tabEl.classList.add('active');
+  }
+  document.querySelectorAll('.sb-item').forEach(function(i){i.classList.remove('active');});
+  var nk=nav||name;
+  var nid=NAV_MAP[nk];
+  if(nid){var el=document.getElementById(nid);if(el)el.classList.add('active');}
+}
+
+/* Open add plan modal */
+function openAddPlan(){
+  document.getElementById('m-add-plan').classList.add('open');
+  apTab('one');
+}
+
+/* Tab switcher: One time / Monthly / Ad-hoc */
+function apTab(t){
+  document.getElementById('ap-one').style.display=t==='one'?'block':'none';
+  document.getElementById('ap-monthly').style.display=t==='monthly'?'block':'none';
+  document.getElementById('ap-adhoc').style.display=t==='adhoc'?'block':'none';
+  document.getElementById('apt-one').classList.toggle('active',t==='one');
+  document.getElementById('apt-monthly').classList.toggle('active',t==='monthly');
+  document.getElementById('apt-adhoc').classList.toggle('active',t==='adhoc');
+  var modal=document.getElementById('modal-add-plan');
+  modal.classList.toggle('modal-wide',t==='monthly');
+  if(t==='monthly')generateMonthRows();
+  var btnLabel=document.getElementById('btn-add-plan');
+  if(btnLabel)btnLabel.textContent=t==='adhoc'?'Add ad-hoc invoice':'Add invoice plan';
+}
+
+/* Generate month rows in monthly tab */
+var MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
+var DEFAULT_AMOUNTS=[4000,4000,4000,4000,4000,4000,4000];
+var DEFAULT_PROBS=['Fixed -- 100%','Fixed -- 100%','Fixed -- 100%','Maybe -- 50%','Maybe -- 50%','Maybe -- 50%','Maybe -- 50%'];
+
+function generateMonthRows(){
+  var fromEl=document.getElementById('ap-from');
+  var toEl=document.getElementById('ap-to');
+  if(!fromEl||!toEl)return;
+  var from=fromEl.value,to=toEl.value;
+  if(!from||!to)return;
+  var fp=from.split('-'),tp=to.split('-');
+  var fy=parseInt(fp[0]),fm=parseInt(fp[1])-1;
+  var ty=parseInt(tp[0]),tm=parseInt(tp[1])-1;
+  var rows=[];
+  var cy=fy,cm=fm;
+  while(cy<ty||(cy===ty&&cm<=tm)){
+    rows.push({y:cy,m:cm});
+    cm++;if(cm>11){cm=0;cy++;}
+    if(rows.length>24)break;
+  }
+  var tbody=document.getElementById('month-rows-body');
+  if(!tbody)return;
+  tbody.innerHTML='';
+  rows.forEach(function(r,i){
+    var label=MONTH_NAMES[r.m]+' '+r.y;
+    var amt=DEFAULT_AMOUNTS[i]!==undefined?DEFAULT_AMOUNTS[i]:4000;
+    var prob=DEFAULT_PROBS[i]||'Fixed -- 100%';
+    var sel100=prob==='Fixed -- 100%'?' selected':'';
+    var sel50=prob==='Maybe -- 50%'?' selected':'';
+    var sel30=prob==='Unlikely -- 30%'?' selected':'';
+    var sel10=prob==='Low -- 10%'?' selected':'';
+    var tr=document.createElement('tr');
+    tr.innerHTML=
+      '<td style="font-size:12px;font-weight:600;color:var(--c2);white-space:nowrap">'+label+'</td>'+
+      '<td><input class="mri" type="number" value="'+amt+'" oninput="updateMonthTotal()" placeholder="0"></td>'+
+      '<td><select class="mrs">'+
+        '<option'+sel100+'>Fixed -- 100%</option>'+
+        '<option'+sel50+'>Maybe -- 50%</option>'+
+        '<option'+sel30+'>Unlikely -- 30%</option>'+
+        '<option'+sel10+'>Low -- 10%</option>'+
+      '</select></td>';
+    tbody.appendChild(tr);
+  });
+  updateMonthTotal();
+}
+
+function updateMonthTotal(){
+  var inputs=document.querySelectorAll('#month-rows-body .mri');
+  var total=0;
+  inputs.forEach(function(inp){total+=parseFloat(inp.value)||0;});
+  var el=document.getElementById('month-rows-total');
+  if(el){
+    var n=inputs.length;
+    el.textContent='\u20ac'+total.toLocaleString('de-DE')+'  ('+n+' entr'+(n===1?'y':'ies')+')';
+  }
+}
+
+/* Probability pill selector */
+function selProb(el){
+  el.closest('div').querySelectorAll('.prob-pill').forEach(function(p){p.classList.remove('pp-sel');});
+  el.classList.add('pp-sel');
+}
+
+/* Project type selector */
+function selType(el,t){
+  document.querySelectorAll('.tpill').forEach(function(p){p.className='tpill';});
+  el.classList.add('sel-'+t);
+  document.getElementById('mp-fixed').style.display=t==='f'?'block':'none';
+  document.getElementById('mp-maint').style.display=t==='m'?'block':'none';
+  document.getElementById('mp-retainer').style.display=t==='r'?'block':'none';
+  document.getElementById('mp-value').style.display=t==='m'?'none':'block';
+}
+
+/* Not Invoiced modal */
+function openNotInv(project,amount,month){
+  var pEl=document.getElementById('ni-project-name');
+  var aEl=document.getElementById('ni-amount');
+  var mEl=document.getElementById('ni-month');
+  if(pEl)pEl.textContent=project;
+  if(aEl)aEl.textContent=amount;
+  if(mEl)mEl.textContent=month;
+  document.getElementById('m-not-inv').classList.add('open');
+}
+
+/* Confirm invoice row */
+function confirmInvRow(rowId,inputId){
+  var row=document.getElementById(rowId);
+  if(!row)return;
+  var inp=document.getElementById(inputId);
+  var raw=inp&&inp.value?parseFloat(inp.value)||0:0;
+  var fmt=raw>0?'\u20ac'+raw.toLocaleString('de-DE'):'--';
+  var cells=row.querySelectorAll('td');
+  if(cells[3])cells[3].innerHTML='<span style="color:#2563eb;font-weight:700;font-variant-numeric:tabular-nums">'+fmt+'</span>';
+  if(cells[4])cells[4].innerHTML='<span class="badge bblue">Issued</span>';
+  if(cells[5])cells[5].innerHTML='<button class="btn btn-g btn-xs">Edit</button>';
+  row.classList.remove('row-pending');
+}
+
+/* Month navigation */
+var MONTHS_EN=['January','February','March','April','May','June','July','August','September','October','November','December'];
+var curM=2,curY=2026;
+function changeMonth(d){
+  curM+=d;
+  if(curM<0){curM=11;curY--;}
+  if(curM>11){curM=0;curY++;}
+  var el=document.getElementById('cur-month-label');
+  if(el)el.textContent=MONTHS_EN[curM]+' '+curY;
+}
+
+/* Email generator */
+function generateEmail(){
+  var client=(document.getElementById('e-client')||{}).value||'';
+  var projRef=(document.getElementById('e-project')||{}).value||'';
+  var serviceMonth=(document.getElementById('e-service-month')||{}).value||'2026-03';
+  var payDays=parseInt((document.getElementById('e-paydays')||{}).value)||30;
+  var sender=(document.getElementById('e-sender')||{}).value||'Nino Kovac';
+  // Format service month
+  var MONTHS_SL=['januar','februar','marec','april','maj','junij','julij','avgust','september','oktober','november','december'];
+  var smParts=serviceMonth.split('-');
+  var smStr=smParts.length===2?MONTHS_SL[parseInt(smParts[1])-1]+' '+smParts[0]:serviceMonth;
+  // Collect line items
+  var rows=document.querySelectorAll('#e-lines tr');
+  var lines=[],total=0;
+  rows.forEach(function(tr){
+    var ins=tr.querySelectorAll('input');
+    if(ins.length>=3){
+      var ref=ins[0].value||'';
+      var desc=ins[1].value||'';
+      var amt=parseFloat(ins[2].value)||0;
+      total+=amt;
+      lines.push({ref:ref,desc:desc,amt:amt});
+    }
+  });
+  // Update total display
+  var totalEl=document.getElementById('e-total');
+  if(totalEl)totalEl.textContent=total.toLocaleString('sl-SI',{minimumFractionDigits:2,maximumFractionDigits:2})+' EUR';
+  // Build line items text
+  var linesText='';
+  lines.forEach(function(l,i){
+    var amtFmt=l.amt.toLocaleString('sl-SI',{minimumFractionDigits:2,maximumFractionDigits:2})+' EUR';
+    linesText+='\n  '+(i+1)+'. '+(l.ref?'['+l.ref+'] ':'')+l.desc+' — '+amtFmt;
+  });
+  var totalFmt=total.toLocaleString('sl-SI',{minimumFractionDigits:2,maximumFractionDigits:2})+' EUR';
+  var clientLine=client?'\nNarocnik: '+client:'';
+  var projLine=projRef?'\nRef. projekta: '+projRef:'';
+  var txt='Pozdravljeni,\n\nprosimo za izstavitev '+(lines.length===1?'fakture':'faktur')+' za '+smStr+':'+clientLine+projLine+'\n\nStoritve:'+linesText+'\n\nSKUPAJ (brez DDV): '+totalFmt+'\nDatum storitve: '+smStr+'\nRok placila: '+payDays+' dni\n\nProsimo, da fakturo izstavite cim prej.\n\nLep pozdrav,\n'+sender+'\nRenderspace d.o.o.\nnino@renderspace.si';
+  var el=document.getElementById('e-preview');
+  if(el)el.textContent=txt;
+}
+
+function addEmailLine(){
+  var tbody=document.getElementById('e-lines');
+  if(!tbody)return;
+  var tr=document.createElement('tr');
+  tr.innerHTML='<td style="padding:6px 8px;border-bottom:1px solid var(--c7)"><input style="width:90px;padding:5px 7px;border:1.5px solid var(--c6);border-radius:6px;font-size:12px;font-family:inherit;font-weight:500;" placeholder="Ref #" oninput="generateEmail()"></td>'+
+    '<td style="padding:6px 8px;border-bottom:1px solid var(--c7)"><input style="width:100%;padding:5px 7px;border:1.5px solid var(--c6);border-radius:6px;font-size:12px;font-family:inherit;font-weight:500;" placeholder="Service description" oninput="generateEmail()"></td>'+
+    '<td style="padding:6px 8px;border-bottom:1px solid var(--c7)"><input type="number" style="width:100%;padding:5px 7px;border:1.5px solid var(--c6);border-radius:6px;font-size:12px;font-family:inherit;font-weight:500;text-align:right;" placeholder="0" oninput="generateEmail()"></td>'+
+    '<td style="padding:6px 8px;border-bottom:1px solid var(--c7);text-align:center"><button onclick="removeEmailLine(this)" style="background:none;border:none;cursor:pointer;color:var(--c4);font-size:14px;padding:2px 4px;">×</button></td>';
+  tbody.appendChild(tr);
+}
+
+function removeEmailLine(btn){
+  var tr=btn.closest('tr');
+  var tbody=document.getElementById('e-lines');
+  if(tbody&&tbody.rows.length>1&&tr){tr.remove();generateEmail();}
+}
+
+function copyEmailText(btn){
+  var el=document.getElementById('e-preview');
+  if(!el)return;
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(el.textContent).then(function(){
+      var orig=btn.innerHTML;
+      btn.textContent='Copied!';
+      setTimeout(function(){btn.innerHTML=orig;},1600);
+    });
+  }
+}
+
+/* ---- Statistics charts ---- */
+function renderStats(){
+  drawBarChart();
+  drawDonut();
+  drawClientBars();
+}
+
+function drawBarChart(){
+  var labels=['Jan','Feb','Mar','Apr','May','Jun'];
+  var planned=[15900,18300,32600,24800,26500,16200];
+  var actual=[15900,18300,14250,0,0,0];
+  var costs=[800,1400,2700,0,0,0];
+  var W=500,H=190;
+  var padL=46,padR=12,padT=12,padB=28;
+  var cW=W-padL-padR,cH=H-padT-padB;
+  var maxV=36000;
+  var slotW=cW/6;
+  var bw=14,gap=3;
+  var svg='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block;">';
+  // gridlines
+  for(var g=0;g<=4;g++){
+    var gv=(maxV/4)*g;
+    var gy=padT+cH-(gv/maxV)*cH;
+    var glbl=gv===0?'0':(gv/1000)+'k';
+    svg+='<line x1="'+padL+'" y1="'+gy+'" x2="'+(W-padR)+'" y2="'+gy+'" stroke="#e4e4e7" stroke-width="1"/>';
+    svg+='<text x="'+(padL-5)+'" y="'+(gy+3.5)+'" text-anchor="end" font-size="9" fill="#a1a1aa" font-family="Figtree,sans-serif">'+glbl+'</text>';
+  }
+  // bars
+  for(var i=0;i<6;i++){
+    var sx=padL+i*slotW;
+    var cx=sx+slotW/2;
+    // planned
+    var ph=Math.max((planned[i]/maxV)*cH,planned[i]>0?2:0);
+    var py=padT+cH-ph;
+    svg+='<rect x="'+(cx-bw-gap/2-bw/2)+'" y="'+py+'" width="'+bw+'" height="'+ph+'" rx="3" fill="#ede9fe" stroke="#c4b5fd" stroke-width="1"/>';
+    // actual
+    if(actual[i]>0){
+      var ah=(actual[i]/maxV)*cH;
+      var ay=padT+cH-ah;
+      svg+='<rect x="'+(cx-gap/2-bw/2)+'" y="'+ay+'" width="'+bw+'" height="'+ah+'" rx="3" fill="#7c3aed"/>';
+    }
+    // costs (thin bar)
+    if(costs[i]>0){
+      var ch2=(costs[i]/maxV)*cH;
+      var cy2=padT+cH-ch2;
+      svg+='<rect x="'+(cx+gap/2+bw/2)+'" y="'+cy2+'" width="'+bw+'" height="'+ch2+'" rx="3" fill="#fbbf24" opacity="0.8"/>';
+    }
+    // label
+    svg+='<text x="'+cx+'" y="'+(H-6)+'" text-anchor="middle" font-size="9.5" fill="#71717a" font-family="Figtree,sans-serif" font-weight="600">'+labels[i]+'</text>';
+  }
+  svg+='</svg>';
+  var el=document.getElementById('bar-chart');
+  if(el)el.innerHTML=svg;
+}
+
+function drawDonut(){
+  var data=[
+    {pct:55,color:'#7c3aed'},
+    {pct:18,color:'#a78bfa'},
+    {pct:27,color:'#ddd6fe'}
+  ];
+  var r=44,cx=60,cy=60;
+  var circ=2*Math.PI*r;
+  var svg='<svg viewBox="0 0 120 120" style="width:130px;height:130px;display:block;margin:0 auto 4px">';
+  svg+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="#f4f4f5" stroke-width="16"/>';
+  var offset=0;
+  for(var i=0;i<data.length;i++){
+    var dash=(data[i].pct/100)*circ;
+    var gp=circ-dash;
+    svg+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="'+data[i].color+'" stroke-width="16" stroke-dasharray="'+dash+' '+gp+'" stroke-dashoffset="'+(-(offset-circ/4))+'" transform="rotate(-90 '+cx+' '+cy+')" stroke-linecap="butt"/>';
+    offset+=(data[i].pct/100)*circ;
+  }
+  svg+='<text x="'+cx+'" y="'+(cy-4)+'" text-anchor="middle" font-size="13" font-weight="800" fill="#09090b" font-family="Figtree,sans-serif">\u20ac196k</text>';
+  svg+='<text x="'+cx+'" y="'+(cy+10)+'" text-anchor="middle" font-size="9" fill="#a1a1aa" font-family="Figtree,sans-serif" font-weight="600">PLANNED</text>';
+  svg+='</svg>';
+  var el=document.getElementById('donut-chart');
+  if(el)el.innerHTML=svg;
+}
+
+function drawClientBars(){
+  var clients=[
+    {name:'Moderna galerija',val:36502,max:62000,color:'#7c3aed'},
+    {name:'OKS',val:17700,max:62000,color:'#a78bfa'},
+    {name:'Unichem d.o.o.',val:8000,max:62000,color:'#c4b5fd'},
+    {name:'Pristop d.o.o.',val:0,max:62000,color:'#e9d5ff'}
+  ];
+  var html='';
+  clients.forEach(function(c){
+    var pct=c.max>0?Math.round((c.val/c.max)*100):0;
+    var valStr=c.val>0?'\u20ac'+c.val.toLocaleString('de-DE'):'\u20ac0';
+    html+='<div class="cbar-row">';
+    html+='<div class="cbar-name">'+c.name+'</div>';
+    html+='<div class="cbar-track"><div class="cbar-fill" style="width:'+pct+'%;background:'+c.color+'"></div></div>';
+    html+='<div class="cbar-val">'+valStr+'</div>';
+    html+='</div>';
+  });
+  var el=document.getElementById('client-bars');
+  if(el)el.innerHTML=html;
+}
+
+/* New client inline input */
+/* Sync default hosting PN to modal */
+function syncDefaultPN(){
+  var pn=(document.getElementById('default-hosting-pn')||{}).value||'';
+  var inp=document.getElementById('hc-pn-input');
+  if(inp&&inp.style.background!=='rgb(255, 255, 255)'){
+    inp.value=pn;inp.placeholder=pn;
+  }
+}
+function hcCycleChange(){
+  var cycle=document.getElementById('hc-cycle').value;
+  var lbl=document.getElementById('hc-amount-label');
+  var wrap=document.getElementById('hc-next-inv-wrap');
+  if(lbl)lbl.textContent=cycle==='yearly'?'Yearly revenue (€)':'Monthly revenue (€)';
+  if(wrap)wrap.style.display=cycle==='yearly'?'':'none';
+}
+function openAddHostingClient(){
+  var pn=(document.getElementById('default-hosting-pn')||{}).value||'RS-2026-GOT';
+  var inp=document.getElementById('hc-pn-input');
+  var badge=document.getElementById('hc-pn-default-badge');
+  if(inp){inp.value=pn;inp.style.borderColor='var(--p)';inp.style.background='var(--pll)';inp.style.color='var(--p)';}
+  if(badge)badge.style.display='';
+  document.getElementById('m-add-hosting-client').classList.add('open');
+}
+
+function newClientChange(selId,wrapId){
+  var sel=document.getElementById(selId);
+  var wrap=document.getElementById(wrapId);
+  if(!sel||!wrap)return;
+  if(sel.value==='__new__'){
+    wrap.classList.add('show');
+    var inp=wrap.querySelector('input');
+    if(inp)setTimeout(function(){inp.focus();},50);
+  } else {
+    wrap.classList.remove('show');
+    var inp=wrap.querySelector('input');
+    if(inp)inp.value='';
+  }
+}
+
+/* AI Timesheet tool */
+var TS_PNS=[];
+var TS_ROW_IDX=0;
+var TS_KNOWN=[
+  {pn:'RS-2026-001',name:'MG+MSUM Prenova',client:'Moderna galerija',type:'fixed'},
+  {pn:'RS-2026-004',name:'Unichem Digitalizacija',client:'Unichem d.o.o.',type:'maintenance'},
+  {pn:'RS-2026-005',name:'OKS TV Broadcast',client:'OKS',type:'retainer'},
+  {pn:'RS-2025-010',name:'Pristop Spletna stran',client:'Pristop d.o.o.',type:'fixed'},
+  {pn:'RS-2026-GOT',name:'Hosting — GOT',client:'Skupina',type:'maintenance'}
+];
+
+function tsAddProject(prefillPn){
+  var listEl=document.getElementById('ts-proj-list');
+  if(!listEl)return;
+  var idx=TS_ROW_IDX++;
+  var dlId='ts-dl-'+idx;
+  var dlOpts='';
+  TS_KNOWN.forEach(function(p){
+    dlOpts+='<option value="'+p.pn+'" data-type="'+p.type+'">'+p.pn+' · '+p.name+'</option>';
+  });
+  var row=document.createElement('div');
+  row.className='ts-proj-row';
+  row.id='ts-row-'+idx;
+  row.innerHTML=
+    '<datalist id="'+dlId+'">'+dlOpts+'</datalist>'+
+    '<input class="ts-fin" type="text" list="'+dlId+'" placeholder="PN or project name…" id="ts-pn-'+idx+'" style="font-size:12px;font-weight:600;" oninput="tsRowPnInput('+idx+')" value="'+(prefillPn||'')+'">'+
+    '<input class="ts-fin" type="text" placeholder="Opis dela…" id="ts-desc-'+idx+'" style="font-size:12px;">'+
+    '<div style="display:flex;align-items:center;gap:6px">'+
+      '<input type="number" value="0" min="0" max="100" style="width:58px;padding:5px 8px;border:1.5px solid var(--c6);border-radius:6px;font-size:12px;font-family:inherit;text-align:center;font-variant-numeric:tabular-nums;" id="ts-pct-'+idx+'" oninput="tsRowPctChange()">'+
+      '<span style="font-size:11px;color:var(--c4)">%</span>'+
+      '<span style="font-size:11px;font-weight:700;color:var(--p);min-width:36px;white-space:nowrap" id="ts-rowhrs-'+idx+'">— h</span>'+
+    '</div>'+
+    '<button class="ts-remove-btn" onclick="tsRemoveRow('+idx+')" title="Remove">&#215;</button>';
+  listEl.appendChild(row);
+  if(prefillPn){
+    tsRowPnInput(idx);
+    var pctEl=document.getElementById('ts-pct-'+idx);
+    if(pctEl)pctEl.value=0;
+  }
+  tsRowPctChange();
+}
+
+function tsRowChange(idx,sel){
+  var pn=sel.value;
+  var proj=TS_KNOWN.filter(function(p){return p.pn===pn;})[0];
+  if(!proj)return;
+  var descEl=document.getElementById('ts-desc-'+idx);
+  if(descEl&&!descEl.value){
+    var descs=TS_DESCRIPTIONS[proj.type]||TS_DESCRIPTIONS.fixed;
+    descEl.value=descs[0];
+  }
+  var pctEl=document.getElementById('ts-pct-'+idx);
+  if(pctEl&&parseFloat(pctEl.value)===0){
+    var rows=document.querySelectorAll('[id^="ts-pct-"]');
+    var used=0;
+    rows.forEach(function(r){used+=parseFloat(r.value)||0;});
+    if(used<100)pctEl.value=Math.min(100-used,50);
+    tsRowPctChange();
+  }
+}
+
+function tsRowPnInput(idx){
+  var pnEl=document.getElementById('ts-pn-'+idx);
+  if(!pnEl)return;
+  var val=pnEl.value.trim();
+  // Try to match by PN exactly or by typed text against known projects
+  var proj=TS_KNOWN.filter(function(p){return p.pn===val||val.indexOf(p.pn)===0;})[0];
+  if(!proj)return;
+  var descEl=document.getElementById('ts-desc-'+idx);
+  if(descEl&&!descEl.value){
+    var descs=TS_DESCRIPTIONS[proj.type]||TS_DESCRIPTIONS.fixed;
+    descEl.value=descs[0];
+  }
+  var pctEl=document.getElementById('ts-pct-'+idx);
+  if(pctEl&&parseFloat(pctEl.value)===0){
+    var rows=document.querySelectorAll('[id^="ts-pct-"]');
+    var used=0;
+    rows.forEach(function(r){used+=parseFloat(r.value)||0;});
+    if(used<100)pctEl.value=Math.min(100-used,50);
+    tsRowPctChange();
+  }
+}
+
+function tsRemoveRow(idx){
+  var row=document.getElementById('ts-row-'+idx);
+  if(row)row.remove();
+  tsRowPctChange();
+}
+
+function tsRowPctChange(){
+  var totalHrs=parseFloat((document.getElementById('ts-hours')||{}).value)||160;
+  var inputs=document.querySelectorAll('[id^="ts-pct-"]');
+  var totalPct=0;
+  inputs.forEach(function(inp){
+    totalPct+=parseFloat(inp.value)||0;
+    var i=inp.id.replace('ts-pct-','');
+    var hrs=Math.round((parseFloat(inp.value)||0)/100*totalHrs*10)/10;
+    var el=document.getElementById('ts-rowhrs-'+i);
+    if(el)el.textContent=hrs>0?hrs+' h':'— h';
+  });
+  var allocHrs=Math.round(totalPct/100*totalHrs*10)/10;
+  var rem=Math.round((totalHrs-allocHrs)*10)/10;
+  var at=document.getElementById('ts-alloc-text');
+  var rt=document.getElementById('ts-remaining');
+  var fill=document.getElementById('ts-alloc-fill');
+  var chip=document.getElementById('ts-alloc-chip');
+  var warn=document.getElementById('ts-pct-warn');
+  var ok=document.getElementById('ts-pct-ok');
+  if(at)at.textContent=allocHrs+' h allocated of '+totalHrs+' h';
+  if(rt)rt.textContent=rem+' h remaining';
+  if(fill)fill.style.width=Math.min(totalPct,100)+'%';
+  if(chip){chip.textContent=allocHrs+' / '+totalHrs+' h';chip.style.background=Math.round(totalPct)===100?'#dcfce7':'var(--c7)';chip.style.color=Math.round(totalPct)===100?'#16a34a':'var(--c3)';}
+  if(warn)warn.style.display=(totalPct>0&&Math.round(totalPct)!==100)?'inline':'none';
+  if(ok)ok.style.display=Math.round(totalPct)===100?'inline':'none';
+}
+
+function tsParsePNs(){
+  var raw=(document.getElementById('ts-pn-input')||{}).value||'';
+  var lines=raw.split('\n').map(function(l){return l.trim();}).filter(Boolean);
+  TS_PNS=lines.map(function(l){
+    var parts=l.split(/[\u00b7·\-\|]/).map(function(p){return p.trim();}).filter(Boolean);
+    return{pn:parts[0]||l,name:parts.slice(1).join(' ')||'',pct:0,hrs:0};
+  });
+  var wrap=document.getElementById('ts-pn-table-wrap');
+  if(!wrap)return;
+  if(TS_PNS.length===0){wrap.style.display='none';return;}
+  wrap.style.display='block';
+  var tbody=document.getElementById('ts-pn-tbody');
+  if(!tbody)return;
+  tbody.innerHTML='';
+  var defaultPct=TS_PNS.length>0?Math.floor(100/TS_PNS.length):0;
+  TS_PNS.forEach(function(p,i){
+    p.pct=i===TS_PNS.length-1?(100-defaultPct*(TS_PNS.length-1)):defaultPct;
+    var tr=document.createElement('tr');
+    tr.innerHTML=
+      '<td style="font-size:11px;font-weight:700;color:var(--c3);white-space:nowrap">'+p.pn+'</td>'+
+      '<td style="font-size:12px;font-weight:600;color:var(--c1)">'+p.name+'</td>'+
+      '<td><input type="number" value="'+p.pct+'" min="0" max="100" data-ts-idx="'+i+'" oninput="tsAllocChange()" style="width:62px;padding:5px 8px;border:1.5px solid var(--c6);border-radius:6px;font-size:12px;font-family:inherit;text-align:center;font-variant-numeric:tabular-nums;"></td>'+
+      '<td style="font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--p)" id="ts-hrs-'+i+'">—</td>';
+    tbody.appendChild(tr);
+  });
+  tsUpdate();
+}
+
+function tsAllocChange(){
+  var inputs=document.querySelectorAll('[data-ts-idx]');
+  var total=0;
+  inputs.forEach(function(inp){total+=parseFloat(inp.value)||0;});
+  var warn=document.getElementById('ts-alloc-warning');
+  if(warn)warn.style.display=(Math.round(total)!==100)?'block':'none';
+  tsUpdate();
+}
+
+function tsUpdate(){
+  var totalHrs=parseFloat((document.getElementById('ts-hours')||{}).value)||160;
+  var inputs=document.querySelectorAll('[data-ts-idx]');
+  inputs.forEach(function(inp){
+    var i=parseInt(inp.getAttribute('data-ts-idx'));
+    var pct=parseFloat(inp.value)||0;
+    var hrs=Math.round((pct/100)*totalHrs*10)/10;
+    TS_PNS[i]&&(TS_PNS[i].hrs=hrs);
+    var el=document.getElementById('ts-hrs-'+i);
+    if(el)el.textContent=hrs>0?hrs+' h':'—';
+  });
+  var mEl=document.getElementById('ts-month');
+  var mVal=mEl&&mEl.value?mEl.value:'2026-03';
+  var MONTHS_EN2=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var mParts=mVal.split('-');
+  var mStr=mParts.length===2?MONTHS_EN2[parseInt(mParts[1])-1]+' '+mParts[0]:mVal;
+  var pEl=document.getElementById('ts-preview-month');
+  if(pEl)pEl.textContent=mStr;
+  var hEl=document.getElementById('ts-total-hrs-label');
+  if(hEl)hEl.textContent='Total: '+totalHrs+' hours';
+}
+
+/* Domain invoice email */
+function domSaveWithInvoice(){
+  // Collect data from the modal
+  var client=(document.getElementById('dom-client-sel')||{}).value||'Stranka';
+  if(client==='__new__'){
+    var nc=document.querySelector('#dom-client-nc input');
+    client=nc&&nc.value?nc.value:'Stranka';
+  }
+  var pn=(document.getElementById('dom-project-pn')||{}).value||'1159';
+  var contractId=(document.getElementById('dom-contract-id')||{}).value||'';
+
+  // Collect domain rows
+  var rows=document.querySelectorAll('#dom-modal-rows > div');
+  var domains=[];
+  rows.forEach(function(row){
+    var inputs=row.querySelectorAll('input');
+    var domName=inputs[0]&&inputs[0].value?inputs[0].value:'';
+    var expiry=inputs[1]&&inputs[1].value?inputs[1].value:'';
+    var amount=inputs[2]&&inputs[2].value?inputs[2].value:'';
+    if(domName)domains.push({name:domName,expiry:expiry,amount:amount});
+  });
+
+  if(domains.length===0){alert('Add at least one domain first.');return;}
+
+  // Format expiry nicely
+  function fmtDate(d){
+    if(!d)return'—';
+    var parts=d.split('-');
+    if(parts.length===3)return parts[2]+'.'+parts[1]+'.'+parts[0];
+    return d;
+  }
+
+  // Build subject
+  var subject='Račun za podaljšanje domen — PN '+pn+' — '+client+' — Renderspace';
+  document.getElementById('dinv-subject').value=subject;
+
+  // Build body
+  var lines=[];
+  lines.push('Pozdravljeni,');
+  lines.push('');
+  lines.push('v priponki pošiljam zahtevo za račun za podaljšanje domen za stranko '+client+'.');
+  lines.push('');
+  lines.push('Projektna številka: PN '+pn+(contractId?' · Pogodba/Naročilnica: '+contractId:''));
+  lines.push('');
+  lines.push('Storitve:');
+  domains.forEach(function(d){
+    var svcName='Podaljšanje domene "'+d.name+'" za 1 leto (velja do '+fmtDate(d.expiry)+')';
+    lines.push('  • '+svcName+(d.amount?' — €'+d.amount:''));
+  });
+  var total=0;
+  domains.forEach(function(d){total+=parseFloat(d.amount)||0;});
+  if(total>0){
+    lines.push('');
+    lines.push('Skupaj: €'+total.toFixed(2));
+  }
+  lines.push('');
+  lines.push('Hvala,');
+  lines.push('Renderspace');
+
+  document.getElementById('dinv-body').value=lines.join('\n');
+
+  // Close add modal, open invoice modal
+  document.getElementById('m-add-domains').classList.remove('open');
+  document.getElementById('m-domain-invoice').classList.add('open');
+}
+
+function dinvCopy(closeAfter){
+  var subj=(document.getElementById('dinv-subject')||{}).value||'';
+  var body=(document.getElementById('dinv-body')||{}).value||'';
+  var full='Subject: '+subj+'\n\n'+body;
+  navigator.clipboard&&navigator.clipboard.writeText(full);
+  var btn=event.target.closest('button');
+  if(btn){var orig=btn.innerHTML;btn.textContent='Copied!';setTimeout(function(){btn.innerHTML=orig;},1500);}
+  if(closeAfter){
+    setTimeout(function(){document.getElementById('m-domain-invoice').classList.remove('open');},800);
+  }
+}
+
+/* Smart distribute */
+var SD_ROW_IDX=0;
+function tsSmartDistribute(){
+  // Pre-populate with existing rows
+  document.getElementById('sd-proj-list').innerHTML='';
+  SD_ROW_IDX=0;
+  var pnInputs=document.querySelectorAll('[id^="ts-pn-"]');
+  if(pnInputs.length>0){
+    pnInputs.forEach(function(inp){
+      sdAddRow(inp.value||'');
+    });
+  } else {
+    sdAddRow();sdAddRow();sdAddRow();
+  }
+  document.getElementById('sd-preview').style.display='none';
+  document.getElementById('m-smart-dist').classList.add('open');
+}
+function sdAddRow(val){
+  var list=document.getElementById('sd-proj-list');
+  var idx=SD_ROW_IDX++;
+  var row=document.createElement('div');
+  row.style='display:flex;align-items:center;gap:6px';
+  row.innerHTML=
+    '<input type="text" list="sd-dl-top" placeholder="PN or project name…" id="sd-row-'+idx+'" class="ts-fin" style="font-size:12px;font-weight:600;flex:1" value="'+(val||'')+'">'+
+    '<button onclick="this.parentNode.remove()" style="width:28px;height:34px;border:1px solid var(--c6);background:#fff;border-radius:7px;cursor:pointer;color:var(--c4);font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0">&#215;</button>';
+  list.appendChild(row);
+}
+function sdPreview(){
+  var allPns=[];
+  document.querySelectorAll('[id^="sd-row-"]').forEach(function(inp){
+    var v=inp.value.trim();
+    if(v)allPns.push(v);
+  });
+  if(allPns.length===0){alert('Add at least one project.');return;}
+  var top=[
+    (document.getElementById('sd-top1')||{}).value||'',
+    (document.getElementById('sd-top2')||{}).value||'',
+    (document.getElementById('sd-top3')||{}).value||''
+  ].filter(Boolean).filter(function(v){return allPns.indexOf(v)!==-1;});
+  var rest=allPns.filter(function(pn){return top.indexOf(pn)===-1;});
+  // Distribute: top3 share 65%, rest share 35%
+  var topPct=allPns.length<=3?100:65;
+  var restPct=100-topPct;
+  var dist={};
+  if(top.length>0){var pp=Math.round(topPct/top.length);top.forEach(function(pn,i){dist[pn]=i===top.length-1?(topPct-pp*(top.length-1)):pp;});}
+  if(rest.length>0){var rp=Math.round(restPct/rest.length);rest.forEach(function(pn,i){dist[pn]=i===rest.length-1?(restPct-rp*(rest.length-1)):rp;});}
+  // Fix rounding
+  var sum=0;Object.keys(dist).forEach(function(k){sum+=dist[k];});
+  if(sum!==100&&allPns.length>0)dist[allPns[allPns.length-1]]=(dist[allPns[allPns.length-1]]||0)+(100-sum);
+  // Show preview
+  var prev=document.getElementById('sd-preview');
+  var rows=document.getElementById('sd-preview-rows');
+  prev.style.display='block';
+  rows.innerHTML='';
+  allPns.forEach(function(pn){
+    var pct=dist[pn]||0;
+    var isTop=top.indexOf(pn)!==-1;
+    var barColor=isTop?'var(--p)':'var(--c4)';
+    var textColor=isTop?'var(--p)':'var(--c3)';
+    var d=document.createElement('div');
+    d.style='display:flex;align-items:center;gap:8px;margin-bottom:6px';
+    d.innerHTML=
+      '<span style="font-size:12px;font-weight:700;color:var(--c1);flex:1">'+pn+(isTop?'<span style="font-size:10px;color:var(--p);font-weight:700;margin-left:4px">TOP</span>':'')+'</span>'+
+      '<div style="height:6px;border-radius:3px;background:var(--c6);width:100px;overflow:hidden"><div style="height:100%;border-radius:3px;background:'+barColor+';width:'+pct+'%"></div></div>'+
+      '<span style="font-size:12px;font-weight:700;color:'+textColor+';min-width:32px;text-align:right">'+pct+'%</span>';
+    rows.appendChild(d);
+  });
+  prev._dist=dist;prev._pns=allPns;
+}
+function sdApply(){
+  var prev=document.getElementById('sd-preview');
+  if(!prev._dist){sdPreview();if(!prev._dist)return;}
+  var dist=prev._dist;var allPns=prev._pns;
+  // Clear existing rows
+  var listEl=document.getElementById('ts-proj-list');
+  if(listEl)listEl.innerHTML='';
+  TS_ROW_IDX=0;
+  allPns.forEach(function(pn){
+    tsAddProject(pn);
+    // set pct
+    var idx=TS_ROW_IDX-1;
+    var pctEl=document.getElementById('ts-pct-'+idx);
+    if(pctEl)pctEl.value=dist[pn]||0;
+  });
+  tsRowPctChange();
+  document.getElementById('m-smart-dist').classList.remove('open');
+}
+
+var TS_DESCRIPTIONS={
+  fixed:['Razvoj in programiranje po specifikaciji','Implementacija novih funkcionalnosti','Projektno delo – faza implementacije','Oblikovanje in razvoj spletnih storitev','Tehnična izvedba projekta po dogovoru'],
+  maintenance:['Vzdrževanje in tehnična podpora','Redne posodobitve in popravki','Mesečno vzdrževanje sistema','Tehnična podpora in optimizacije','Monitoring in vzdrževalne aktivnosti'],
+  retainer:['Svetovanje in projektno vodenje','Strateška podpora in koordinacija','Retainer – operativne storitve','Svetovanje in izvajanje nalog','Podpora projektu in ad-hoc naloge']
+};
+
+function tsGenerate(){
+  var pctInputs=document.querySelectorAll('[id^="ts-pct-"]');
+  if(pctInputs.length===0){alert('Add at least one project first.');return;}
+  var mEl=document.getElementById('ts-month');
+  var mVal=mEl&&mEl.value?mEl.value:'2026-03';
+  var mParts=mVal.split('-');
+  var lastDay=mParts.length===2?new Date(parseInt(mParts[0]),parseInt(mParts[1]),0).getDate():31;
+  var dateStr=(mParts[1]?mParts[1]:'03')+'/'+lastDay+'/'+mParts[0];
+  var tbody=document.getElementById('ts-preview-tbody');
+  if(!tbody)return;
+  tbody.innerHTML='';
+  var totalHrs=parseFloat((document.getElementById('ts-hours')||{}).value)||160;
+  pctInputs.forEach(function(inp,i){
+    var rowIdx=inp.id.replace('ts-pct-','');
+    var row=document.getElementById('ts-row-'+rowIdx);
+    if(!row)return;
+    var sel=row.querySelector('select');
+    var pn=sel?sel.value:'—';
+    if(!pn)return;
+    var proj=TS_KNOWN.filter(function(p){return p.pn===pn;})[0]||{type:'fixed'};
+    var descInp=document.getElementById('ts-desc-'+rowIdx);
+    var desc=descInp&&descInp.value?descInp.value:(TS_DESCRIPTIONS[proj.type]||TS_DESCRIPTIONS.fixed)[i%5];
+    var hrs=Math.round((parseFloat(inp.value)||0)/100*totalHrs*10)/10;
+    var tr=document.createElement('tr');
+    tr.innerHTML=
+      '<td style="font-size:12px;white-space:nowrap">'+dateStr+'</td>'+
+      '<td style="font-size:12px;font-weight:700">'+pn+'</td>'+
+      '<td style="font-size:12px;font-weight:700;color:var(--p);text-align:right">'+hrs+'</td>'+
+      '<td style="font-size:12px;color:var(--c2)"><span style="display:flex;align-items:center;gap:6px">'+desc+' <span class="ts-status-badge ts-status-ai">AI</span></span></td>'+
+      '<td style="font-size:12px;font-weight:600">'+pn+'</td>';
+    tbody.appendChild(tr);
+  });
+  document.getElementById('ts-preview-empty').style.display='none';
+  document.getElementById('ts-preview-table').style.display='block';
+  var badge=document.getElementById('ts-ai-badge');
+  if(badge)badge.style.display='inline-flex';
+}
+
+/* Domain group toggle */
+function domToggle(id){
+  var hdr=document.getElementById('dom-hdr-'+id);
+  var body=document.getElementById('dom-body-'+id);
+  if(!hdr||!body)return;
+  hdr.classList.toggle('open');
+  body.classList.toggle('open');
+}
+
+/* Add domain row in modal */
+var domModalRowIdx=1;
+function addDomainModalRow(){
+  var list=document.getElementById('dom-modal-rows');
+  if(!list)return;
+  var idx=domModalRowIdx++;
+  var row=document.createElement('div');
+  row.id='dom-mrow-'+idx;
+  row.style='display:grid;grid-template-columns:1fr 140px 90px 28px;align-items:center;gap:6px;margin-bottom:6px';
+  row.innerHTML=
+    '<input type="text" placeholder="e.g. example.si" style="padding:9px 12px;border:1.5px solid var(--c6);border-radius:8px;font-size:13px;font-family:inherit;color:var(--c0)">'+
+    '<input type="date" value="2027-03-12" style="padding:9px 10px;border:1.5px solid var(--c6);border-radius:8px;font-size:12px;font-family:inherit;color:var(--c0)">'+
+    '<input type="number" placeholder="25" step="0.01" style="padding:9px 10px;border:1.5px solid var(--c6);border-radius:8px;font-size:13px;font-family:inherit;color:var(--c0);text-align:right">'+
+    '<button onclick="this.parentNode.remove()" style="width:28px;height:34px;border:1px solid var(--c6);background:#fff;border-radius:7px;cursor:pointer;color:var(--c4);font-size:15px;display:flex;align-items:center;justify-content:center">&#215;</button>';
+  list.appendChild(row);
+}
+
+/* Init */
+generateEmail();
+generateMonthRows();
+renderStats();
+</script>
+</body>
+</html>

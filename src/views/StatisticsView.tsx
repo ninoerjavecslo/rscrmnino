@@ -86,7 +86,7 @@ export function StatisticsView() {
   const types: Array<{ key: Project['type']; label: string }> = [
     { key: 'fixed',       label: 'Fixed' },
     { key: 'maintenance', label: 'Maintenance' },
-    { key: 'retainer',    label: 'Retainer' },
+    { key: 'variable',    label: 'Variable' },
   ]
 
   const totalPortfolioValue = allProjects.reduce((s, p) => s + (p.contract_value ?? 0), 0)

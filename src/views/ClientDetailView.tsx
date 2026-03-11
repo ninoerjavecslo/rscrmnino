@@ -315,16 +315,6 @@ export function ClientDetailView() {
       .slice(0, 20)
   }, [rpRows])
 
-  const infraMonthlyTotal = useMemo(() => {
-    let total = 0
-    for (const h of hostingRows) {
-      total += h.cycle === 'monthly' ? h.amount : h.amount / 12
-    }
-    for (const d of clientDomains) {
-      total += (d.yearly_amount ?? 0) / 12
-    }
-    return total
-  }, [hostingRows, clientDomains])
 
   // ── derived subtitle ──────────────────────────────────────────────────────
   const clientSince = client ? new Date(client.created_at).getFullYear() : null

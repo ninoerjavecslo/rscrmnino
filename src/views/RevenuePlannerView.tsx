@@ -71,31 +71,6 @@ function probColors(p: number): { bg: string; text: string; border: string } {
   return           { bg: '#fef2f2', text: '#dc2626', border: '#fecaca' }
 }
 
-function ProbabilityBadge({ prob, onClick }: { prob: number; onClick?: () => void }) {
-  const { bg, text, border } = probColors(prob)
-  return (
-    <span
-      onClick={onClick}
-      title={onClick ? 'Click to change probability' : undefined}
-      style={{
-        display: 'inline-block',
-        fontSize: 9,
-        fontWeight: 700,
-        letterSpacing: '0.3px',
-        textTransform: 'uppercase',
-        padding: '1px 5px',
-        borderRadius: 3,
-        background: bg,
-        color: text,
-        border: `1px solid ${border}`,
-        cursor: onClick ? 'pointer' : 'default',
-        userSelect: 'none',
-      }}
-    >
-      {prob}% · {probLabel(prob)}
-    </span>
-  )
-}
 
 // ── Cell background helpers ───────────────────────────────────────────────────
 

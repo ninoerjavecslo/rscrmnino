@@ -1,0 +1,170 @@
+// ============================================================
+//  Renderspace — shared TypeScript types (mirrors Supabase schema)
+// ============================================================
+
+export interface Client {
+  id: string
+  name: string
+  email?: string | null
+  phone?: string | null
+  address?: string | null
+  vat_id?: string | null
+  notes?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface Project {
+  id: string
+  client_id?: string | null
+  pn: string                 // e.g. RS-2026-001
+  name: string
+  type: 'fixed' | 'maintenance' | 'variable'
+  status: 'active' | 'paused' | 'completed' | 'cancelled'
+  pm?: string | null
+  contract_value?: number | null
+  currency: string
+  start_date?: string | null
+  end_date?: string | null
+  notes?: string | null
+  // Joined from clients table
+  client?: Pick<Client, 'id' | 'name'> | null
+}
+
+export interface Invoice {
+  id: string
+  project_id?: string | null
+  client_id?: string | null
+  invoice_number?: string | null
+  status: 'draft' | 'issued' | 'paid' | 'overdue' | 'cancelled'
+  issued_date?: string | null
+  due_date?: string | null
+  paid_date?: string | null
+  subtotal: number
+  tax_rate: number
+  tax_amount: number
+  total: number
+  currency: string
+  notes?: string | null
+  // Joined
+  client?: Pick<Client, 'id' | 'name'> | null
+  project?: Pick<Project, 'id' | 'pn' | 'name'> | null
+}
+
+export interface HostingClient {
+  id: string
+  client_id: string
+  project_pn: string
+  description?: string | null
+  cycle: 'monthly' | 'yearly'
+  amount: number
+  billing_since?: string | null
+  next_invoice_date?: string | null
+  status: 'active' | 'paused' | 'cancelled'
+  notes?: string | null
+  // Joined
+  client?: Pick<Client, 'id' | 'name'> | null
+}
+
+export interface InfrastructureCost {
+  id: string
+  provider: string
+  description?: string | null
+  monthly_cost: number
+  billing_cycle: 'monthly' | 'annual' | 'variable'
+  status: 'active' | 'inactive'
+  notes?: string | null
+}
+
+export interface Domain {
+  id: string
+  client_id?: string | null
+  project_pn: string
+  domain_name: string
+  expiry_date: string
+  yearly_amount?: number | null
+  contract_id?: string | null
+  registrar?: string | null
+  auto_renew: boolean
+  status: 'active' | 'expiring_soon' | 'expired'  // computed column in DB
+  notes?: string | null
+  // Joined
+  client?: Pick<Client, 'id' | 'name'> | null
+}
+
+export interface TimesheetEntry {
+  id: string
+  user_id?: string | null
+  month: string              // first day: 2026-03-01
+  project_pn: string
+  project_name?: string | null
+  description?: string | null
+  hours: number
+  allocation_pct?: number | null
+  total_month_hours?: number | null
+  ai_generated: boolean
+  created_at: string
+}
+
+export interface RevenuePlanner {
+  id: string
+  project_id: string
+  month: string
+  planned_amount?: number | null
+  actual_amount?: number | null
+  status: 'planned' | 'paid' | 'issued' | 'retainer' | 'cost'
+  probability: number  // 25 | 50 | 75 | 100
+  invoice_id?: string | null
+  notes?: string | null
+  // Joined
+  project?: Pick<Project, 'id' | 'pn' | 'name' | 'type' | 'client_id'> | null
+}
+
+// ── Supabase Database type for typed client ──────────────────────────────────
+
+export interface Database {
+  public: {
+    Tables: {
+      clients: {
+        Row: Client
+        Insert: Omit<Client, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<Client, 'id' | 'created_at' | 'updated_at'>>
+      }
+      projects: {
+        Row: Omit<Project, 'client'>
+        Insert: Omit<Project, 'id' | 'client'>
+        Update: Partial<Omit<Project, 'id' | 'client'>>
+      }
+      invoices: {
+        Row: Omit<Invoice, 'client' | 'project'>
+        Insert: Omit<Invoice, 'id' | 'client' | 'project'>
+        Update: Partial<Omit<Invoice, 'id' | 'client' | 'project'>>
+      }
+      hosting_clients: {
+        Row: Omit<HostingClient, 'client'>
+        Insert: Omit<HostingClient, 'id' | 'client'>
+        Update: Partial<Omit<HostingClient, 'id' | 'client'>>
+      }
+      infrastructure_costs: {
+        Row: InfrastructureCost
+        Insert: Omit<InfrastructureCost, 'id'>
+        Update: Partial<Omit<InfrastructureCost, 'id'>>
+      }
+      domains: {
+        Row: Omit<Domain, 'client'>
+        Insert: Omit<Domain, 'id' | 'status' | 'client'>  // status is computed
+        Update: Partial<Omit<Domain, 'id' | 'status' | 'client'>>
+      }
+      timesheet_entries: {
+        Row: TimesheetEntry
+        Insert: Omit<TimesheetEntry, 'id' | 'created_at'>
+        Update: Partial<Omit<TimesheetEntry, 'id' | 'created_at'>>
+      }
+      revenue_planner: {
+        Row: Omit<RevenuePlanner, 'project'>
+        Insert: Omit<RevenuePlanner, 'id' | 'project'>
+        Update: Partial<Omit<RevenuePlanner, 'id' | 'project'>>
+      }
+    }
+  }
+}

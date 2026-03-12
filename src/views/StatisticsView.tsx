@@ -144,7 +144,7 @@ export function StatisticsView() {
       </div>
 
       {/* Top stats strip */}
-      <div className="stats-strip" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
+      <div className="stats-strip">
         <StatCard
           label="Total pipeline value"
           value={pipelineValue ? fmtEur(pipelineValue) : '—'}
@@ -174,7 +174,7 @@ export function StatisticsView() {
       <div className="page-content">
 
         {/* ── Section 1 & 2: side by side breakdown ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 28 }}>
+        <div className="grid-2" style={{ marginBottom: 28 }}>
 
           {/* Project Breakdown by type */}
           <div>
@@ -248,7 +248,7 @@ export function StatisticsView() {
           <h2>Infrastructure Summary</h2>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 28 }}>
+        <div className="grid-2" style={{ marginBottom: 28 }}>
           {/* Left: revenue vs costs bar visual */}
           <div className="card" style={{ padding: 20 }}>
             <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--c2)', marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -323,7 +323,7 @@ export function StatisticsView() {
               <div className="text-sm">No domains tracked yet</div>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+            <div className="grid-4">
               {/* Total */}
               <div style={{ padding: '16px 18px', background: 'var(--c7)', borderRadius: 'var(--r)', textAlign: 'center' }}>
                 <div className="stat-card-label" style={{ marginBottom: 6 }}>Total domains</div>

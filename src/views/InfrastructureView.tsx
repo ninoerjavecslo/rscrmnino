@@ -347,7 +347,7 @@ export function InfrastructureView() {
         </div>
 
         {/* Margin strip */}
-        <div style={{background:'#fff',border:'1px solid var(--c6)',borderTop:'2px dashed var(--c6)',borderRadius:'0 0 var(--r) var(--r)',padding:'12px 20px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+        <div style={{background:'#fff',border:'1px solid var(--c6)',borderTop:'2px dashed var(--c6)',borderRadius:'0 0 var(--r) var(--r)',padding:'12px 20px',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
           <span className="text-label">Margin · hosting revenue minus infrastructure costs</span>
           <div className="flex-center gap-8">
             <span style={{fontSize:20,fontWeight:800,color:'var(--green)',fontVariantNumeric:'tabular-nums'}}>€{margin.toFixed(0)} / month</span>

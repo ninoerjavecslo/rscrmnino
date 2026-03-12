@@ -91,7 +91,7 @@ function PlanForm({ project, month, onSave, onCancel, saving }: PlanFormProps) {
   return (
     <form
       onSubmit={handleSubmit}
-      style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+      style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}
     >
       <span style={{ fontSize: 12, color: 'var(--c3)', fontWeight: 600, flexShrink: 0 }}>
         Plan {fmtMonthLabel(month)} for {project.name}:
@@ -463,7 +463,7 @@ export function ThisMonthView() {
         </div>
 
         {/* Month navigation */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <button
             className="btn btn-secondary btn-sm"
             onClick={() => setMonthOffset(o => o - 1)}

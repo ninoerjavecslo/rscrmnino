@@ -168,11 +168,11 @@ export function DomainsView() {
           <h1>Domains</h1>
           <p>Domain expiry tracking &amp; renewals</p>
         </div>
-        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+        <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
           <div style={{position:'relative'}}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{position:'absolute',left:9,top:'50%',transform:'translateY(-50%)',color:'var(--c4)',pointerEvents:'none'}}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input placeholder="Search domains…" value={search} onChange={e => setSearch(e.target.value)}
-              style={{paddingLeft:28,width:180,height:34,fontSize:13}} />
+              style={{paddingLeft:28,maxWidth:180,width:'100%',height:34,fontSize:13}} />
           </div>
           <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -235,17 +235,17 @@ export function DomainsView() {
 
                 {/* Domain rows */}
                 {isOpen && domains.map((d: Domain, i: number) => (
-                  <div key={d.id} style={{display:'flex',alignItems:'center',padding:'11px 16px',borderBottom:i<domains.length-1?'1px solid var(--c7)':'none',gap:12}}>
-                    <div style={{flex:1}}>
-                      <span style={{fontWeight:600,fontSize:14,color:'var(--c0)'}}>{d.domain_name}</span>
+                  <div key={d.id} style={{display:'flex',alignItems:'center',padding:'11px 16px',borderBottom:i<domains.length-1?'1px solid var(--c7)':'none',gap:12,flexWrap:'wrap'}}>
+                    <div style={{flex:'1 1 auto',minWidth:0}}>
+                      <span style={{fontWeight:600,fontSize:14,color:'var(--c0)',wordBreak:'break-all'}}>{d.domain_name}</span>
                     </div>
-                    <div style={{width:140}}>
+                    <div style={{flexShrink:0}}>
                       <div style={{fontSize:13,color:'var(--c2)',fontWeight:500}}>Exp. {fmtDate(d.expiry_date)}</div>
                     </div>
-                    <div style={{width:80,textAlign:'right',fontSize:13,color:'var(--c2)'}}>
+                    <div style={{flexShrink:0,textAlign:'right',fontSize:13,color:'var(--c2)'}}>
                       {d.yearly_amount ? `€${d.yearly_amount}/yr` : '—'}
                     </div>
-                    <div style={{width:60,textAlign:'right'}}>
+                    <div style={{flexShrink:0,textAlign:'right'}}>
                       <ExpiryLabel expiryDate={d.expiry_date} />
                     </div>
                   </div>

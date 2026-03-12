@@ -366,3 +366,96 @@ tbody tr:hover td { background: var(--c8); }
 /* ── Spinner ─────────────────────────────  */
 .spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.3); border-top-color: currentColor; border-radius: 50%; animation: spin 0.7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Mobile / Responsive ─────────────────────────────────────────── */
+
+/* Mobile top bar (hamburger) — hidden on desktop */
+.mobile-header {
+  display: none;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #fff;
+  border-bottom: 1px solid var(--c6);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  flex-shrink: 0;
+}
+.mobile-menu-btn {
+  width: 36px; height: 36px;
+  background: none;
+  border: 1.5px solid var(--c6);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  color: var(--c2);
+  flex-shrink: 0;
+}
+.mobile-close-btn {
+  display: none;
+  width: 30px; height: 30px;
+  background: var(--c7);
+  border: 1px solid var(--c6);
+  border-radius: 7px;
+  align-items: center; justify-content: center;
+  cursor: pointer;
+  color: var(--c3);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+/* Sidebar backdrop overlay */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.45);
+  z-index: 49;
+  backdrop-filter: blur(1px);
+}
+
+/* Responsive dashboard grid helpers */
+.dash-quick-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.dash-main-grid     { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+
+@media (max-width: 768px) {
+  /* Show mobile header bar */
+  .mobile-header   { display: flex; }
+  .mobile-close-btn { display: flex; }
+
+  /* Sidebar becomes a fixed slide-over panel */
+  .sidebar {
+    position: fixed;
+    left: 0; top: 0; bottom: 0;
+    z-index: 50;
+    height: 100%;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: none;
+  }
+  .sidebar.sidebar-open {
+    transform: translateX(0);
+    box-shadow: 4px 0 32px rgba(0,0,0,.18);
+  }
+  .sidebar-backdrop.sidebar-open { display: block; }
+
+  /* Page spacing */
+  .page-header  { padding: 14px 16px 12px; }
+  .page-content { padding: 14px 16px 40px; }
+
+  /* Stats strip: 2 columns */
+  .stats-strip { grid-template-columns: repeat(2, 1fr); padding: 12px 16px; gap: 10px; }
+
+  /* Dashboard grids */
+  .dash-quick-actions { grid-template-columns: repeat(2, 1fr); }
+  .dash-main-grid     { grid-template-columns: 1fr; }
+
+  /* Forms */
+  .form-row   { grid-template-columns: 1fr; }
+  .form-row-3 { grid-template-columns: 1fr; }
+
+  /* Tables: horizontal scroll on small screens */
+  .card-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .card-table-wrap table { min-width: 480px; }
+}

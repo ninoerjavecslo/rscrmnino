@@ -12,15 +12,25 @@ function IconTool()      { return <svg width="16" height="16" viewBox="0 0 24 24
 
 const nav = ({isActive}: {isActive: boolean}) => 'sidebar-item' + (isActive ? ' active' : '')
 
-export function Sidebar() {
+interface SidebarProps {
+  open: boolean
+  onClose: () => void
+}
+
+export function Sidebar({ open, onClose }: SidebarProps) {
   return (
-    <aside className="sidebar">
-      <div className="sidebar-logo">
-        <div className="sidebar-logo-name">Renderspace</div>
-        <div className="sidebar-logo-sub">Studio Intelligence</div>
+    <aside className={`sidebar${open ? ' sidebar-open' : ''}`}>
+      <div className="sidebar-logo" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div>
+          <div className="sidebar-logo-name">Renderspace</div>
+          <div className="sidebar-logo-sub">Studio Intelligence</div>
+        </div>
+        <button className="mobile-close-btn" onClick={onClose} aria-label="Close menu">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
       </div>
 
-      <nav className="sidebar-nav">
+      <nav className="sidebar-nav" onClick={onClose}>
         <NavLink to="/dashboard" className={nav}><IconHome /> Dashboard</NavLink>
 
         <div className="sidebar-divider" />

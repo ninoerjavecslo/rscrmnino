@@ -133,7 +133,7 @@ export function DashboardView() {
       <div className="page-content" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
         {/* ── Quick Actions ────────────────────────────────────────────────────── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+        <div className="dash-quick-actions">
           <Link to="/clients" style={{ textDecoration: 'none' }}>
             <div className="card" style={{ padding: '20px 16px', textAlign: 'center', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--navy)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
@@ -161,7 +161,7 @@ export function DashboardView() {
         </div>
 
         {/* ── 2-column grid: invoices left, projects right ─────────────────── */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+        <div className="dash-main-grid">
 
           {/* ── Invoices to Issue ─────────────────────────────────────────── */}
           <div>
@@ -346,7 +346,7 @@ export function DashboardView() {
               </Link>
             </div>
 
-            <div className="card">
+            <div className="card card-table-wrap">
               <table>
                 <thead>
                   <tr>

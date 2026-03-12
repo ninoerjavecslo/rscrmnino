@@ -88,7 +88,7 @@ function Modal({
       <div
         style={{
           background: '#fff', borderRadius: 10, padding: '28px 32px',
-          minWidth: 420, maxWidth: 560, width: '100%',
+          maxWidth: 560, width: '100%',
           boxShadow: '0 8px 40px rgba(0,0,0,0.18)',
           maxHeight: '90vh', overflowY: 'auto',
         }}
@@ -661,7 +661,7 @@ export function ClientDetailView() {
       </div>
 
       {/* ── Stats strip ── */}
-      <div className="stats-strip" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
+      <div className="stats-strip">
         <div className="stat-card" style={{ '--left-color': 'var(--navy)' } as React.CSSProperties}>
           <div className="stat-card-label">PROJECTS</div>
           <div className="stat-card-value">{projects.length}</div>

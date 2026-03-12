@@ -415,9 +415,43 @@ tbody tr:hover td { background: var(--c8); }
   backdrop-filter: blur(1px);
 }
 
-/* Responsive dashboard grid helpers */
+/* ── Responsive grid helpers ─────────────────────────────────────── */
 .dash-quick-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .dash-main-grid     { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.grid-2             { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid-3             { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.grid-4             { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+
+/* ── Tablet (≤ 1024px) ──────────────────────────────────────────── */
+
+@media (max-width: 1024px) {
+  /* Page header: allow wrapping */
+  .page-header  { flex-wrap: wrap; gap: 10px; }
+  .page-header h1 { font-size: 20px; }
+
+  /* Stats: 2 columns on tablet */
+  .stats-strip { grid-template-columns: repeat(2, 1fr); }
+  .stats-strip-3 { grid-template-columns: repeat(2, 1fr); }
+
+  /* Section bar: wrap */
+  .section-bar { flex-wrap: wrap; gap: 8px; }
+
+  /* Grid helpers → collapse */
+  .grid-2 { grid-template-columns: 1fr; }
+  .grid-3 { grid-template-columns: 1fr 1fr; }
+  .grid-4 { grid-template-columns: repeat(2, 1fr); }
+
+  /* Dashboard grids */
+  .dash-main-grid { grid-template-columns: 1fr; }
+
+  /* Tables: horizontal scroll wrapper */
+  .card > table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .card > table thead,
+  .card > table tbody,
+  .card > table tfoot { min-width: 600px; display: table; width: 100%; }
+}
+
+/* ── Mobile (≤ 768px) ───────────────────────────────────────────── */
 
 @media (max-width: 768px) {
   /* Show mobile header bar */
@@ -442,14 +476,21 @@ tbody tr:hover td { background: var(--c8); }
 
   /* Page spacing */
   .page-header  { padding: 14px 16px 12px; }
+  .page-header h1 { font-size: 18px; }
   .page-content { padding: 14px 16px 40px; }
 
   /* Stats strip: 2 columns */
   .stats-strip { grid-template-columns: repeat(2, 1fr); padding: 12px 16px; gap: 10px; }
+  .stat-card-value { font-size: 18px; }
 
   /* Dashboard grids */
   .dash-quick-actions { grid-template-columns: repeat(2, 1fr); }
   .dash-main-grid     { grid-template-columns: 1fr; }
+
+  /* All grid helpers → 1 column */
+  .grid-2 { grid-template-columns: 1fr; }
+  .grid-3 { grid-template-columns: 1fr; }
+  .grid-4 { grid-template-columns: repeat(2, 1fr); }
 
   /* Forms */
   .form-row   { grid-template-columns: 1fr; }
@@ -458,4 +499,58 @@ tbody tr:hover td { background: var(--c8); }
   /* Tables: horizontal scroll on small screens */
   .card-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .card-table-wrap table { min-width: 480px; }
+
+  /* Modals: mobile-friendly bottom sheet style */
+  .modal-overlay { padding: 12px; align-items: flex-end; }
+  .modal-box {
+    max-width: 100% !important;
+    min-width: 0 !important;
+    border-radius: 14px 14px 0 0;
+    max-height: 85vh;
+  }
+  .modal-header { padding: 16px 18px 12px; }
+  .modal-header h2 { font-size: 15px; }
+  .modal-body   { padding: 16px 18px; }
+  .modal-footer { padding: 12px 18px; }
+
+  /* Section bar */
+  .section-bar h2 { font-size: 14px; }
+
+  /* Card padding */
+  .card-header { padding: 12px 14px; }
+  .card-body   { padding: 14px; }
+  .card-footer { padding: 10px 14px; }
+
+  /* Table cell padding */
+  th { padding: 8px 10px; font-size: 10px; }
+  td { padding: 10px; font-size: 13px; }
+
+  /* Alerts */
+  .alert { font-size: 12px; padding: 10px 12px; }
+
+  /* Buttons */
+  .btn-lg { height: 40px; padding: 0 18px; font-size: 14px; }
+}
+
+/* ── Small phone (≤ 480px) ──────────────────────────────────────── */
+
+@media (max-width: 480px) {
+  .page-header h1 { font-size: 16px; letter-spacing: -0.3px; }
+  .page-header p  { font-size: 11px; }
+
+  /* Stats: single column */
+  .stats-strip { grid-template-columns: 1fr; padding: 10px 12px; gap: 8px; }
+  .stat-card   { padding: 12px 14px; }
+  .stat-card-value { font-size: 16px; }
+
+  /* Quick actions: single column */
+  .dash-quick-actions { grid-template-columns: 1fr; }
+  .grid-4 { grid-template-columns: 1fr; }
+
+  /* Page content */
+  .page-content { padding: 10px 12px 32px; }
+  .page-header  { padding: 12px 12px 10px; }
+
+  /* Buttons */
+  .btn-sm { font-size: 12px; height: 34px; padding: 0 12px; }
 }

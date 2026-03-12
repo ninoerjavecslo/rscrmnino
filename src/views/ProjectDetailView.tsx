@@ -62,7 +62,7 @@ function Modal({
       <div
         style={{
           background: '#fff', borderRadius: 10, padding: '28px 32px',
-          minWidth: 420, maxWidth: 560, width: '100%',
+          maxWidth: 560, width: '100%',
           boxShadow: '0 8px 40px rgba(0,0,0,0.18)',
           maxHeight: '90vh', overflowY: 'auto',
         }}
@@ -706,7 +706,7 @@ export function ProjectDetailView() {
 
         {/* ── Info cards ── */}
         <div className="card" style={{ marginBottom: 24, padding: '20px 24px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px 24px' }}>
+          <div className="grid-3" style={{ gap: '16px 24px' }}>
             {/* Row 1 */}
             <div>
               <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Client</div>

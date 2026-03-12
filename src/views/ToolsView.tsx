@@ -205,13 +205,7 @@ export function ToolsView() {
       </div>
 
       <div className="page-content">
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: 16,
-          }}
-        >
+        <div className="grid-2">
           {TOOLS.map(tool => (
             <ToolCardItem key={tool.id} tool={tool} />
           ))}

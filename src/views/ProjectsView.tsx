@@ -185,7 +185,7 @@ export function ProjectsView() {
       </div>
 
       {/* Stats strip */}
-      <div className="stats-strip" style={{gridTemplateColumns:'repeat(4,1fr)'}}>
+      <div className="stats-strip">
         {[
           { label:'Total projects',  value:String(pStore.projects.length), sub:`${activeCount} active`, color:'var(--c5)' },
           { label:'Portfolio value', value: portfolioValue ? `€${portfolioValue.toLocaleString()}` : '—', sub:'active contracts', color:'var(--navy)' },

@@ -98,7 +98,7 @@ nino@renderspace.si`
       </div>
 
       <div className="page-content">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
+        <div className="grid-2" style={{ gap: 24, alignItems: 'start' }}>
 
           {/* ── Left panel ── */}
           <div className="card">

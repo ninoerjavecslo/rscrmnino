@@ -1,0 +1,7 @@
+[ 1814700ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/src/views/StatisticsView.tsx?t=1773408771050:0
+[ 1814702ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/src/views/InfrastructureView.tsx?t=1773408771043:0
+[ 1814703ms] [ERROR] [vite] Failed to reload /src/App.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://localhost:5173/@vite/client:808
+[ 1814715ms] [ERROR] [vite] Failed to reload /src/views/InfrastructureView.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://localhost:5173/@vite/client:808
+[ 1814716ms] [ERROR] [vite] Failed to reload /src/views/StatisticsView.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://localhost:5173/@vite/client:808
+[ 1854390ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/src/views/StatisticsView.tsx?t=1773408810999:0
+[ 1854390ms] [ERROR] [vite] Failed to reload /src/views/StatisticsView.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://localhost:5173/@vite/client:808

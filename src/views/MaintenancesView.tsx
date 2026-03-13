@@ -226,7 +226,7 @@ export function MaintenancesView() {
             <label className="form-label">Status</label>
             <Select
               value={form.status}
-              onChange={val => setForm(prev => ({ ...prev, status: val }))}
+              onChange={val => setForm(prev => ({ ...prev, status: val as FormState['status'] }))}
               options={[
                 { value: 'active', label: 'Active' },
                 { value: 'paused', label: 'Paused' },
@@ -312,7 +312,7 @@ export function MaintenancesView() {
                   <label className="form-label">Billing cycle</label>
                   <Select
                     value={form.hosting_cycle}
-                    onChange={val => setForm(prev => ({ ...prev, hosting_cycle: val }))}
+                    onChange={val => setForm(prev => ({ ...prev, hosting_cycle: val as FormState['hosting_cycle'] }))}
                     options={[
                       { value: 'monthly', label: 'Monthly' },
                       { value: 'yearly', label: 'Yearly' },

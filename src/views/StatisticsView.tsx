@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useProjectsStore } from '../stores/projects'
 import { useInfraStore } from '../stores/infrastructure'
 import { useDomainsStore } from '../stores/domains'
-import type { Project, InfrastructureCost } from '../lib/types'
+import type { Project } from '../lib/types'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -30,31 +30,6 @@ function StatCard({ label, value, sub, color }: StatCardProps) {
       <div className="stat-card-label">{label}</div>
       <div className="stat-card-value">{value}</div>
       {sub && <div className="stat-card-sub">{sub}</div>}
-    </div>
-  )
-}
-
-// ── CSS bar visual ─────────────────────────────────────────────────────────────
-
-interface BarRowProps {
-  label: string
-  value: number
-  max: number
-  color: string
-  formatted: string
-}
-
-function BarRow({ label, value, max, color, formatted }: BarRowProps) {
-  const widthPct = max > 0 ? Math.round((value / max) * 100) : 0
-  return (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 5 }}>
-        <span className="text-sm" style={{ fontWeight: 600 }}>{label}</span>
-        <span className="text-mono" style={{ fontSize: 13, fontWeight: 700, color }}>{formatted}</span>
-      </div>
-      <div style={{ height: 8, background: 'var(--c6)', borderRadius: 100, overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: `${widthPct}%`, background: color, borderRadius: 100, transition: 'width .3s' }} />
-      </div>
     </div>
   )
 }
@@ -116,15 +91,7 @@ export function StatisticsView() {
 
   // ── Infrastructure data ───────────────────────────────────────────────────
 
-  const monthlyRev  = infraStore.monthlyRevenueEquiv()
-  const monthlyCost = infraStore.totalMonthlyCost()
-  const marginPct   = infraStore.marginPct()
-
-  const barMax = Math.max(monthlyRev, monthlyCost, 1)
-
-  const topCosts: InfrastructureCost[] = [...infraStore.infraCosts]
-    .sort((a, b) => b.monthly_cost - a.monthly_cost)
-    .slice(0, 3)
+  const monthlyRev = infraStore.monthlyRevenueEquiv()
 
   // ── Domain data ───────────────────────────────────────────────────────────
 
@@ -144,7 +111,7 @@ export function StatisticsView() {
       </div>
 
       {/* Top stats strip */}
-      <div className="stats-strip">
+      <div className="stats-strip" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
         <StatCard
           label="Total pipeline value"
           value={pipelineValue ? fmtEur(pipelineValue) : '—'}
@@ -162,12 +129,6 @@ export function StatisticsView() {
           value={monthlyRev ? fmtEur(monthlyRev) : '—'}
           sub="from active hosting clients"
           color="var(--green)"
-        />
-        <StatCard
-          label="Net margin"
-          value={`${marginPct}%`}
-          sub="hosting revenue vs costs"
-          color={marginPct >= 70 ? 'var(--green)' : marginPct >= 40 ? 'var(--amber)' : 'var(--red)'}
         />
       </div>
 
@@ -243,76 +204,7 @@ export function StatisticsView() {
 
         </div>
 
-        {/* ── Section 3: Infrastructure summary ── */}
-        <div className="section-bar">
-          <h2>Infrastructure Summary</h2>
-        </div>
-
-        <div className="grid-2" style={{ marginBottom: 28 }}>
-          {/* Left: revenue vs costs bar visual */}
-          <div className="card" style={{ padding: 20 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--c2)', marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Monthly Revenue vs Costs
-            </div>
-            <BarRow
-              label="Revenue (from hosting)"
-              value={monthlyRev}
-              max={barMax}
-              color="var(--green)"
-              formatted={fmtEur(monthlyRev) + '/mo'}
-            />
-            <BarRow
-              label="Costs (to providers)"
-              value={monthlyCost}
-              max={barMax}
-              color="var(--red)"
-              formatted={fmtEur(monthlyCost) + '/mo'}
-            />
-            <div style={{ borderTop: '1px dashed var(--c6)', paddingTop: 12, marginTop: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span className="text-label">Net margin</span>
-              <span style={{ fontWeight: 800, fontSize: 16, color: marginPct >= 0 ? 'var(--green)' : 'var(--red)', fontVariantNumeric: 'tabular-nums' }}>
-                {fmtEur(monthlyRev - monthlyCost)}/mo
-                <span className="text-sm" style={{ fontWeight: 500, marginLeft: 6 }}>({marginPct}%)</span>
-              </span>
-            </div>
-          </div>
-
-          {/* Right: top 3 costs */}
-          <div className="card" style={{ padding: 20 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--c2)', marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Top Infrastructure Costs
-            </div>
-            {topCosts.length === 0 ? (
-              <div style={{ color: 'var(--c4)', fontSize: 13, paddingTop: 8 }}>No active costs recorded</div>
-            ) : (
-              <table>
-                <thead>
-                  <tr>
-                    <th>Provider</th>
-                    <th>Description</th>
-                    <th className="th-right">Monthly</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {topCosts.map((c: InfrastructureCost, i: number) => (
-                    <tr key={c.id}>
-                      <td style={{ fontWeight: 700 }}>
-                        {i === 0 && <span style={{ marginRight: 5, color: 'var(--amber)' }}>▲</span>}
-                        {c.provider}
-                      </td>
-                      <td className="text-sm text-muted">{c.description ?? '—'}</td>
-                      <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--red)' }}>
-                        €{c.monthly_cost.toFixed(2)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
-
-        {/* ── Section 4: Domain health ── */}
+        {/* ── Section 3: Domain health ── */}
         <div className="section-bar">
           <h2>Domain Health</h2>
         </div>

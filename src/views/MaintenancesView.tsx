@@ -6,6 +6,7 @@ import { useProjectsStore } from '../stores/projects'
 import { supabase } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import type { Maintenance } from '../lib/types'
+import { Select } from '../components/Select'
 
 function fmtEuro(n: number) {
   return '€' + n.toLocaleString('en-EU')
@@ -214,20 +215,24 @@ export function MaintenancesView() {
         <div className="form-row" style={{ marginBottom: 14 }}>
           <div className="form-group">
             <label className="form-label">Client</label>
-            <select value={form.client_id} onChange={f('client_id')}>
-              <option value="">Select client…</option>
-              {cStore.clients.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+            <Select
+              value={form.client_id}
+              onChange={val => setForm(prev => ({ ...prev, client_id: val }))}
+              placeholder="Select client…"
+              options={cStore.clients.map(c => ({ value: c.id, label: c.name }))}
+            />
           </div>
           <div className="form-group">
             <label className="form-label">Status</label>
-            <select value={form.status} onChange={f('status')}>
-              <option value="active">Active</option>
-              <option value="paused">Paused</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
+            <Select
+              value={form.status}
+              onChange={val => setForm(prev => ({ ...prev, status: val }))}
+              options={[
+                { value: 'active', label: 'Active' },
+                { value: 'paused', label: 'Paused' },
+                { value: 'cancelled', label: 'Cancelled' },
+              ]}
+            />
           </div>
         </div>
 
@@ -296,17 +301,23 @@ export function MaintenancesView() {
               <div className="form-row" style={{ marginBottom: 12 }}>
                 <div className="form-group">
                   <label className="form-label">Project #</label>
-                  <select value={form.hosting_project_pn} onChange={f('hosting_project_pn')}>
-                    <option value="">— Select project —</option>
-                    {pStore.projects.map(p => <option key={p.pn} value={p.pn}>{p.pn} — {p.name}</option>)}
-                  </select>
+                  <Select
+                    value={form.hosting_project_pn}
+                    onChange={val => setForm(prev => ({ ...prev, hosting_project_pn: val }))}
+                    placeholder="— Select project —"
+                    options={pStore.projects.map(p => ({ value: p.pn, label: `${p.pn} — ${p.name}` }))}
+                  />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Billing cycle</label>
-                  <select value={form.hosting_cycle} onChange={f('hosting_cycle')}>
-                    <option value="monthly">Monthly</option>
-                    <option value="yearly">Yearly</option>
-                  </select>
+                  <Select
+                    value={form.hosting_cycle}
+                    onChange={val => setForm(prev => ({ ...prev, hosting_cycle: val }))}
+                    options={[
+                      { value: 'monthly', label: 'Monthly' },
+                      { value: 'yearly', label: 'Yearly' },
+                    ]}
+                  />
                 </div>
               </div>
               <div className="form-row" style={{ marginBottom: 12 }}>

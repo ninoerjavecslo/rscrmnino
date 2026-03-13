@@ -5,6 +5,7 @@ import { useProjectsStore } from '../stores/projects'
 import { supabase } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import type { HostingClient } from '../lib/types'
+import { Select } from '../components/Select'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -296,14 +297,18 @@ export function InfrastructureView() {
         <div className="form-row" style={{marginBottom:14}}>
           <div className="form-group">
             <label className="form-label">Client</label>
-            <select value={hosting.form.client_id} onChange={e => {
-              if (e.target.value === '__new__') { setShowNewClient(true); setNewClientName('') }
-              else { setShowNewClient(false); hosting.set('client_id', e.target.value) }
-            }}>
-              <option value="">— Select client —</option>
-              {cStore.clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              <option value="__new__">+ New client…</option>
-            </select>
+            <Select
+              value={showNewClient ? '__new__' : hosting.form.client_id}
+              onChange={val => {
+                if (val === '__new__') { setShowNewClient(true); setNewClientName('') }
+                else { setShowNewClient(false); hosting.set('client_id', val) }
+              }}
+              placeholder="— Select client —"
+              options={[
+                ...cStore.clients.map(c => ({ value: c.id, label: c.name })),
+                { value: '__new__', label: '+ New client…' },
+              ]}
+            />
             {showNewClient && (
               <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
                 <input
@@ -332,15 +337,19 @@ export function InfrastructureView() {
         <div className="form-row" style={{marginBottom:14}}>
           <div className="form-group">
             <label className="form-label">Billing cycle</label>
-            <select value={hosting.form.cycle} onChange={e => {
-              hosting.set('cycle', e.target.value)
-              if (e.target.value === 'yearly' && hosting.form.billing_since) {
-                hosting.set('next_invoice_date', hosting.form.billing_since)
-              }
-            }}>
-              <option value="monthly">Monthly</option>
-              <option value="yearly">Yearly</option>
-            </select>
+            <Select
+              value={hosting.form.cycle}
+              onChange={val => {
+                hosting.set('cycle', val)
+                if (val === 'yearly' && hosting.form.billing_since) {
+                  hosting.set('next_invoice_date', hosting.form.billing_since)
+                }
+              }}
+              options={[
+                { value: 'monthly', label: 'Monthly' },
+                { value: 'yearly', label: 'Yearly' },
+              ]}
+            />
           </div>
           <div className="form-group"><label className="form-label">Amount (€)</label><input type="number" placeholder="120" value={hosting.form.amount} onChange={e => hosting.set('amount', e.target.value)} /></div>
         </div>
@@ -361,8 +370,9 @@ export function InfrastructureView() {
         </div>
         {!hosting.form.client_id || true ? (
           <div style={{marginTop:14,paddingTop:14,borderTop:'1px solid var(--c6)'}}>
-            <label style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
-              <input type="checkbox" checked={hosting.form.accounting_email} onChange={e => hosting.set('accounting_email', e.target.checked)} style={{width:16,height:16,accentColor:'var(--amber)'}} />
+            <label className="toggle-label">
+              <input type="checkbox" checked={hosting.form.accounting_email} onChange={e => hosting.set('accounting_email', e.target.checked)} />
+              <span className="toggle-track"/>
               <span style={{fontSize:14,fontWeight:600,color:'var(--c1)'}}>Send to accounting</span>
               <span className="text-xs" style={{color:'var(--c4)'}}>invoice via email to accounting dept</span>
             </label>
@@ -381,9 +391,11 @@ export function InfrastructureView() {
             <div className="form-row" style={{marginBottom:14}}>
               <div className="form-group">
                 <label className="form-label">Client</label>
-                <select value={editHosting.form.client_id} onChange={e => editHosting.set('client_id', e.target.value)}>
-                  {cStore.clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                <Select
+                  value={editHosting.form.client_id}
+                  onChange={val => editHosting.set('client_id', val)}
+                  options={cStore.clients.map(c => ({ value: c.id, label: c.name }))}
+                />
               </div>
               <div className="form-group">
                 <label className="form-label">Project #</label>
@@ -397,10 +409,14 @@ export function InfrastructureView() {
             <div className="form-row" style={{marginBottom:14}}>
               <div className="form-group">
                 <label className="form-label">Billing cycle</label>
-                <select value={editHosting.form.cycle} onChange={e => editHosting.set('cycle', e.target.value)}>
-                  <option value="monthly">Monthly</option>
-                  <option value="yearly">Yearly</option>
-                </select>
+                <Select
+                  value={editHosting.form.cycle}
+                  onChange={val => editHosting.set('cycle', val)}
+                  options={[
+                    { value: 'monthly', label: 'Monthly' },
+                    { value: 'yearly', label: 'Yearly' },
+                  ]}
+                />
               </div>
               <div className="form-group">
                 <label className="form-label">Amount (€)</label>
@@ -427,16 +443,21 @@ export function InfrastructureView() {
             </div>
             <div className="form-group">
               <label className="form-label">Status</label>
-              <select value={editHosting.form.status} onChange={e => editHosting.set('status', e.target.value)}>
-                <option value="active">Active</option>
-                <option value="paused">Paused</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
+              <Select
+                value={editHosting.form.status}
+                onChange={val => editHosting.set('status', val)}
+                options={[
+                  { value: 'active', label: 'Active' },
+                  { value: 'paused', label: 'Paused' },
+                  { value: 'cancelled', label: 'Cancelled' },
+                ]}
+              />
             </div>
             {!editHosting.form.maintenance_id && (
               <div style={{paddingTop:14,borderTop:'1px solid var(--c6)'}}>
-                <label style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
-                  <input type="checkbox" checked={!!editHosting.form.accounting_email} onChange={e => editHosting.set('accounting_email', e.target.checked)} style={{width:16,height:16,accentColor:'var(--amber)'}} />
+                <label className="toggle-label">
+                  <input type="checkbox" checked={!!editHosting.form.accounting_email} onChange={e => editHosting.set('accounting_email', e.target.checked)} />
+                  <span className="toggle-track"/>
                   <span style={{fontSize:14,fontWeight:600,color:'var(--c1)'}}>Send to accounting</span>
                   <span className="text-xs" style={{color:'var(--c4)'}}>invoice via email to accounting dept</span>
                 </label>

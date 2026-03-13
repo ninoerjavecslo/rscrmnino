@@ -6,7 +6,8 @@
       "Bash(~/.ssh/known_hosts)",
       "Bash(brew install:*)",
       "Bash(/opt/homebrew/bin/brew install:*)",
-      "Read(//opt/**)"
+      "Read(//opt/**)",
+      "Bash(/opt/homebrew/bin/supabase --version)"
     ]
   }
 }

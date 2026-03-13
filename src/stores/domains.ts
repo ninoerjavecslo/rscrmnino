@@ -14,8 +14,9 @@ interface DomainState {
 
   // Actions
   fetchAll: () => Promise<void>
-  addDomains: (clientId: string, projectPn: string, entries: { domain_name: string; expiry_date: string; yearly_amount?: number; contract_id?: string }[]) => Promise<void>
+  addDomains: (clientId: string, projectPn: string, entries: { domain_name: string; expiry_date: string; yearly_amount?: number; contract_id?: string; accounting_email?: boolean }[]) => Promise<void>
   updateDomain: (id: string, data: Partial<Omit<Domain, 'id' | 'status' | 'client'>>) => Promise<void>
+  deleteDomain: (id: string) => Promise<void>
 }
 
 function daysUntil(d: string) {
@@ -64,6 +65,7 @@ export const useDomainsStore = create<DomainState>((set, get) => ({
       expiry_date: e.expiry_date,
       yearly_amount: e.yearly_amount ?? null,
       contract_id: e.contract_id ?? null,
+      accounting_email: e.accounting_email ?? false,
       auto_renew: true,
     }))
     const { error } = await supabase.from('domains').insert(rows)
@@ -75,5 +77,11 @@ export const useDomainsStore = create<DomainState>((set, get) => ({
     const { error } = await supabase.from('domains').update(data).eq('id', id)
     if (error) throw error
     await get().fetchAll()
+  },
+
+  deleteDomain: async (id) => {
+    const { error } = await supabase.from('domains').delete().eq('id', id)
+    if (error) throw error
+    set(s => ({ domains: s.domains.filter(d => d.id !== id) }))
   },
 }))

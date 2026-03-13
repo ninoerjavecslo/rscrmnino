@@ -6,6 +6,7 @@ import { useDomainsStore } from '../stores/domains'
 import { useInfraStore } from '../stores/infrastructure'
 import { useRevenuePlannerStore } from '../stores/revenuePlanner'
 import type { Project, Domain, HostingClient, RevenuePlanner } from '../lib/types'
+import { Select } from '../components/Select'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -477,9 +478,15 @@ export function ClientDetailView() {
             </div>
             <div className="form-group">
               <label className="form-label">Project Manager</label>
-              <select value={projForm.pm} onChange={e => setProjForm(f => ({ ...f, pm: e.target.value }))}>
-                <option>Nino</option><option>Ana</option><option>Maja</option>
-              </select>
+              <Select
+                value={projForm.pm}
+                onChange={val => setProjForm(f => ({ ...f, pm: val }))}
+                options={[
+                  { value: 'Nino', label: 'Nino' },
+                  { value: 'Ana', label: 'Ana' },
+                  { value: 'Maja', label: 'Maja' },
+                ]}
+              />
             </div>
           </div>
 
@@ -564,10 +571,14 @@ export function ClientDetailView() {
             </div>
             <div className="form-group">
               <label className="form-label">Billing cycle</label>
-              <select value={hostingForm.cycle} onChange={e => setHostingForm(f => ({ ...f, cycle: e.target.value as 'monthly' | 'yearly' }))}>
-                <option value="monthly">Monthly</option>
-                <option value="yearly">Yearly</option>
-              </select>
+              <Select
+                value={hostingForm.cycle}
+                onChange={val => setHostingForm(f => ({ ...f, cycle: val as 'monthly' | 'yearly' }))}
+                options={[
+                  { value: 'monthly', label: 'Monthly' },
+                  { value: 'yearly', label: 'Yearly' },
+                ]}
+              />
             </div>
           </div>
           <div className="form-group">

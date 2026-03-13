@@ -4,6 +4,7 @@ import { useProjectsStore } from '../stores/projects'
 import { useClientsStore } from '../stores/clients'
 import { supabase } from '../lib/supabase'
 import type { RevenuePlanner, Project } from '../lib/types'
+import { Select } from '../components/Select'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -477,16 +478,24 @@ export function ProjectDetailView() {
           <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
             <div className="form-group">
               <label className="form-label">Client</label>
-              <select value={projectEditForm.client_id} onChange={e => setProjectEditForm(f => ({ ...f, client_id: e.target.value }))}>
-                <option value="">— No client —</option>
-                {cStore.clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <Select
+                value={projectEditForm.client_id}
+                onChange={val => setProjectEditForm(f => ({ ...f, client_id: val }))}
+                placeholder="— No client —"
+                options={cStore.clients.map(c => ({ value: c.id, label: c.name }))}
+              />
             </div>
             <div className="form-group">
               <label className="form-label">Project Manager</label>
-              <select value={projectEditForm.pm} onChange={e => setProjectEditForm(f => ({ ...f, pm: e.target.value }))}>
-                <option>Nino</option><option>Ana</option><option>Maja</option>
-              </select>
+              <Select
+                value={projectEditForm.pm}
+                onChange={val => setProjectEditForm(f => ({ ...f, pm: val }))}
+                options={[
+                  { value: 'Nino', label: 'Nino' },
+                  { value: 'Ana', label: 'Ana' },
+                  { value: 'Maja', label: 'Maja' },
+                ]}
+              />
             </div>
           </div>
           <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
@@ -496,12 +505,16 @@ export function ProjectDetailView() {
             </div>
             <div className="form-group">
               <label className="form-label">Status</label>
-              <select value={projectEditForm.status} onChange={e => setProjectEditForm(f => ({ ...f, status: e.target.value }))}>
-                <option value="active">Active</option>
-                <option value="completed">Completed</option>
-                <option value="paused">Paused</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
+              <Select
+                value={projectEditForm.status}
+                onChange={val => setProjectEditForm(f => ({ ...f, status: val }))}
+                options={[
+                  { value: 'active', label: 'Active' },
+                  { value: 'completed', label: 'Completed' },
+                  { value: 'paused', label: 'Paused' },
+                  { value: 'cancelled', label: 'Cancelled' },
+                ]}
+              />
             </div>
           </div>
           <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -592,16 +605,17 @@ export function ProjectDetailView() {
                 value={row.planned_amount}
                 onChange={e => setPlanRows(rows => rows.map((r, idx) => idx === i ? { ...r, planned_amount: e.target.value } : r))}
               />
-              <select
+              <Select
                 value={row.probability}
-                onChange={e => setPlanRows(rows => rows.map((r, idx) => idx === i ? { ...r, probability: e.target.value } : r))}
+                onChange={val => setPlanRows(rows => rows.map((r, idx) => idx === i ? { ...r, probability: val } : r))}
                 style={{ fontSize: 13 }}
-              >
-                <option value="25">25%</option>
-                <option value="50">50%</option>
-                <option value="75">75%</option>
-                <option value="100">100%</option>
-              </select>
+                options={[
+                  { value: '25', label: '25%' },
+                  { value: '50', label: '50%' },
+                  { value: '75', label: '75%' },
+                  { value: '100', label: '100%' },
+                ]}
+              />
               <button
                 type="button"
                 onClick={() => setPlanRows(rows => rows.length > 1 ? rows.filter((_, idx) => idx !== i) : rows)}
@@ -761,16 +775,16 @@ export function ProjectDetailView() {
           </div>
           <div className="form-group">
             <label className="form-label">Status</label>
-            <select
-              className="form-input"
+            <Select
               value={editForm.status}
-              onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}
-            >
-              <option value="planned">Planned</option>
-              <option value="issued">Issued</option>
-              <option value="paid">Paid</option>
-              <option value="variable">Variable</option>
-            </select>
+              onChange={val => setEditForm(f => ({ ...f, status: val }))}
+              options={[
+                { value: 'planned', label: 'Planned' },
+                { value: 'issued', label: 'Issued' },
+                { value: 'paid', label: 'Paid' },
+                { value: 'variable', label: 'Variable' },
+              ]}
+            />
           </div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
             <button className="btn btn-secondary btn-sm" onClick={() => { setShowEdit(false); setEditRow(null) }}>Cancel</button>

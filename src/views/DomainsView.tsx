@@ -1,27 +1,27 @@
 import { useEffect, useState } from 'react'
 import { useDomainsStore } from '../stores/domains'
 import { useClientsStore } from '../stores/clients'
-import { useProjectsStore } from '../stores/projects'
 import { supabase } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import type { Domain } from '../lib/types'
+import { Select } from '../components/Select'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function daysUntil(d: string) {
-  return Math.ceil((new Date(d).getTime() - Date.now()) / 86_400_000)
+  return Math.ceil((new Date(d + 'T00:00:00').getTime() - Date.now()) / 86_400_000)
 }
 function fmtDate(d: string) {
   const [y, m, day] = d.split('-')
   return `${day}/${m}/${y}`
 }
 
-function ExpiryLabel({ expiryDate }: { expiryDate: string }) {
+function ExpiryBadge({ expiryDate }: { expiryDate: string }) {
   const days = daysUntil(expiryDate)
-  if (days < 0)   return <span style={{color:'var(--red)',fontWeight:700,fontSize:13}}>Expired</span>
-  if (days <= 7)  return <span style={{color:'var(--red)',fontWeight:700,fontSize:13}}>{days}d</span>
-  if (days <= 30) return <span style={{color:'var(--amber)',fontWeight:700,fontSize:13}}>{days}d</span>
-  return <span style={{color:'var(--green)',fontWeight:600,fontSize:13}}>Safe</span>
+  if (days < 0)   return <span className="badge badge-red">Expired</span>
+  if (days <= 7)  return <span className="badge badge-red">{days}d</span>
+  if (days <= 30) return <span className="badge badge-amber">{days}d</span>
+  return <span className="badge badge-green">Safe</span>
 }
 
 // ── Domain row input (in add modal) ──────────────────────────────────────────
@@ -78,58 +78,71 @@ function Modal({ open, title, maxWidth = 580, onClose, children, footer }: {
   )
 }
 
+// ── Confirm popup ─────────────────────────────────────────────────────────────
+
+function ConfirmModal({ open, title, message, confirmLabel, danger, onConfirm, onClose }: {
+  open: boolean; title: string; message: string; confirmLabel: string; danger?: boolean
+  onConfirm: () => void; onClose: () => void
+}) {
+  if (!open) return null
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal-box" style={{ maxWidth: 400 }}>
+        <div className="modal-header"><h2>{title}</h2><button className="modal-close" onClick={onClose}>×</button></div>
+        <div className="modal-body">
+          <p style={{margin:0,fontSize:14,color:'var(--c1)'}}>{message}</p>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary btn-sm" onClick={onClose}>Cancel</button>
+          <button className={`btn btn-sm ${danger ? 'btn-primary' : 'btn-primary'}`}
+            style={danger ? {background:'var(--red)',borderColor:'var(--red)'} : {}}
+            onClick={onConfirm}>{confirmLabel}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main view ─────────────────────────────────────────────────────────────────
 
 export function DomainsView() {
   const store = useDomainsStore()
   const cStore = useClientsStore()
-  const pStore = useProjectsStore()
-  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
-  const [showAdd, setShowAdd] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [search, setSearch] = useState('')
-  const [showHistory, setShowHistory] = useState(false)
 
-  // Add form state
-  const [clientId, setClientId]           = useState('')
-  const [newClientName, setNewClientName] = useState('')
-  const [showNewClient, setShowNewClient] = useState(false)
-  const [projectPn, setProjectPn]         = useState('')
-  const [domainError, setDomainError]     = useState<string | null>(null)
-  const [contractId, setContractId]       = useState('')
+  const [showAdd, setShowAdd]           = useState(false)
+  const [saving, setSaving]             = useState(false)
+  const [search, setSearch]             = useState('')
+  const [showHistory, setShowHistory]   = useState(false)
+
+  // Add form
+  const [clientId, setClientId]               = useState('')
+  const [newClientName, setNewClientName]     = useState('')
+  const [showNewClient, setShowNewClient]     = useState(false)
+  const [projectPn, setProjectPn]             = useState('')
+  const [contractId, setContractId]           = useState('')
   const [accountingEmail, setAccountingEmail] = useState(false)
-  const [domainRows, setDomainRows]       = useState<DomainRow[]>([{ domain_name: '', expiry_date: '', yearly_amount: '' }])
+  const [domainRows, setDomainRows]           = useState<DomainRow[]>([{ domain_name: '', expiry_date: '', yearly_amount: '' }])
+  const [domainError, setDomainError]         = useState<string | null>(null)
 
-  // Edit form state
+  // Edit form
   const [editDomain, setEditDomain] = useState<Domain | null>(null)
 
-  useEffect(() => { store.fetchAll(); cStore.fetchAll(); pStore.fetchAll() }, [])
+  // Confirm modals
+  const [archiveTarget, setArchiveTarget] = useState<Domain | null>(null)
+  const [deleteTarget, setDeleteTarget]   = useState<Domain | null>(null)
 
-  useEffect(() => {
-    if (store.domains.length > 0) {
-      const active = store.domains.filter(d => !d.archived)
-      const groups = buildGroups(active)
-      setOpenGroups(new Set(groups.map(g => g.clientName)))
-    }
-  }, [store.domains.length])
+  useEffect(() => { store.fetchAll(); cStore.fetchAll() }, [])
 
-  function toggleGroup(name: string) {
-    setOpenGroups(prev => {
-      const next = new Set(prev)
-      next.has(name) ? next.delete(name) : next.add(name)
-      return next
-    })
-  }
+  const activeDomains   = store.domains.filter(d => !d.archived)
+  const archivedDomains = store.domains.filter(d => d.archived)
+  const critical        = store.critical()
+  const warningSoon     = store.warningSoon()
+  const q               = search.trim().toLowerCase()
+  const filtered        = q
+    ? activeDomains.filter(d => d.domain_name.toLowerCase().includes(q) || (d.client?.name ?? '').toLowerCase().includes(q))
+    : activeDomains
 
-  function buildGroups(domains: Domain[]) {
-    const map = new Map<string, { clientName: string; domains: Domain[] }>()
-    for (const d of domains) {
-      const name = d.client?.name ?? 'Unknown'
-      if (!map.has(name)) map.set(name, { clientName: name, domains: [] })
-      map.get(name)!.domains.push(d)
-    }
-    return [...map.values()]
-  }
+  const totalYearly = filtered.reduce((s, d) => s + (d.yearly_amount ?? 0), 0)
 
   async function handleSave() {
     const valid = domainRows.filter(r => r.domain_name && r.expiry_date)
@@ -142,19 +155,16 @@ export function DomainsView() {
       let resolvedClientId = clientId
       if (showNewClient) {
         const { data: newClient, error: ce } = await supabase
-          .from('clients')
-          .insert({ name: newClientName.trim() })
-          .select('id')
-          .single()
+          .from('clients').insert({ name: newClientName.trim() }).select('id').single()
         if (ce) throw ce
         resolvedClientId = newClient.id
         await cStore.fetchAll()
       }
       await store.addDomains(resolvedClientId, projectPn, valid.map(r => ({
-        domain_name:     r.domain_name,
-        expiry_date:     r.expiry_date,
-        yearly_amount:   r.yearly_amount ? parseFloat(r.yearly_amount) : undefined,
-        contract_id:     contractId || undefined,
+        domain_name:      r.domain_name,
+        expiry_date:      r.expiry_date,
+        yearly_amount:    r.yearly_amount ? parseFloat(r.yearly_amount) : undefined,
+        contract_id:      contractId || undefined,
         accounting_email: accountingEmail,
       })))
       toast('success', `${valid.length} domain${valid.length > 1 ? 's' : ''} added`)
@@ -174,16 +184,14 @@ export function DomainsView() {
     setSaving(true)
     try {
       await store.updateDomain(editDomain.id, {
-        domain_name:      editDomain.domain_name,
-        expiry_date:      editDomain.expiry_date,
-        yearly_amount:    editDomain.yearly_amount,
-        project_pn:       editDomain.project_pn,
-        contract_id:      editDomain.contract_id,
-        registrar:        editDomain.registrar,
-        auto_renew:       editDomain.auto_renew,
-        accounting_email: editDomain.accounting_email,
-        archived:         editDomain.archived,
-        notes:            editDomain.notes,
+        domain_name:   editDomain.domain_name,
+        expiry_date:   editDomain.expiry_date,
+        yearly_amount: editDomain.yearly_amount,
+        project_pn:    editDomain.project_pn,
+        contract_id:   editDomain.contract_id,
+        registrar:     editDomain.registrar,
+        auto_renew:    editDomain.auto_renew,
+        notes:         editDomain.notes,
       })
       toast('success', 'Domain updated')
       setEditDomain(null)
@@ -194,16 +202,36 @@ export function DomainsView() {
     }
   }
 
-  const activeDomains   = store.domains.filter(d => !d.archived)
-  const archivedDomains = store.domains.filter(d => d.archived)
-  const critical        = store.critical()
-  const warningSoon     = store.warningSoon()
-  const q               = search.trim().toLowerCase()
+  async function handleArchive(d: Domain) {
+    try {
+      await store.updateDomain(d.id, { archived: true })
+      toast('success', `${d.domain_name} archived`)
+    } catch (err) {
+      toast('error', (err as Error).message)
+    } finally {
+      setArchiveTarget(null)
+    }
+  }
 
-  const groups = buildGroups(activeDomains).map(g => ({
-    ...g,
-    domains: q ? g.domains.filter((d: Domain) => d.domain_name.toLowerCase().includes(q)) : g.domains,
-  })).filter(g => !q || g.domains.length > 0 || g.clientName.toLowerCase().includes(q))
+  async function handleDelete(d: Domain) {
+    try {
+      await store.deleteDomain(d.id)
+      toast('success', `${d.domain_name} deleted`)
+    } catch (err) {
+      toast('error', (err as Error).message)
+    } finally {
+      setDeleteTarget(null)
+    }
+  }
+
+  async function toggleAccounting(d: Domain) {
+    try {
+      await store.updateDomain(d.id, { accounting_email: !d.accounting_email })
+      toast('success', d.accounting_email ? 'Removed from accounting' : 'Added to accounting')
+    } catch (err) {
+      toast('error', (err as Error).message)
+    }
+  }
 
   return (
     <div>
@@ -213,7 +241,7 @@ export function DomainsView() {
           <h1>Domains</h1>
           <p>Domain expiry tracking &amp; renewals</p>
         </div>
-        <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+        <div style={{display:'flex',gap:8,alignItems:'center'}}>
           <div style={{position:'relative'}}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{position:'absolute',left:9,top:'50%',transform:'translateY(-50%)',color:'var(--c4)',pointerEvents:'none'}}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input placeholder="Search domains…" value={search} onChange={e => setSearch(e.target.value)}
@@ -231,7 +259,6 @@ export function DomainsView() {
           <div className="alert alert-red" style={{marginBottom:12}}>Failed to load data. Please check your connection.</div>
         )}
 
-        {/* Alert strips */}
         {critical.length > 0 && (
           <div className="alert alert-red" style={{marginBottom:6}}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
@@ -245,71 +272,83 @@ export function DomainsView() {
           </div>
         )}
 
-        {/* Empty state */}
-        {!store.loading && groups.length === 0 && (
-          <div className="card">
-            <div className="card-body" style={{textAlign:'center',padding:'48px 20px'}}>
-              <div style={{fontSize:32,marginBottom:10}}>🌐</div>
-              <div style={{fontWeight:700,fontSize:15,color:'var(--c2)',marginBottom:5}}>No domains tracked yet</div>
-              <div className="text-sm">Add client domains to start monitoring expiry dates</div>
-            </div>
-          </div>
-        )}
-
-        {/* Active client groups */}
-        <div style={{display:'flex',flexDirection:'column',gap:10}}>
-          {groups.map(({ clientName, domains }) => {
-            const isOpen    = openGroups.has(clientName)
-            const critCount = domains.filter((d: Domain) => { const n = daysUntil(d.expiry_date); return n >= 0 && n <= 7 }).length
-            const warnCount = domains.filter((d: Domain) => { const n = daysUntil(d.expiry_date); return n > 7 && n <= 30 }).length
-            const acctCount = domains.filter((d: Domain) => d.accounting_email).length
-
-            return (
-              <div key={clientName} className="card">
-                <div onClick={() => toggleGroup(clientName)}
-                  style={{display:'flex',alignItems:'center',gap:10,padding:'12px 16px',cursor:'pointer',userSelect:'none',borderBottom:isOpen?'1px solid var(--c7)':'none'}}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                    style={{transform:isOpen?'rotate(0deg)':'rotate(-90deg)',transition:'transform .15s',flexShrink:0,color:'var(--c4)'}}>
-                    <polyline points="6 9 12 15 18 9"/>
-                  </svg>
-                  <span style={{fontWeight:700,fontSize:14,color:'var(--c0)',flex:1}}>{clientName}</span>
-                  <span className="text-xs">{domains.length} domain{domains.length !== 1 ? 's' : ''}</span>
-                  {acctCount > 0 && <span className="badge badge-amber">ACCT</span>}
-                  {critCount > 0 && <span className="badge badge-red">{critCount} critical</span>}
-                  {warnCount > 0 && <span className="badge badge-amber">{warnCount} expiring</span>}
-                </div>
-
-                {isOpen && domains.map((d: Domain, i: number) => (
-                  <div key={d.id} style={{display:'flex',alignItems:'center',padding:'11px 16px',borderBottom:i<domains.length-1?'1px solid var(--c7)':'none',gap:12,flexWrap:'wrap'}}>
-                    <div style={{flex:'1 1 auto',minWidth:0,display:'flex',alignItems:'center',gap:8}}>
-                      <span style={{fontWeight:600,fontSize:14,color:'var(--c0)',wordBreak:'break-all'}}>{d.domain_name}</span>
-                      {d.accounting_email && <span className="badge badge-amber" style={{fontSize:10}}>ACCT</span>}
-                    </div>
-                    <div style={{flexShrink:0}}>
-                      <div style={{fontSize:13,color:'var(--c2)',fontWeight:500}}>Exp. {fmtDate(d.expiry_date)}</div>
-                    </div>
-                    <div style={{flexShrink:0,textAlign:'right',fontSize:13,color:'var(--c2)'}}>
-                      {d.yearly_amount ? `€${d.yearly_amount}/yr` : '—'}
-                    </div>
-                    <div style={{flexShrink:0,textAlign:'right'}}>
-                      <ExpiryLabel expiryDate={d.expiry_date} />
-                    </div>
-                    <button className="btn btn-secondary btn-xs" onClick={() => setEditDomain({ ...d })}>Edit</button>
-                  </div>
-                ))}
-              </div>
-            )
-          })}
+        <div className="section-bar">
+          <h2>Active Domains <span className="text-xs" style={{fontWeight:400,textTransform:'none',letterSpacing:0}}>· {filtered.length} domain{filtered.length !== 1 ? 's' : ''}</span></h2>
         </div>
 
-        {/* History section */}
+        <div className="card">
+          {filtered.length === 0 ? (
+            <div style={{padding:'40px 20px',textAlign:'center',color:'var(--c4)'}}>
+              <div style={{fontWeight:600,color:'var(--c3)',marginBottom:4}}>No domains tracked yet</div>
+              <div className="text-sm">Add client domains to start monitoring expiry dates</div>
+            </div>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Client</th>
+                  <th>Domain</th>
+                  <th>Project #</th>
+                  <th>Expiry</th>
+                  <th className="th-right">€/yr</th>
+                  <th>Status</th>
+                  <th>Acct</th>
+                  <th style={{width:120}}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((d: Domain) => (
+                  <tr key={d.id}>
+                    <td style={{fontWeight:700}}>{d.client?.name ?? '—'}</td>
+                    <td style={{fontWeight:600,color:'var(--c0)'}}>{d.domain_name}</td>
+                    <td>{d.project_pn ? <span className="badge badge-gray">{d.project_pn}</span> : <span className="text-xs">—</span>}</td>
+                    <td className="text-xs">{fmtDate(d.expiry_date)}</td>
+                    <td className="td-right text-mono" style={{fontWeight:600}}>
+                      {d.yearly_amount ? `€${d.yearly_amount}` : <span className="text-xs">—</span>}
+                    </td>
+                    <td><ExpiryBadge expiryDate={d.expiry_date} /></td>
+                    <td>
+                      <button
+                        onClick={() => toggleAccounting(d)}
+                        className={`badge ${d.accounting_email ? 'badge-amber' : 'badge-gray'}`}
+                        style={{cursor:'pointer',border:'none',background:'none',padding:0,font:'inherit'}}
+                        title={d.accounting_email ? 'Remove from accounting' : 'Send to accounting'}
+                      >
+                        ACCT
+                      </button>
+                    </td>
+                    <td>
+                      <div style={{display:'flex',gap:4,justifyContent:'flex-end'}}>
+                        <button className="btn btn-secondary btn-xs" onClick={() => setEditDomain({ ...d })}>Edit</button>
+                        <button className="btn btn-ghost btn-xs" onClick={() => setArchiveTarget(d)} title="Archive">
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+                        </button>
+                        <button className="btn btn-ghost btn-xs" onClick={() => setDeleteTarget(d)} title="Delete"
+                          style={{color:'var(--red)'}}>
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              {totalYearly > 0 && (
+                <tfoot>
+                  <tr>
+                    <td colSpan={4} style={{textAlign:'right',fontSize:10,fontWeight:700,color:'var(--c3)',textTransform:'uppercase',letterSpacing:'0.6px'}}>Total / year</td>
+                    <td className="td-right text-mono" style={{fontSize:16,fontWeight:800,color:'var(--navy)'}}>€{totalYearly.toFixed(0)}</td>
+                    <td colSpan={3}></td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          )}
+        </div>
+
+        {/* Archived history */}
         {archivedDomains.length > 0 && (
           <div style={{marginTop:24}}>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => setShowHistory(h => !h)}
-              style={{marginBottom:10,color:'var(--c4)'}}
-            >
+            <button className="btn btn-ghost btn-sm" onClick={() => setShowHistory(h => !h)} style={{marginBottom:10,color:'var(--c4)'}}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
                 style={{transform:showHistory?'rotate(0deg)':'rotate(-90deg)',transition:'transform .15s'}}>
                 <polyline points="6 9 12 15 18 9"/>
@@ -317,16 +356,20 @@ export function DomainsView() {
               History ({archivedDomains.length} archived)
             </button>
             {showHistory && (
-              <div className="card" style={{opacity:0.65}}>
+              <div className="card" style={{opacity:0.7}}>
                 <table>
-                  <thead><tr><th>Domain</th><th>Client</th><th>Expired</th><th style={{width:60}}></th></tr></thead>
+                  <thead><tr><th>Client</th><th>Domain</th><th>Expiry</th><th style={{width:80}}></th></tr></thead>
                   <tbody>
                     {archivedDomains.map(d => (
                       <tr key={d.id}>
-                        <td style={{fontWeight:600,color:'var(--c3)'}}>{d.domain_name}</td>
                         <td className="text-sm">{d.client?.name ?? '—'}</td>
+                        <td style={{fontWeight:600,color:'var(--c3)'}}>{d.domain_name}</td>
                         <td className="text-sm">{fmtDate(d.expiry_date)}</td>
-                        <td><button className="btn btn-ghost btn-xs" onClick={() => setEditDomain({ ...d })}>Edit</button></td>
+                        <td>
+                          <button className="btn btn-ghost btn-xs" style={{color:'var(--red)'}} onClick={() => setDeleteTarget(d)} title="Delete">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -343,9 +386,7 @@ export function DomainsView() {
           <button className="btn btn-secondary btn-sm" onClick={() => setShowAdd(false)}>Cancel</button>
           <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving}>{saving ? <span className="spinner"/> : null} Save domains</button>
         </>}>
-        {domainError && (
-          <div className="alert alert-red" style={{marginBottom:12}}>{domainError}</div>
-        )}
+        {domainError && <div className="alert alert-red" style={{marginBottom:12}}>{domainError}</div>}
         <div className="form-row" style={{marginBottom:14}}>
           <div className="form-group">
             <label className="form-label" style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
@@ -358,10 +399,12 @@ export function DomainsView() {
             {showNewClient ? (
               <input placeholder="Client name" value={newClientName} onChange={e => setNewClientName(e.target.value)} autoFocus />
             ) : (
-              <select value={clientId} onChange={e => setClientId(e.target.value)}>
-                <option value="">— Select client —</option>
-                {cStore.clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <Select
+                value={clientId}
+                onChange={setClientId}
+                placeholder="— Select client —"
+                options={cStore.clients.map(c => ({ value: c.id, label: c.name }))}
+              />
             )}
           </div>
           <div className="form-group">
@@ -374,8 +417,9 @@ export function DomainsView() {
           <input placeholder="e.g. PO-2026-042" value={contractId} onChange={e => setContractId(e.target.value)} />
         </div>
         <div className="form-group" style={{marginBottom:14}}>
-          <label style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
-            <input type="checkbox" checked={accountingEmail} onChange={e => setAccountingEmail(e.target.checked)} style={{width:16,height:16,accentColor:'var(--amber)'}} />
+          <label className="toggle-label">
+            <input type="checkbox" checked={accountingEmail} onChange={e => setAccountingEmail(e.target.checked)} />
+            <span className="toggle-track"/>
             <span style={{fontSize:14,fontWeight:600,color:'var(--c1)'}}>Send to accounting</span>
             <span className="text-xs" style={{color:'var(--c4)'}}>appears in Outbox</span>
           </label>
@@ -423,23 +467,33 @@ export function DomainsView() {
               <input value={editDomain.contract_id ?? ''} onChange={e => setEditDomain(d => d ? {...d, contract_id: e.target.value || null} : d)} />
             </div>
           </div>
-          <div style={{display:'flex',flexDirection:'column',gap:12,marginBottom:14}}>
-            <label style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
-              <input type="checkbox" checked={!!editDomain.accounting_email} onChange={e => setEditDomain(d => d ? {...d, accounting_email: e.target.checked} : d)} style={{width:16,height:16,accentColor:'var(--amber)'}} />
-              <span style={{fontSize:14,fontWeight:600,color:'var(--c1)'}}>Send to accounting</span>
-              <span className="text-xs" style={{color:'var(--c4)'}}>appears in Outbox</span>
-            </label>
-            <label style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
-              <input type="checkbox" checked={!!editDomain.archived} onChange={e => setEditDomain(d => d ? {...d, archived: e.target.checked} : d)} style={{width:16,height:16,accentColor:'var(--c4)'}} />
-              <span style={{fontSize:14,fontWeight:600,color:'var(--c3)'}}>Archive (not renewed / cancelled)</span>
-            </label>
-          </div>
           <div className="form-group">
             <label className="form-label">Notes</label>
             <input value={editDomain.notes ?? ''} onChange={e => setEditDomain(d => d ? {...d, notes: e.target.value || null} : d)} />
           </div>
         </Modal>
       )}
+
+      {/* Archive confirm */}
+      <ConfirmModal
+        open={!!archiveTarget}
+        title="Archive domain"
+        message={`Archive ${archiveTarget?.domain_name ?? ''}? It will no longer be billed and will move to history.`}
+        confirmLabel="Archive"
+        onConfirm={() => archiveTarget && handleArchive(archiveTarget)}
+        onClose={() => setArchiveTarget(null)}
+      />
+
+      {/* Delete confirm */}
+      <ConfirmModal
+        open={!!deleteTarget}
+        title="Delete domain"
+        message={`Permanently delete ${deleteTarget?.domain_name ?? ''}? This cannot be undone.`}
+        confirmLabel="Delete"
+        danger
+        onConfirm={() => deleteTarget && handleDelete(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+      />
     </div>
   )
 }

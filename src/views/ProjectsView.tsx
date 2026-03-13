@@ -6,6 +6,7 @@ import { useInfraStore } from '../stores/infrastructure'
 import { useRevenuePlannerStore } from '../stores/revenuePlanner'
 import { supabase } from '../lib/supabase'
 import type { Project } from '../lib/types'
+import { Select } from '../components/Select'
 
 const CURRENT_YEAR = new Date().getFullYear()
 function currentYearMonths() {
@@ -272,11 +273,15 @@ export function ProjectsView() {
           </div>
           <div className="form-group">
             <label className="form-label">Client</label>
-            <select value={showNewClient ? '__new__' : form.client_id} onChange={e => handleClientChange(e.target.value)}>
-              <option value="">— Select client —</option>
-              {cStore.clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              <option value="__new__">+ New client…</option>
-            </select>
+            <Select
+              value={showNewClient ? '__new__' : form.client_id}
+              onChange={handleClientChange}
+              placeholder="— Select client —"
+              options={[
+                ...cStore.clients.map(c => ({ value: c.id, label: c.name })),
+                { value: '__new__', label: '+ New client…' },
+              ]}
+            />
             {showNewClient && (
               <input style={{marginTop:8}} value={newClientName} onChange={e => setNewClientName(e.target.value)} placeholder="New client name…" />
             )}
@@ -286,9 +291,15 @@ export function ProjectsView() {
         <div className="form-row" style={{marginBottom: form.type !== 'fixed' ? 14 : 0}}>
           <div className="form-group">
             <label className="form-label">Project Manager</label>
-            <select value={form.pm} onChange={e => setF('pm', e.target.value)}>
-              <option>Nino</option><option>Ana</option><option>Maja</option>
-            </select>
+            <Select
+              value={form.pm}
+              onChange={val => setF('pm', val)}
+              options={[
+                { value: 'Nino', label: 'Nino' },
+                { value: 'Ana', label: 'Ana' },
+                { value: 'Maja', label: 'Maja' },
+              ]}
+            />
           </div>
           <div className="form-group">
             <label className="form-label">

@@ -7,7 +7,9 @@
       "Bash(brew install:*)",
       "Bash(/opt/homebrew/bin/brew install:*)",
       "Read(//opt/**)",
-      "Bash(/opt/homebrew/bin/supabase --version)"
+      "Bash(/opt/homebrew/bin/supabase --version)",
+      "mcp__plugin_supabase_supabase__list_projects",
+      "mcp__plugin_supabase_supabase__execute_sql"
     ]
   }
 }

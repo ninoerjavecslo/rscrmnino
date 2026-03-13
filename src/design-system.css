@@ -202,6 +202,18 @@ input, select, textarea {
   -webkit-appearance: none;
   appearance: none;
 }
+input[type="checkbox"], input[type="radio"] {
+  -webkit-appearance: checkbox;
+  appearance: checkbox;
+  width: auto;
+  height: auto;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: none;
+  flex-shrink: 0;
+}
 input:focus, select:focus, textarea:focus {
   border-color: var(--navy);
   outline: none;

@@ -286,7 +286,7 @@ export function ClientDetailView() {
 
   // ── infra / domains ───────────────────────────────────────────────────────
   const hostingRows = infraStore.hostingClients.filter(h => h.client_id === id)
-  const clientDomains = dStore.domains.filter(d => d.client_id === id)
+  const clientDomains = dStore.domains.filter(d => d.client_id === id && !d.archived)
 
   const contractsValue = activeProjects.reduce((s, p) => s + (p.contract_value ?? 0), 0)
   const hostingAnnual = hostingRows.reduce((s, h) => s + (h.cycle === 'monthly' ? h.amount * 12 : h.amount), 0)

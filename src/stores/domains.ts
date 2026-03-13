@@ -45,11 +45,18 @@ export const useDomainsStore = create<DomainState>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const { data, error } = await supabase
-        .from('domains_with_status')   // view that adds computed status
+        .from('domains')
         .select('*, client:clients(id, name)')
         .order('expiry_date')
       if (error) throw error
-      set({ domains: (data ?? []) as Domain[] })
+      // Compute status locally so we don't depend on the view
+      const now = Date.now()
+      const domains = (data ?? []).map((d: Record<string, unknown>) => {
+        const days = Math.ceil((new Date((d.expiry_date as string) + 'T00:00:00').getTime() - now) / 86_400_000)
+        const status: Domain['status'] = days < 0 ? 'expired' : days <= 30 ? 'expiring_soon' : 'active'
+        return { ...d, status } as Domain
+      })
+      set({ domains })
     } catch (err) {
       set({ error: (err as Error).message })
     } finally {

@@ -91,9 +91,17 @@ interface InvoicePlanRow {
   month: string
   description: string
   planned_amount: string
+  probability: string
 }
 
 interface CostForm {
+  month_from: string
+  month_to: string
+  description: string
+  amount: string
+}
+
+interface EditCostForm {
   month: string
   description: string
   amount: string
@@ -132,12 +140,17 @@ export function ProjectDetailView() {
 
   // modals
   const [showAddPlan, setShowAddPlan] = useState(false)
-  const [planRows, setPlanRows] = useState<InvoicePlanRow[]>([{ month: '', description: '', planned_amount: '' }])
+  const [planRows, setPlanRows] = useState<InvoicePlanRow[]>([{ month: '', description: '', planned_amount: '', probability: '100' }])
   const [planSaving, setPlanSaving] = useState(false)
 
   const [showAddCost, setShowAddCost] = useState(false)
-  const [costForm, setCostForm] = useState<CostForm>({ month: '', description: '', amount: '' })
+  const [costForm, setCostForm] = useState<CostForm>({ month_from: '', month_to: '', description: '', amount: '' })
   const [costSaving, setCostSaving] = useState(false)
+
+  const [showEditCost, setShowEditCost] = useState(false)
+  const [editCostRow, setEditCostRow] = useState<RevenuePlanner | null>(null)
+  const [editCostForm, setEditCostForm] = useState<EditCostForm>({ month: '', description: '', amount: '' })
+  const [editCostSaving, setEditCostSaving] = useState(false)
 
   const [showEdit, setShowEdit] = useState(false)
   const [editRow, setEditRow] = useState<RevenuePlanner | null>(null)
@@ -211,38 +224,82 @@ export function ProjectDetailView() {
           planned_amount: r.planned_amount ? Number(r.planned_amount) : null,
           actual_amount: null,
           status: 'planned' as const,
+          probability: r.probability ? Number(r.probability) : 100,
         })))
         .select('*, project:projects(id, pn, name, type)')
       if (error) throw error
       if (data) setRpRows(prev => [...prev, ...(data as RevenuePlanner[])].sort((a, b) => a.month.localeCompare(b.month)))
       setShowAddPlan(false)
-      setPlanRows([{ month: '', description: '', planned_amount: '' }])
+      setPlanRows([{ month: '', description: '', planned_amount: '', probability: '100' }])
     } finally {
       setPlanSaving(false)
     }
   }
 
   async function saveCost() {
-    if (!id) return
+    if (!id || !costForm.month_from) return
     setCostSaving(true)
     try {
+      // Generate all months in range
+      const months: string[] = []
+      const from = new Date(costForm.month_from + '-01T00:00:00')
+      const to = costForm.month_to ? new Date(costForm.month_to + '-01T00:00:00') : from
+      const cur = new Date(from)
+      while (cur <= to) {
+        months.push(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-01`)
+        cur.setMonth(cur.getMonth() + 1)
+      }
       const { data, error } = await supabase
         .from('revenue_planner')
-        .insert({
+        .insert(months.map(month => ({
           project_id: id,
-          month: costForm.month + '-01',
+          month,
           notes: costForm.description || null,
           planned_amount: null,
           actual_amount: costForm.amount ? Number(costForm.amount) : null,
-          status: 'cost',
-        })
+          status: 'cost' as const,
+          probability: 100,
+        })))
         .select('*, project:projects(id, pn, name, type)')
       if (error) throw error
       if (data) setRpRows(prev => [...prev, ...(data as RevenuePlanner[])].sort((a, b) => a.month.localeCompare(b.month)))
       setShowAddCost(false)
-      setCostForm({ month: '', description: '', amount: '' })
+      setCostForm({ month_from: '', month_to: '', description: '', amount: '' })
     } finally {
       setCostSaving(false)
+    }
+  }
+
+  function openEditCost(r: RevenuePlanner) {
+    setEditCostRow(r)
+    setEditCostForm({
+      month: r.month.slice(0, 7),
+      description: r.notes ?? '',
+      amount: r.actual_amount != null ? String(r.actual_amount) : '',
+    })
+    setShowEditCost(true)
+  }
+
+  async function saveEditCost() {
+    if (!editCostRow) return
+    setEditCostSaving(true)
+    try {
+      const { data } = await supabase
+        .from('revenue_planner')
+        .update({
+          month: editCostForm.month + '-01',
+          notes: editCostForm.description || null,
+          actual_amount: editCostForm.amount ? Number(editCostForm.amount) : null,
+        })
+        .eq('id', editCostRow.id)
+        .select('*, project:projects(id, pn, name, type)')
+      if (data && data.length > 0) {
+        setRpRows(prev => prev.map(r => r.id === editCostRow.id ? (data[0] as RevenuePlanner) : r).sort((a, b) => a.month.localeCompare(b.month)))
+      }
+      setShowEditCost(false)
+      setEditCostRow(null)
+    } finally {
+      setEditCostSaving(false)
     }
   }
 
@@ -505,16 +562,17 @@ export function ProjectDetailView() {
 
       {/* ── Add invoice plan modal ── */}
       {showAddPlan && (
-        <Modal title="Add Invoice Plans" onClose={() => { setShowAddPlan(false); setPlanRows([{ month: '', description: '', planned_amount: '' }]) }}>
+        <Modal title="Add Invoice Plans" onClose={() => { setShowAddPlan(false); setPlanRows([{ month: '', description: '', planned_amount: '', probability: '100' }]) }}>
           {/* column headers */}
-          <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr 110px 28px', gap: '4px 8px', marginBottom: 4 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr 100px 80px 28px', gap: '4px 8px', marginBottom: 4 }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Month</span>
             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Description</span>
             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Amount (€)</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Probability</span>
             <span />
           </div>
           {planRows.map((row, i) => (
-            <div key={i} style={{ display: 'grid', gridTemplateColumns: '140px 1fr 110px 28px', gap: '6px 8px', alignItems: 'center', marginBottom: 6 }}>
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '130px 1fr 100px 80px 28px', gap: '6px 8px', alignItems: 'center', marginBottom: 6 }}>
               <input
                 className="form-input"
                 type="month"
@@ -534,6 +592,16 @@ export function ProjectDetailView() {
                 value={row.planned_amount}
                 onChange={e => setPlanRows(rows => rows.map((r, idx) => idx === i ? { ...r, planned_amount: e.target.value } : r))}
               />
+              <select
+                value={row.probability}
+                onChange={e => setPlanRows(rows => rows.map((r, idx) => idx === i ? { ...r, probability: e.target.value } : r))}
+                style={{ fontSize: 13 }}
+              >
+                <option value="25">25%</option>
+                <option value="50">50%</option>
+                <option value="75">75%</option>
+                <option value="100">100%</option>
+              </select>
               <button
                 type="button"
                 onClick={() => setPlanRows(rows => rows.length > 1 ? rows.filter((_, idx) => idx !== i) : rows)}
@@ -545,13 +613,13 @@ export function ProjectDetailView() {
           <button
             type="button"
             className="btn btn-ghost btn-xs"
-            onClick={() => setPlanRows(rows => [...rows, { month: '', description: '', planned_amount: '' }])}
+            onClick={() => setPlanRows(rows => [...rows, { month: '', description: '', planned_amount: '', probability: '100' }])}
             style={{ marginTop: 4, marginBottom: 20 }}
           >
             + Add row
           </button>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => { setShowAddPlan(false); setPlanRows([{ month: '', description: '', planned_amount: '' }]) }}>Cancel</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => { setShowAddPlan(false); setPlanRows([{ month: '', description: '', planned_amount: '', probability: '100' }]) }}>Cancel</button>
             <button className="btn btn-primary btn-sm" onClick={savePlan} disabled={planSaving || planRows.every(r => !r.month)}>
               {planSaving ? 'Saving…' : `Save ${planRows.filter(r => r.month).length || ''} plan${planRows.filter(r => r.month).length !== 1 ? 's' : ''}`}
             </button>
@@ -561,29 +629,44 @@ export function ProjectDetailView() {
 
       {/* ── Add cost modal ── */}
       {showAddCost && (
-        <Modal title="Add Cost" onClose={() => setShowAddCost(false)}>
-          <div className="form-group">
-            <label className="form-label">Month</label>
-            <input
-              className="form-input"
-              type="month"
-              value={costForm.month}
-              onChange={e => setCostForm(f => ({ ...f, month: e.target.value }))}
-            />
+        <Modal title="Add Cost" onClose={() => { setShowAddCost(false); setCostForm({ month_from: '', month_to: '', description: '', amount: '' }) }}>
+          <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+            <div className="form-group">
+              <label className="form-label">From month</label>
+              <input
+                type="month"
+                value={costForm.month_from}
+                onChange={e => setCostForm(f => ({ ...f, month_from: e.target.value }))}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">
+                To month
+                <span className="form-hint" style={{ display: 'inline', marginLeft: 6 }}>optional — for recurring</span>
+              </label>
+              <input
+                type="month"
+                value={costForm.month_to}
+                onChange={e => setCostForm(f => ({ ...f, month_to: e.target.value }))}
+              />
+            </div>
           </div>
-          <div className="form-group">
+          {costForm.month_from && costForm.month_to && costForm.month_to > costForm.month_from && (
+            <div className="alert alert-amber" style={{ marginBottom: 14, fontSize: 12 }}>
+              Will create one cost entry per month from {costForm.month_from} to {costForm.month_to}
+            </div>
+          )}
+          <div className="form-group" style={{ marginBottom: 14 }}>
             <label className="form-label">Description</label>
             <input
-              className="form-input"
               placeholder="e.g. Freelancer payment"
               value={costForm.description}
               onChange={e => setCostForm(f => ({ ...f, description: e.target.value }))}
             />
           </div>
           <div className="form-group">
-            <label className="form-label">Amount (€)</label>
+            <label className="form-label">Amount (€) per month</label>
             <input
-              className="form-input"
               type="number"
               placeholder="0"
               value={costForm.amount}
@@ -591,9 +674,46 @@ export function ProjectDetailView() {
             />
           </div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowAddCost(false)}>Cancel</button>
-            <button className="btn btn-primary btn-sm" onClick={saveCost} disabled={costSaving || !costForm.month}>
+            <button className="btn btn-secondary btn-sm" onClick={() => { setShowAddCost(false); setCostForm({ month_from: '', month_to: '', description: '', amount: '' }) }}>Cancel</button>
+            <button className="btn btn-primary btn-sm" onClick={saveCost} disabled={costSaving || !costForm.month_from}>
               {costSaving ? 'Saving…' : 'Add Cost'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Edit cost modal ── */}
+      {showEditCost && editCostRow && (
+        <Modal title="Edit Cost" onClose={() => { setShowEditCost(false); setEditCostRow(null) }}>
+          <div className="form-group" style={{ marginBottom: 14 }}>
+            <label className="form-label">Month</label>
+            <input
+              type="month"
+              value={editCostForm.month}
+              onChange={e => setEditCostForm(f => ({ ...f, month: e.target.value }))}
+            />
+          </div>
+          <div className="form-group" style={{ marginBottom: 14 }}>
+            <label className="form-label">Description</label>
+            <input
+              value={editCostForm.description}
+              onChange={e => setEditCostForm(f => ({ ...f, description: e.target.value }))}
+              placeholder="e.g. Freelancer payment"
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Amount (€)</label>
+            <input
+              type="number"
+              value={editCostForm.amount}
+              onChange={e => setEditCostForm(f => ({ ...f, amount: e.target.value }))}
+              placeholder="0"
+            />
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => { setShowEditCost(false); setEditCostRow(null) }}>Cancel</button>
+            <button className="btn btn-primary btn-sm" onClick={saveEditCost} disabled={editCostSaving}>
+              {editCostSaving ? 'Saving…' : 'Save'}
             </button>
           </div>
         </Modal>
@@ -885,6 +1005,7 @@ export function ProjectDetailView() {
                   <th>MONTH</th>
                   <th>DESCRIPTION</th>
                   <th className="th-right">AMOUNT</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -898,6 +1019,9 @@ export function ProjectDetailView() {
                     </td>
                     <td className="td-right text-mono" style={{ fontWeight: 600, color: 'var(--red)', fontSize: 13 }}>
                       {r.actual_amount != null ? fmt(r.actual_amount) : <span className="text-muted">—</span>}
+                    </td>
+                    <td>
+                      <button className="btn btn-secondary btn-xs" onClick={() => openEditCost(r)}>Edit</button>
                     </td>
                   </tr>
                 ))}

@@ -4,7 +4,7 @@ import { useClientsStore } from '../stores/clients'
 import { useProjectsStore } from '../stores/projects'
 import { supabase } from '../lib/supabase'
 import { toast } from '../lib/toast'
-import type { HostingClient, InfrastructureCost } from '../lib/types'
+import type { HostingClient } from '../lib/types'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -19,16 +19,6 @@ function daysUntil(d: string) {
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
-
-function StatCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color: string }) {
-  return (
-    <div className="stat-card" style={{ '--left-color': color } as React.CSSProperties}>
-      <div className="stat-card-label">{label}</div>
-      <div className="stat-card-value">{value}</div>
-      {sub && <div className="stat-card-sub">{sub}</div>}
-    </div>
-  )
-}
 
 function Modal({ open, title, maxWidth = 540, onClose, children, footer }: {
   open: boolean; title: string; maxWidth?: number
@@ -58,13 +48,6 @@ function useHostingForm() {
   return { form, set, reset }
 }
 
-function useProviderForm() {
-  const [form, setForm] = useState({ provider: '', description: '', monthly_cost: '', billing_cycle: 'monthly' as 'monthly' | 'annual' | 'variable' })
-  function set(field: string, val: string) { setForm(f => ({ ...f, [field]: val })) }
-  function reset() { setForm({ provider: '', description: '', monthly_cost: '', billing_cycle: 'monthly' }) }
-  return { form, set, reset }
-}
-
 // ── Edit hosting form state ───────────────────────────────────────────────────
 
 function useEditHostingForm() {
@@ -79,21 +62,40 @@ function useEditHostingForm() {
 
 export function InfrastructureView() {
   const store = useInfraStore()
-  const [showAddHosting, setShowAddHosting]   = useState(false)
-  const [showAddProvider, setShowAddProvider] = useState(false)
+  const [showAddHosting, setShowAddHosting] = useState(false)
   const [saving, setSaving] = useState(false)
   const hosting = useHostingForm()
-  const provider = useProviderForm()
   const editHosting = useEditHostingForm()
 
   const cStore = useClientsStore()
   const pStore = useProjectsStore()
+  const [newClientName, setNewClientName] = useState('')
+  const [showNewClient, setShowNewClient] = useState(false)
+  const [addingClient, setAddingClient] = useState(false)
   useEffect(() => { store.fetchAll(); cStore.fetchAll(); pStore.fetchAll() }, [])
 
+  async function handleQuickAddClient() {
+    if (!newClientName.trim()) return
+    setAddingClient(true)
+    try {
+      const { data, error } = await supabase
+        .from('clients')
+        .insert({ name: newClientName.trim() })
+        .select('id')
+        .single()
+      if (error) throw error
+      await cStore.fetchAll()
+      hosting.set('client_id', data.id)
+      setNewClientName('')
+      setShowNewClient(false)
+    } catch (e) {
+      toast('error', (e as Error).message)
+    } finally {
+      setAddingClient(false)
+    }
+  }
+
   const totalRevenue = store.monthlyRevenueEquiv()
-  const totalCost    = store.totalMonthlyCost()
-  const margin       = store.margin()
-  const marginPct    = store.marginPct()
   const yearlyDueSoon = store.yearlyDueSoon()
 
   async function handleAddHosting() {
@@ -112,7 +114,6 @@ export function InfrastructureView() {
         notes:             null,
       })
 
-      // Auto-create revenue_planner entries
       const project = pStore.projects.find(p => p.pn === hosting.form.project_pn)
       if (project && hosting.form.billing_since) {
         const amount = parseFloat(hosting.form.amount)
@@ -154,28 +155,6 @@ export function InfrastructureView() {
     }
   }
 
-  async function handleAddProvider() {
-    if (!provider.form.provider || !provider.form.monthly_cost) return
-    setSaving(true)
-    try {
-      await store.addInfraCost({
-        provider:      provider.form.provider,
-        description:   provider.form.description || null,
-        monthly_cost:  parseFloat(provider.form.monthly_cost),
-        billing_cycle: provider.form.billing_cycle,
-        status:        'active',
-        notes:         null,
-      })
-      toast('success', 'Provider added')
-      provider.reset()
-      setShowAddProvider(false)
-    } catch (err) {
-      toast('error', (err as Error).message)
-    } finally {
-      setSaving(false)
-    }
-  }
-
   async function handleSaveEditHosting() {
     const h = editHosting.form
     if (!h) return
@@ -200,44 +179,36 @@ export function InfrastructureView() {
     }
   }
 
-  if (store.loading && store.hostingClients.length === 0) {
-    return (
-      <div>
-        <div className="page-header"><div><h1>Infrastructure</h1><p>Loading…</p></div></div>
-        <div className="page-content" style={{textAlign: 'center', paddingTop: 60, color: 'var(--c4)'}}>Loading data from Supabase…</div>
-      </div>
-    )
-  }
-
   return (
     <div>
-      {/* Page header */}
       <div className="page-header">
         <div>
-          <h1>Infrastructure</h1>
-          <p>Client hosting revenue &amp; provider costs</p>
+          <h1>Hosting</h1>
+          <p>Client hosting revenue</p>
         </div>
       </div>
 
-      {/* Error banner */}
       {store.error && (
         <div className="alert alert-red" style={{margin: '12px 28px 0'}}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          <span>Failed to load infrastructure data. Please check your connection.</span>
+          <span>Failed to load hosting data.</span>
         </div>
       )}
 
-      {/* Stats strip */}
-      <div className="stats-strip">
-        <StatCard label="Monthly Revenue"  value={`€${totalRevenue.toFixed(0)}`}  sub="from hosting clients"   color="var(--green)" />
-        <StatCard label="Monthly Costs"    value={`€${totalCost.toFixed(2)}`}      sub="to providers"           color="var(--red)" />
-        <StatCard label="Net Margin"       value={`€${margin.toFixed(0)}/mo`}      sub="revenue minus costs"    color="var(--navy)" />
-        <StatCard label="Margin %"         value={`${marginPct}%`}                 sub="healthy above 70%"      color="var(--green)" />
+      <div className="stats-strip" style={{ gridTemplateColumns: 'repeat(2,1fr)' }}>
+        <div className="stat-card" style={{ '--left-color': 'var(--green)' } as React.CSSProperties}>
+          <div className="stat-card-label">MONTHLY REVENUE</div>
+          <div className="stat-card-value" style={{ color: 'var(--green)' }}>€{totalRevenue.toFixed(0)}</div>
+          <div className="stat-card-sub">from hosting clients</div>
+        </div>
+        <div className="stat-card" style={{ '--left-color': 'var(--amber)' } as React.CSSProperties}>
+          <div className="stat-card-label">YEARLY RENEWING SOON</div>
+          <div className="stat-card-value" style={{ color: yearlyDueSoon.length > 0 ? 'var(--amber)' : undefined }}>{yearlyDueSoon.length}</div>
+          <div className="stat-card-sub">within 60 days</div>
+        </div>
       </div>
 
       <div className="page-content">
-
-        {/* ── Client Hosting Revenue ── */}
         <div className="section-bar">
           <h2>Client Hosting Revenue <span className="text-xs" style={{fontWeight:400,textTransform:'none',letterSpacing:0}}>· what clients pay you</span></h2>
           <button className="btn btn-secondary btn-sm" onClick={() => setShowAddHosting(true)}>
@@ -253,14 +224,12 @@ export function InfrastructureView() {
               <strong>{yearlyDueSoon.length} yearly client{yearlyDueSoon.length > 1 ? 's' : ''} renewing soon:</strong>{' '}
               {yearlyDueSoon.map((h: HostingClient) => h.client?.name ?? h.client_id).join(', ')}
             </span>
-            <button className="btn btn-secondary btn-xs" style={{marginLeft: 'auto'}}>Create invoices</button>
           </div>
         )}
 
-        <div className="card" style={{marginBottom: 28}}>
+        <div className="card">
           {store.hostingClients.length === 0 ? (
             <div style={{padding: '40px 20px', textAlign: 'center', color: 'var(--c4)'}}>
-              <div style={{fontSize: 28, marginBottom: 8}}>🖥️</div>
               <div style={{fontWeight: 600, color: 'var(--c3)', marginBottom: 4}}>No hosting clients yet</div>
               <div className="text-sm">Add your first client to start tracking revenue</div>
             </div>
@@ -298,7 +267,7 @@ export function InfrastructureView() {
               </tbody>
               <tfoot>
                 <tr>
-                  <td colSpan={4} style={{textAlign:'right',fontSize:10,fontWeight:700,color:'var(--c3)',textTransform:'uppercase',letterSpacing:'0.6px'}}>Monthly equiv. revenue</td>
+                  <td colSpan={4} style={{textAlign:'right',fontSize:10,fontWeight:700,color:'var(--c3)',textTransform:'uppercase',letterSpacing:'0.6px'}}>Monthly revenue</td>
                   <td className="td-right text-mono" style={{fontSize:17,fontWeight:800,color:'var(--green)'}}>€{totalRevenue.toFixed(0)}<span className="text-xs">/mo</span></td>
                   <td colSpan={4}></td>
                 </tr>
@@ -307,55 +276,7 @@ export function InfrastructureView() {
           )}
         </div>
 
-        {/* ── Infrastructure Costs ── */}
-        <div className="section-bar">
-          <h2>Infrastructure Costs <span className="text-xs" style={{fontWeight:400,textTransform:'none',letterSpacing:0}}>· what you pay providers</span></h2>
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowAddProvider(true)}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Add Provider
-          </button>
-        </div>
-
-        <div className="card" style={{borderRadius:'var(--r) var(--r) 0 0',marginBottom:0}}>
-          {store.infraCosts.length === 0 ? (
-            <div style={{padding:'40px 20px',textAlign:'center',color:'var(--c4)'}}>
-              <div style={{fontWeight:600,color:'var(--c3)',marginBottom:4}}>No provider costs yet</div>
-              <div className="text-sm">Add your hosting providers and services</div>
-            </div>
-          ) : (
-            <table>
-              <thead><tr><th>Provider</th><th>Description</th><th className="th-right">Monthly €</th><th style={{width:60}}></th></tr></thead>
-              <tbody>
-                {store.infraCosts.map((c: InfrastructureCost) => (
-                  <tr key={c.id}>
-                    <td style={{fontWeight:700}}>{c.provider}</td>
-                    <td className="text-sm">{c.description ?? '—'}</td>
-                    <td className="td-right text-mono" style={{fontWeight:700}}>{fmt(c.monthly_cost)}</td>
-                    <td><button className="btn btn-secondary btn-xs">Edit</button></td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td colSpan={2} style={{textAlign:'right',fontSize:10,fontWeight:700,color:'var(--c3)',textTransform:'uppercase',letterSpacing:'0.6px'}}>Total / month</td>
-                  <td className="td-right text-mono" style={{fontSize:17,fontWeight:800,color:'var(--red)'}}>€{totalCost.toFixed(2)}</td>
-                  <td></td>
-                </tr>
-              </tfoot>
-            </table>
-          )}
-        </div>
-
-        {/* Margin strip */}
-        <div style={{background:'#fff',border:'1px solid var(--c6)',borderTop:'2px dashed var(--c6)',borderRadius:'0 0 var(--r) var(--r)',padding:'12px 20px',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
-          <span className="text-label">Margin · hosting revenue minus infrastructure costs</span>
-          <div className="flex-center gap-8">
-            <span style={{fontSize:20,fontWeight:800,color:'var(--green)',fontVariantNumeric:'tabular-nums'}}>€{margin.toFixed(0)} / month</span>
-            <span className="text-xs">({marginPct}% margin)</span>
-          </div>
-        </div>
-
-        <div className="info-box">
+        <div className="info-box" style={{marginTop: 16}}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
           Active hosting clients auto-generate monthly invoice rows in the Revenue Planner under their linked Project #.
         </div>
@@ -370,17 +291,33 @@ export function InfrastructureView() {
         <div className="form-row" style={{marginBottom:14}}>
           <div className="form-group">
             <label className="form-label">Client</label>
-            <select value={hosting.form.client_id} onChange={e => hosting.set('client_id', e.target.value)}>
+            <select value={hosting.form.client_id} onChange={e => {
+              if (e.target.value === '__new__') { setShowNewClient(true); setNewClientName('') }
+              else { setShowNewClient(false); hosting.set('client_id', e.target.value) }
+            }}>
               <option value="">— Select client —</option>
               {cStore.clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              <option value="__new__">+ New client…</option>
             </select>
+            {showNewClient && (
+              <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                <input
+                  placeholder="Client name"
+                  value={newClientName}
+                  onChange={e => setNewClientName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleQuickAddClient()}
+                  style={{ flex: 1 }}
+                  autoFocus
+                />
+                <button className="btn btn-primary btn-sm" onClick={handleQuickAddClient} disabled={addingClient || !newClientName.trim()}>
+                  {addingClient ? '…' : 'Add'}
+                </button>
+              </div>
+            )}
           </div>
           <div className="form-group">
             <label className="form-label">Project #</label>
-            <select value={hosting.form.project_pn} onChange={e => hosting.set('project_pn', e.target.value)}>
-              <option value="">— Select project —</option>
-              {pStore.projects.map(p => <option key={p.pn} value={p.pn}>{p.pn} — {p.name}</option>)}
-            </select>
+            <input placeholder="RS-2026-001" value={hosting.form.project_pn} onChange={e => hosting.set('project_pn', e.target.value)} />
           </div>
         </div>
         <div className="form-group" style={{marginBottom:14}}>
@@ -419,31 +356,6 @@ export function InfrastructureView() {
         </div>
       </Modal>
 
-      {/* Add Provider modal */}
-      <Modal open={showAddProvider} title="Add Provider Cost" maxWidth={460} onClose={() => setShowAddProvider(false)}
-        footer={<>
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowAddProvider(false)}>Cancel</button>
-          <button className="btn btn-primary btn-sm" onClick={handleAddProvider} disabled={saving}>{saving ? <span className="spinner"/> : null} Add provider</button>
-        </>}>
-        <div className="form-group" style={{marginBottom:14}}>
-          <label className="form-label">Provider name</label>
-          <input placeholder="e.g. Hetzner, Cloudflare, AWS" value={provider.form.provider} onChange={e => provider.set('provider', e.target.value)} />
-        </div>
-        <div className="form-group" style={{marginBottom:14}}>
-          <label className="form-label">Service description</label>
-          <input placeholder="VPS CX31 — 3 instances" value={provider.form.description} onChange={e => provider.set('description', e.target.value)} />
-        </div>
-        <div className="form-row">
-          <div className="form-group"><label className="form-label">Monthly cost (€)</label><input type="number" placeholder="29.70" value={provider.form.monthly_cost} onChange={e => provider.set('monthly_cost', e.target.value)} /></div>
-          <div className="form-group">
-            <label className="form-label">Billing cycle</label>
-            <select value={provider.form.billing_cycle} onChange={e => provider.set('billing_cycle', e.target.value)}>
-              <option value="monthly">Monthly</option><option value="annual">Annual ÷ 12</option><option value="variable">Variable (avg)</option>
-            </select>
-          </div>
-        </div>
-      </Modal>
-
       {/* Edit Hosting Client modal */}
       <Modal open={!!editHosting.form} title="Edit Hosting Client" onClose={editHosting.close}
         footer={<>
@@ -461,10 +373,7 @@ export function InfrastructureView() {
               </div>
               <div className="form-group">
                 <label className="form-label">Project #</label>
-                <select value={editHosting.form.project_pn} onChange={e => editHosting.set('project_pn', e.target.value)}>
-                  <option value="">— Select project —</option>
-                  {pStore.projects.map(p => <option key={p.pn} value={p.pn}>{p.pn} — {p.name}</option>)}
-                </select>
+                <input placeholder="RS-2026-001" value={editHosting.form.project_pn} onChange={e => editHosting.set('project_pn', e.target.value)} />
               </div>
             </div>
             <div className="form-group" style={{marginBottom:14}}>

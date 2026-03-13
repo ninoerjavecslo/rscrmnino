@@ -117,7 +117,7 @@ function TypePills({ value, onChange }: { value: ProjectType; onChange: (v: Proj
   const types = [
     { key: 'fixed' as ProjectType, label: 'Fixed', sub: 'Known total',
       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg> },
-    { key: 'maintenance' as ProjectType, label: 'Maintenance', sub: 'Monthly recurring',
+    { key: 'maintenance' as ProjectType, label: 'Recurring', sub: 'Monthly recurring',
       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg> },
     { key: 'variable' as ProjectType, label: 'Variable', sub: 'Hourly / usage-based',
       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg> },
@@ -495,10 +495,30 @@ export function ClientDetailView() {
 
           {projForm.type === 'maintenance' && (
             <>
-              <div className="form-group">
-                <label className="form-label">Starting from</label>
-                <input type="month" value={projForm.starting_from} onChange={e => setProjForm(f => ({ ...f, starting_from: e.target.value }))} />
+              <div className="form-row" style={{ marginBottom: 4 }}>
+                <div className="form-group">
+                  <label className="form-label">Starting from</label>
+                  <input type="month" value={projForm.starting_from} onChange={e => setProjForm(f => ({ ...f, starting_from: e.target.value }))} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">
+                    End month
+                    <span className="form-hint" style={{ display: 'inline', marginLeft: 6 }}>optional</span>
+                  </label>
+                  <input type="month" value={projForm.end_month} onChange={e => setProjForm(f => ({ ...f, end_month: e.target.value }))} />
+                </div>
               </div>
+              {projForm.starting_from && projForm.end_month && projForm.end_month >= projForm.starting_from && (() => {
+                const from = new Date(projForm.starting_from + '-01T00:00:00')
+                const to = new Date(projForm.end_month + '-01T00:00:00')
+                const months = (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth()) + 1
+                const total = projForm.contract_value ? months * Number(projForm.contract_value) : null
+                return (
+                  <div style={{ fontSize: 12, color: 'var(--navy)', background: 'var(--navy-light)', border: '1px solid var(--navy-muted, #c7d2fe)', borderRadius: 6, padding: '8px 12px', marginBottom: 8 }}>
+                    <strong>{months} months</strong>{total ? ` · Total value: €${total.toLocaleString()}` : ''}
+                  </div>
+                )
+              })()}
               <div className="info-box">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                 Invoice plans will be auto-generated for every future month.
@@ -788,53 +808,6 @@ export function ClientDetailView() {
           )}
         </div>
 
-        {/* ── Invoice History section ── */}
-        <div className="section-bar" style={{ marginBottom: 10 }}>
-          <h2>Invoice History</h2>
-        </div>
-        <div className="card" style={{ marginBottom: 24 }}>
-          {invoiceHistory.length === 0 ? (
-            <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>
-              No invoiced entries for this client yet.
-            </div>
-          ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>MONTH</th>
-                  <th>PROJECT</th>
-                  <th className="th-right">AMOUNT</th>
-                  <th>STATUS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {invoiceHistory.map((r: RevenuePlanner) => {
-                  const amtColor = r.status === 'paid' ? 'var(--green)' : r.status === 'issued' ? 'var(--navy)' : 'var(--c2)'
-                  return (
-                    <tr key={r.id}>
-                      <td className="text-mono" style={{ fontSize: 13, color: 'var(--c2)' }}>
-                        {fmtMonth(r.month)}
-                      </td>
-                      <td style={{ color: 'var(--c1)', fontSize: 13 }}>
-                        {r.project?.name ?? <span className="text-muted">—</span>}
-                      </td>
-                      <td className="td-right text-mono" style={{ color: amtColor, fontWeight: 600, fontSize: 13 }}>
-                        {fmtEuro(r.actual_amount)}
-                      </td>
-                      <td>
-                        <span className={`badge ${RP_STATUS_BADGE[r.status] ?? 'badge-gray'}`}>
-                          {r.status.charAt(0).toUpperCase() + r.status.slice(1)}
-                        </span>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-
         {/* ── Domains section ── */}
         <div className="section-bar" style={{ marginBottom: 10 }}>
           <h2>Domains &amp; Hosting</h2>
@@ -942,6 +915,52 @@ export function ClientDetailView() {
                     <td colSpan={2} />
                   </tr>
                 )}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* ── Invoice History section ── */}
+        <div className="section-bar" style={{ marginBottom: 10 }}>
+          <h2>Invoice History</h2>
+        </div>
+        <div className="card" style={{ marginBottom: 24 }}>
+          {invoiceHistory.length === 0 ? (
+            <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>
+              No invoiced entries for this client yet.
+            </div>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>MONTH</th>
+                  <th>PROJECT</th>
+                  <th className="th-right">AMOUNT</th>
+                  <th>STATUS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {invoiceHistory.map((r: RevenuePlanner) => {
+                  const amtColor = r.status === 'paid' ? 'var(--green)' : r.status === 'issued' ? 'var(--navy)' : 'var(--c2)'
+                  return (
+                    <tr key={r.id}>
+                      <td className="text-mono" style={{ fontSize: 13, color: 'var(--c2)' }}>
+                        {fmtMonth(r.month)}
+                      </td>
+                      <td style={{ color: 'var(--c1)', fontSize: 13 }}>
+                        {r.project?.name ?? <span className="text-muted">—</span>}
+                      </td>
+                      <td className="td-right text-mono" style={{ color: amtColor, fontWeight: 600, fontSize: 13 }}>
+                        {fmtEuro(r.actual_amount)}
+                      </td>
+                      <td>
+                        <span className={`badge ${RP_STATUS_BADGE[r.status] ?? 'badge-gray'}`}>
+                          {r.status.charAt(0).toUpperCase() + r.status.slice(1)}
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           )}

@@ -8,6 +8,7 @@ import { ClientsView } from './views/ClientsView'
 import { ClientDetailView } from './views/ClientDetailView'
 import { ProjectsView } from './views/ProjectsView'
 import { ProjectDetailView } from './views/ProjectDetailView'
+import { MaintenancesView } from './views/MaintenancesView'
 import { RevenuePlannerView } from './views/RevenuePlannerView'
 import { ToolsView } from './views/ToolsView'
 import { InfrastructureView } from './views/InfrastructureView'
@@ -68,6 +69,7 @@ function App() {
                 <Route path="/clients/:id"     element={<ClientDetailView />} />
                 <Route path="/projects"        element={<ProjectsView />} />
                 <Route path="/projects/:id"    element={<ProjectDetailView />} />
+                <Route path="/maintenances"    element={<MaintenancesView />} />
                 <Route path="/stats"           element={<StatisticsView />} />
                 <Route path="/infrastructure"  element={<InfrastructureView />} />
                 <Route path="/domains"         element={<DomainsView />} />

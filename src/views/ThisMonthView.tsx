@@ -374,16 +374,17 @@ export function ThisMonthView() {
       if (error) throw error
       setLocalOverrides(prev => ({ ...prev, [deferRow.id]: { ...prev[deferRow.id], status: 'retainer' } }))
 
-      // If user picked a new month, create a planned entry there
+      // If user picked a new month, upsert a planned entry there (handles existing row)
       if (deferMonth) {
-        const { error: ie } = await supabase.from('revenue_planner').insert({
+        const { error: ie } = await supabase.from('revenue_planner').upsert({
           project_id:     deferRow.project_id,
           month:          deferMonth + '-01',
           planned_amount: deferRow.planned_amount,
           actual_amount:  null,
           status:         'planned',
           notes:          deferNote || deferRow.notes,
-        })
+          probability:    deferRow.probability ?? 100,
+        }, { onConflict: 'project_id,month' })
         if (ie) throw ie
         await rStore.fetchByMonths([currentMonth])
       }

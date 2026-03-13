@@ -61,6 +61,7 @@ export interface HostingClient {
   billing_since?: string | null
   next_invoice_date?: string | null
   status: 'active' | 'paused' | 'cancelled'
+  maintenance_id?: string | null
   notes?: string | null
   // Joined
   client?: Pick<Client, 'id' | 'name'> | null
@@ -92,6 +93,22 @@ export interface Domain {
   client?: Pick<Client, 'id' | 'name'> | null
 }
 
+export interface Maintenance {
+  id: string
+  client_id: string
+  name: string
+  monthly_retainer: number
+  help_requests_included: number
+  hours_included: number
+  contract_start: string   // YYYY-MM-DD
+  contract_end?: string | null
+  status: 'active' | 'paused' | 'cancelled'
+  notes?: string | null
+  created_at: string
+  // Joined
+  client?: Pick<Client, 'id' | 'name'> | null
+}
+
 export interface TimesheetEntry {
   id: string
   user_id?: string | null
@@ -108,7 +125,7 @@ export interface TimesheetEntry {
 
 export interface RevenuePlanner {
   id: string
-  project_id: string
+  project_id?: string | null
   month: string
   planned_amount?: number | null
   actual_amount?: number | null

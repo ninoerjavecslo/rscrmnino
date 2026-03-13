@@ -16,6 +16,7 @@ import { DomainsView } from './views/DomainsView'
 import { TimesheetView } from './views/TimesheetView'
 import { ThisMonthView } from './views/ThisMonthView'
 import { EmailToolView } from './views/EmailToolView'
+import { OutboxView } from './views/OutboxView'
 import { CeoSummaryView } from './views/CeoSummaryView'
 import { SettingsView } from './views/SettingsView'
 import { Toaster } from './components/Toaster'
@@ -76,6 +77,7 @@ function App() {
                 <Route path="/tools"           element={<ToolsView />} />
                 <Route path="/tools/timesheet" element={<TimesheetView />} />
                 <Route path="/email-tool"      element={<EmailToolView />} />
+                <Route path="/outbox"          element={<OutboxView />} />
                 <Route path="/settings"        element={<SettingsView />} />
               </Routes>
             </main>

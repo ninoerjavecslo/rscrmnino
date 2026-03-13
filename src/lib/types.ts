@@ -62,6 +62,7 @@ export interface HostingClient {
   next_invoice_date?: string | null
   status: 'active' | 'paused' | 'cancelled'
   maintenance_id?: string | null
+  accounting_email?: boolean
   notes?: string | null
   // Joined
   client?: Pick<Client, 'id' | 'name'> | null
@@ -88,6 +89,8 @@ export interface Domain {
   registrar?: string | null
   auto_renew: boolean
   status: 'active' | 'expiring_soon' | 'expired'  // computed column in DB
+  accounting_email?: boolean
+  archived?: boolean
   notes?: string | null
   // Joined
   client?: Pick<Client, 'id' | 'name'> | null

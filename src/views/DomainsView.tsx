@@ -88,22 +88,28 @@ export function DomainsView() {
   const [showAdd, setShowAdd] = useState(false)
   const [saving, setSaving] = useState(false)
   const [search, setSearch] = useState('')
+  const [showHistory, setShowHistory] = useState(false)
 
   // Add form state
-  const [clientId, setClientId]         = useState('')
+  const [clientId, setClientId]           = useState('')
   const [newClientName, setNewClientName] = useState('')
   const [showNewClient, setShowNewClient] = useState(false)
-  const [projectPn, setProjectPn]       = useState('')
-  const [domainError, setDomainError]   = useState<string | null>(null)
-  const [contractId, setContractId]     = useState('')
-  const [domainRows, setDomainRows]     = useState<DomainRow[]>([{ domain_name: '', expiry_date: '', yearly_amount: '' }])
+  const [projectPn, setProjectPn]         = useState('')
+  const [domainError, setDomainError]     = useState<string | null>(null)
+  const [contractId, setContractId]       = useState('')
+  const [accountingEmail, setAccountingEmail] = useState(false)
+  const [domainRows, setDomainRows]       = useState<DomainRow[]>([{ domain_name: '', expiry_date: '', yearly_amount: '' }])
+
+  // Edit form state
+  const [editDomain, setEditDomain] = useState<Domain | null>(null)
 
   useEffect(() => { store.fetchAll(); cStore.fetchAll(); pStore.fetchAll() }, [])
 
-  // Open all groups once data loads
   useEffect(() => {
     if (store.domains.length > 0) {
-      setOpenGroups(new Set(store.byClient().map(g => g.clientName)))
+      const active = store.domains.filter(d => !d.archived)
+      const groups = buildGroups(active)
+      setOpenGroups(new Set(groups.map(g => g.clientName)))
     }
   }, [store.domains.length])
 
@@ -113,6 +119,16 @@ export function DomainsView() {
       next.has(name) ? next.delete(name) : next.add(name)
       return next
     })
+  }
+
+  function buildGroups(domains: Domain[]) {
+    const map = new Map<string, { clientName: string; domains: Domain[] }>()
+    for (const d of domains) {
+      const name = d.client?.name ?? 'Unknown'
+      if (!map.has(name)) map.set(name, { clientName: name, domains: [] })
+      map.get(name)!.domains.push(d)
+    }
+    return [...map.values()]
   }
 
   async function handleSave() {
@@ -135,15 +151,16 @@ export function DomainsView() {
         await cStore.fetchAll()
       }
       await store.addDomains(resolvedClientId, projectPn, valid.map(r => ({
-        domain_name:   r.domain_name,
-        expiry_date:   r.expiry_date,
-        yearly_amount: r.yearly_amount ? parseFloat(r.yearly_amount) : undefined,
-        contract_id:   contractId || undefined,
+        domain_name:     r.domain_name,
+        expiry_date:     r.expiry_date,
+        yearly_amount:   r.yearly_amount ? parseFloat(r.yearly_amount) : undefined,
+        contract_id:     contractId || undefined,
+        accounting_email: accountingEmail,
       })))
       toast('success', `${valid.length} domain${valid.length > 1 ? 's' : ''} added`)
       setShowAdd(false)
       setClientId(''); setProjectPn(''); setContractId('')
-      setNewClientName(''); setShowNewClient(false)
+      setNewClientName(''); setShowNewClient(false); setAccountingEmail(false)
       setDomainRows([{ domain_name: '', expiry_date: '', yearly_amount: '' }])
     } catch (err) {
       toast('error', (err as Error).message)
@@ -152,10 +169,38 @@ export function DomainsView() {
     }
   }
 
-  const critical    = store.critical()
-  const warningSoon = store.warningSoon()
-  const q = search.trim().toLowerCase()
-  const groups      = store.byClient().map(g => ({
+  async function handleSaveEdit() {
+    if (!editDomain) return
+    setSaving(true)
+    try {
+      await store.updateDomain(editDomain.id, {
+        domain_name:      editDomain.domain_name,
+        expiry_date:      editDomain.expiry_date,
+        yearly_amount:    editDomain.yearly_amount,
+        project_pn:       editDomain.project_pn,
+        contract_id:      editDomain.contract_id,
+        registrar:        editDomain.registrar,
+        auto_renew:       editDomain.auto_renew,
+        accounting_email: editDomain.accounting_email,
+        archived:         editDomain.archived,
+        notes:            editDomain.notes,
+      })
+      toast('success', 'Domain updated')
+      setEditDomain(null)
+    } catch (err) {
+      toast('error', (err as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const activeDomains   = store.domains.filter(d => !d.archived)
+  const archivedDomains = store.domains.filter(d => d.archived)
+  const critical        = store.critical()
+  const warningSoon     = store.warningSoon()
+  const q               = search.trim().toLowerCase()
+
+  const groups = buildGroups(activeDomains).map(g => ({
     ...g,
     domains: q ? g.domains.filter((d: Domain) => d.domain_name.toLowerCase().includes(q)) : g.domains,
   })).filter(g => !q || g.domains.length > 0 || g.clientName.toLowerCase().includes(q))
@@ -211,16 +256,16 @@ export function DomainsView() {
           </div>
         )}
 
-        {/* Client groups */}
+        {/* Active client groups */}
         <div style={{display:'flex',flexDirection:'column',gap:10}}>
           {groups.map(({ clientName, domains }) => {
             const isOpen    = openGroups.has(clientName)
             const critCount = domains.filter((d: Domain) => { const n = daysUntil(d.expiry_date); return n >= 0 && n <= 7 }).length
             const warnCount = domains.filter((d: Domain) => { const n = daysUntil(d.expiry_date); return n > 7 && n <= 30 }).length
+            const acctCount = domains.filter((d: Domain) => d.accounting_email).length
 
             return (
               <div key={clientName} className="card">
-                {/* Group header */}
                 <div onClick={() => toggleGroup(clientName)}
                   style={{display:'flex',alignItems:'center',gap:10,padding:'12px 16px',cursor:'pointer',userSelect:'none',borderBottom:isOpen?'1px solid var(--c7)':'none'}}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -229,15 +274,16 @@ export function DomainsView() {
                   </svg>
                   <span style={{fontWeight:700,fontSize:14,color:'var(--c0)',flex:1}}>{clientName}</span>
                   <span className="text-xs">{domains.length} domain{domains.length !== 1 ? 's' : ''}</span>
+                  {acctCount > 0 && <span className="badge badge-amber">ACCT</span>}
                   {critCount > 0 && <span className="badge badge-red">{critCount} critical</span>}
                   {warnCount > 0 && <span className="badge badge-amber">{warnCount} expiring</span>}
                 </div>
 
-                {/* Domain rows */}
                 {isOpen && domains.map((d: Domain, i: number) => (
                   <div key={d.id} style={{display:'flex',alignItems:'center',padding:'11px 16px',borderBottom:i<domains.length-1?'1px solid var(--c7)':'none',gap:12,flexWrap:'wrap'}}>
-                    <div style={{flex:'1 1 auto',minWidth:0}}>
+                    <div style={{flex:'1 1 auto',minWidth:0,display:'flex',alignItems:'center',gap:8}}>
                       <span style={{fontWeight:600,fontSize:14,color:'var(--c0)',wordBreak:'break-all'}}>{d.domain_name}</span>
+                      {d.accounting_email && <span className="badge badge-amber" style={{fontSize:10}}>ACCT</span>}
                     </div>
                     <div style={{flexShrink:0}}>
                       <div style={{fontSize:13,color:'var(--c2)',fontWeight:500}}>Exp. {fmtDate(d.expiry_date)}</div>
@@ -248,12 +294,47 @@ export function DomainsView() {
                     <div style={{flexShrink:0,textAlign:'right'}}>
                       <ExpiryLabel expiryDate={d.expiry_date} />
                     </div>
+                    <button className="btn btn-secondary btn-xs" onClick={() => setEditDomain({ ...d })}>Edit</button>
                   </div>
                 ))}
               </div>
             )
           })}
         </div>
+
+        {/* History section */}
+        {archivedDomains.length > 0 && (
+          <div style={{marginTop:24}}>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => setShowHistory(h => !h)}
+              style={{marginBottom:10,color:'var(--c4)'}}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                style={{transform:showHistory?'rotate(0deg)':'rotate(-90deg)',transition:'transform .15s'}}>
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+              History ({archivedDomains.length} archived)
+            </button>
+            {showHistory && (
+              <div className="card" style={{opacity:0.65}}>
+                <table>
+                  <thead><tr><th>Domain</th><th>Client</th><th>Expired</th><th style={{width:60}}></th></tr></thead>
+                  <tbody>
+                    {archivedDomains.map(d => (
+                      <tr key={d.id}>
+                        <td style={{fontWeight:600,color:'var(--c3)'}}>{d.domain_name}</td>
+                        <td className="text-sm">{d.client?.name ?? '—'}</td>
+                        <td className="text-sm">{fmtDate(d.expiry_date)}</td>
+                        <td><button className="btn btn-ghost btn-xs" onClick={() => setEditDomain({ ...d })}>Edit</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Add domains modal */}
@@ -288,15 +369,77 @@ export function DomainsView() {
             <input placeholder="e.g. RS-2026-001" value={projectPn} onChange={e => setProjectPn(e.target.value)} />
           </div>
         </div>
-        <div className="form-group" style={{marginBottom:16}}>
+        <div className="form-group" style={{marginBottom:14}}>
           <label className="form-label">Contract / Order ID <span className="form-hint" style={{display:'inline'}}>optional</span></label>
           <input placeholder="e.g. PO-2026-042" value={contractId} onChange={e => setContractId(e.target.value)} />
+        </div>
+        <div className="form-group" style={{marginBottom:14}}>
+          <label style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
+            <input type="checkbox" checked={accountingEmail} onChange={e => setAccountingEmail(e.target.checked)} style={{width:16,height:16,accentColor:'var(--amber)'}} />
+            <span style={{fontSize:14,fontWeight:600,color:'var(--c1)'}}>Send to accounting</span>
+            <span className="text-xs" style={{color:'var(--c4)'}}>appears in Outbox</span>
+          </label>
         </div>
         <div className="form-group">
           <label className="form-label">Domains</label>
           <DomainRowInputs rows={domainRows} onChange={setDomainRows} />
         </div>
       </Modal>
+
+      {/* Edit domain modal */}
+      {editDomain && (
+        <Modal open={!!editDomain} title="Edit Domain" onClose={() => setEditDomain(null)}
+          footer={<>
+            <button className="btn btn-secondary btn-sm" onClick={() => setEditDomain(null)}>Cancel</button>
+            <button className="btn btn-primary btn-sm" onClick={handleSaveEdit} disabled={saving}>{saving ? <span className="spinner"/> : null} Save</button>
+          </>}>
+          <div className="form-row" style={{marginBottom:14}}>
+            <div className="form-group">
+              <label className="form-label">Domain name</label>
+              <input value={editDomain.domain_name} onChange={e => setEditDomain(d => d ? {...d, domain_name: e.target.value} : d)} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Expiry date</label>
+              <input type="date" value={editDomain.expiry_date} onChange={e => setEditDomain(d => d ? {...d, expiry_date: e.target.value} : d)} />
+            </div>
+          </div>
+          <div className="form-row" style={{marginBottom:14}}>
+            <div className="form-group">
+              <label className="form-label">Project #</label>
+              <input placeholder="RS-2026-001" value={editDomain.project_pn} onChange={e => setEditDomain(d => d ? {...d, project_pn: e.target.value} : d)} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">€ / year</label>
+              <input type="number" value={editDomain.yearly_amount ?? ''} onChange={e => setEditDomain(d => d ? {...d, yearly_amount: e.target.value ? parseFloat(e.target.value) : null} : d)} />
+            </div>
+          </div>
+          <div className="form-row" style={{marginBottom:14}}>
+            <div className="form-group">
+              <label className="form-label">Registrar</label>
+              <input placeholder="e.g. Arnes" value={editDomain.registrar ?? ''} onChange={e => setEditDomain(d => d ? {...d, registrar: e.target.value || null} : d)} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Contract ID</label>
+              <input value={editDomain.contract_id ?? ''} onChange={e => setEditDomain(d => d ? {...d, contract_id: e.target.value || null} : d)} />
+            </div>
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:12,marginBottom:14}}>
+            <label style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
+              <input type="checkbox" checked={!!editDomain.accounting_email} onChange={e => setEditDomain(d => d ? {...d, accounting_email: e.target.checked} : d)} style={{width:16,height:16,accentColor:'var(--amber)'}} />
+              <span style={{fontSize:14,fontWeight:600,color:'var(--c1)'}}>Send to accounting</span>
+              <span className="text-xs" style={{color:'var(--c4)'}}>appears in Outbox</span>
+            </label>
+            <label style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
+              <input type="checkbox" checked={!!editDomain.archived} onChange={e => setEditDomain(d => d ? {...d, archived: e.target.checked} : d)} style={{width:16,height:16,accentColor:'var(--c4)'}} />
+              <span style={{fontSize:14,fontWeight:600,color:'var(--c3)'}}>Archive (not renewed / cancelled)</span>
+            </label>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Notes</label>
+            <input value={editDomain.notes ?? ''} onChange={e => setEditDomain(d => d ? {...d, notes: e.target.value || null} : d)} />
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }

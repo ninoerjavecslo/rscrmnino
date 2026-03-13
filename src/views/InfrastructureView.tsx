@@ -42,9 +42,9 @@ function Modal({ open, title, maxWidth = 540, onClose, children, footer }: {
 // ── Add hosting form state ────────────────────────────────────────────────────
 
 function useHostingForm() {
-  const [form, setForm] = useState({ client_id: '', project_pn: '', description: '', cycle: 'monthly' as 'monthly' | 'yearly', amount: '', billing_since: '', next_invoice_date: '' })
-  function set(field: string, val: string) { setForm(f => ({ ...f, [field]: val })) }
-  function reset() { setForm({ client_id: '', project_pn: '', description: '', cycle: 'monthly', amount: '', billing_since: '', next_invoice_date: '' }) }
+  const [form, setForm] = useState({ client_id: '', project_pn: '', description: '', cycle: 'monthly' as 'monthly' | 'yearly', amount: '', billing_since: '', next_invoice_date: '', accounting_email: false })
+  function set(field: string, val: string | boolean) { setForm(f => ({ ...f, [field]: val })) }
+  function reset() { setForm({ client_id: '', project_pn: '', description: '', cycle: 'monthly', amount: '', billing_since: '', next_invoice_date: '', accounting_email: false }) }
   return { form, set, reset }
 }
 
@@ -53,7 +53,7 @@ function useHostingForm() {
 function useEditHostingForm() {
   const [form, setForm] = useState<HostingClient | null>(null)
   function open(h: HostingClient) { setForm({ ...h }) }
-  function set(field: string, val: string | number) { setForm(f => f ? { ...f, [field]: val } : f) }
+  function set(field: string, val: string | number | boolean) { setForm(f => f ? { ...f, [field]: val } : f) }
   function close() { setForm(null) }
   return { form, open, set, close }
 }
@@ -111,6 +111,7 @@ export function InfrastructureView() {
         billing_since:     hosting.form.billing_since || null,
         next_invoice_date: hosting.form.cycle === 'yearly' ? (hosting.form.next_invoice_date || null) : null,
         status:            'active',
+        accounting_email:  hosting.form.accounting_email,
         notes:             null,
       })
 
@@ -169,6 +170,7 @@ export function InfrastructureView() {
         billing_since:     h.billing_since,
         next_invoice_date: h.cycle === 'yearly' ? h.next_invoice_date : null,
         status:            h.status,
+        accounting_email:  h.accounting_email,
       })
       toast('success', 'Hosting client updated')
       editHosting.close()
@@ -245,7 +247,10 @@ export function InfrastructureView() {
               <tbody>
                 {store.hostingClients.map((h: HostingClient) => (
                   <tr key={h.id}>
-                    <td className="table-link" style={{fontWeight:700}}>{h.client?.name ?? h.client_id}</td>
+                    <td className="table-link" style={{fontWeight:700}}>
+                      {h.client?.name ?? h.client_id}
+                      {h.accounting_email && !h.maintenance_id && <span className="badge badge-amber" style={{marginLeft:6,fontSize:10}}>ACCT</span>}
+                    </td>
                     <td><span className="badge badge-gray">{h.project_pn}</span></td>
                     <td className="text-sm">{h.description ?? '—'}</td>
                     <td><span className={`badge badge-${h.cycle === 'monthly' ? 'green' : 'amber'}`}>{h.cycle === 'monthly' ? 'Monthly' : 'Yearly'}</span></td>
@@ -354,6 +359,15 @@ export function InfrastructureView() {
             </div>
           )}
         </div>
+        {!hosting.form.client_id || true ? (
+          <div style={{marginTop:14,paddingTop:14,borderTop:'1px solid var(--c6)'}}>
+            <label style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
+              <input type="checkbox" checked={hosting.form.accounting_email} onChange={e => hosting.set('accounting_email', e.target.checked)} style={{width:16,height:16,accentColor:'var(--amber)'}} />
+              <span style={{fontSize:14,fontWeight:600,color:'var(--c1)'}}>Send to accounting</span>
+              <span className="text-xs" style={{color:'var(--c4)'}}>invoice via email to accounting dept</span>
+            </label>
+          </div>
+        ) : null}
       </Modal>
 
       {/* Edit Hosting Client modal */}
@@ -419,6 +433,15 @@ export function InfrastructureView() {
                 <option value="cancelled">Cancelled</option>
               </select>
             </div>
+            {!editHosting.form.maintenance_id && (
+              <div style={{paddingTop:14,borderTop:'1px solid var(--c6)'}}>
+                <label style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
+                  <input type="checkbox" checked={!!editHosting.form.accounting_email} onChange={e => editHosting.set('accounting_email', e.target.checked)} style={{width:16,height:16,accentColor:'var(--amber)'}} />
+                  <span style={{fontSize:14,fontWeight:600,color:'var(--c1)'}}>Send to accounting</span>
+                  <span className="text-xs" style={{color:'var(--c4)'}}>invoice via email to accounting dept</span>
+                </label>
+              </div>
+            )}
           </>
         )}
       </Modal>

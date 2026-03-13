@@ -15,6 +15,7 @@ interface DomainState {
   // Actions
   fetchAll: () => Promise<void>
   addDomains: (clientId: string, projectPn: string, entries: { domain_name: string; expiry_date: string; yearly_amount?: number; contract_id?: string }[]) => Promise<void>
+  updateDomain: (id: string, data: Partial<Omit<Domain, 'id' | 'status' | 'client'>>) => Promise<void>
 }
 
 function daysUntil(d: string) {
@@ -66,6 +67,12 @@ export const useDomainsStore = create<DomainState>((set, get) => ({
       auto_renew: true,
     }))
     const { error } = await supabase.from('domains').insert(rows)
+    if (error) throw error
+    await get().fetchAll()
+  },
+
+  updateDomain: async (id, data) => {
+    const { error } = await supabase.from('domains').update(data).eq('id', id)
     if (error) throw error
     await get().fetchAll()
   },

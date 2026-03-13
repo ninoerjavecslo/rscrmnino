@@ -278,7 +278,7 @@ export function ClientDetailView() {
   const projectIds = new Set(projects.map(p => p.id))
 
   // ── revenue planner rows for this client ─────────────────────────────────
-  const rpRows = rpStore.rows.filter(r => r.project?.client_id === id || projectIds.has(r.project_id))
+  const rpRows = rpStore.rows.filter(r => r.project?.client_id === id || (r.project_id != null && projectIds.has(r.project_id)))
 
   // ── stats ────────────────────────────────────────────────────────────────
   const activeProjects = projects.filter(p => p.status === 'active')
@@ -300,7 +300,7 @@ export function ClientDetailView() {
   const invoicedByProject = useMemo(() => {
     const map = new Map<string, number>()
     for (const r of rpRows) {
-      if (r.actual_amount) {
+      if (r.actual_amount && r.project_id) {
         map.set(r.project_id, (map.get(r.project_id) ?? 0) + r.actual_amount)
       }
     }

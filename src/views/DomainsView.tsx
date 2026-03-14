@@ -6,6 +6,7 @@ import { toast } from '../lib/toast'
 import type { Domain } from '../lib/types'
 import { Select } from '../components/Select'
 
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function daysUntil(d: string) {
@@ -16,7 +17,11 @@ function fmtDate(d: string) {
   return `${day}/${m}/${y}`
 }
 function fmtEur(n: number) {
-  return '€' + n.toLocaleString(undefined, { maximumFractionDigits: 0 })
+  return n.toLocaleString(undefined, { maximumFractionDigits: 0 }) + ' €'
+}
+function fmtSloDate(d: string) {
+  const dt = new Date(d + 'T00:00:00')
+  return `${dt.getDate()}. ${dt.getMonth() + 1}. ${dt.getFullYear()}`
 }
 
 const ACTIVE_PER_PAGE  = 30
@@ -50,30 +55,53 @@ function ExpiryBadge({ expiryDate }: { expiryDate: string }) {
 
 // ── Domain row input (in add modal) ──────────────────────────────────────────
 
-interface DomainRow { domain_name: string; expiry_date: string; yearly_amount: string }
+interface DomainRow { domain_name: string; expiry_date: string; yearly_amount: string; isRenewal: boolean }
 
 function DomainRowInputs({ rows, onChange }: { rows: DomainRow[]; onChange: (r: DomainRow[]) => void }) {
-  function update(i: number, f: keyof DomainRow, v: string) {
+  function update<K extends keyof DomainRow>(i: number, f: K, v: DomainRow[K]) {
     onChange(rows.map((r, idx) => idx === i ? { ...r, [f]: v } : r))
   }
-  function add()     { onChange([...rows, { domain_name: '', expiry_date: '', yearly_amount: '' }]) }
+  function add()     { onChange([...rows, { domain_name: '', expiry_date: '', yearly_amount: '', isRenewal: false }]) }
   function remove(i: number) { onChange(rows.filter((_, idx) => idx !== i)) }
 
   return (
     <div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 145px 100px 32px',gap:'4px 8px',marginBottom:4}}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 130px 80px 110px 28px',gap:'4px 8px',marginBottom:4}}>
         <span className="form-label">Domain</span>
         <span className="form-label">Expiry date</span>
         <span className="form-label">€ / year</span>
+        <span className="form-label">Type</span>
         <span></span>
       </div>
       {rows.map((row, i) => (
-        <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 145px 100px 32px',gap:'6px 8px',alignItems:'center',marginBottom:8}}>
+        <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 130px 80px 110px 28px',gap:'6px 8px',alignItems:'center',marginBottom:8}}>
           <input value={row.domain_name}    onChange={e => update(i,'domain_name',e.target.value)}    placeholder="example.si" />
           <input type="date" value={row.expiry_date}   onChange={e => update(i,'expiry_date',e.target.value)} />
           <input type="number" value={row.yearly_amount} onChange={e => update(i,'yearly_amount',e.target.value)} placeholder="25" />
+          <div style={{display:'flex',border:'1px solid var(--c6)',borderRadius:6,overflow:'hidden',height:36}}>
+            <button
+              type="button"
+              onClick={() => update(i,'isRenewal',false)}
+              style={{
+                flex:1,fontSize:11,fontWeight:700,border:'none',cursor:'pointer',
+                background: !row.isRenewal ? 'var(--navy)' : '#fff',
+                color: !row.isRenewal ? '#fff' : 'var(--c4)',
+              }}>
+              New
+            </button>
+            <button
+              type="button"
+              onClick={() => update(i,'isRenewal',true)}
+              style={{
+                flex:1,fontSize:11,fontWeight:700,border:'none',borderLeft:'1px solid var(--c6)',cursor:'pointer',
+                background: row.isRenewal ? 'var(--amber)' : '#fff',
+                color: row.isRenewal ? '#fff' : 'var(--c4)',
+              }}>
+              Renew
+            </button>
+          </div>
           <button onClick={() => remove(i)} disabled={rows.length === 1}
-            style={{width:32,height:42,border:'1px solid var(--c6)',borderRadius:8,background:'#fff',cursor:'pointer',color:'var(--c4)',fontSize:20,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
+            style={{width:32,height:36,border:'1px solid var(--c6)',borderRadius:8,background:'#fff',cursor:'pointer',color:'var(--c4)',fontSize:20,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
         </div>
       ))}
       <button className="btn btn-ghost btn-xs" onClick={add} style={{marginTop:2}}>
@@ -127,6 +155,88 @@ function ConfirmModal({ open, title, message, confirmLabel, danger, onConfirm, o
   )
 }
 
+// ── Step 2 Panel ──────────────────────────────────────────────────────────────
+
+function Step2Panel({
+  savedDomains, invoicePlanned, invoicePlanMonth, invoicePlanStatus,
+  paymentDays, onPaymentDaysChange, sielEmail, accountingEmail, onCopy
+}: {
+  savedDomains: Domain[]
+  invoicePlanned: boolean
+  invoicePlanMonth: string
+  invoicePlanStatus: 'planned' | 'issued' | null
+  paymentDays: number
+  onPaymentDaysChange: (n: number) => void
+  sielEmail: string
+  accountingEmail: string
+  onCopy: (text: string, label: string) => void
+}) {
+  const domainNames = savedDomains.map(d => d.domain_name).join(', ')
+  const monthLabel = invoicePlanMonth
+    ? new Date(invoicePlanMonth + '-01T00:00:00').toLocaleString('en', { month: 'long', year: 'numeric' })
+    : ''
+  const statusLabel = invoicePlanStatus === 'issued' ? 'Already billed' : 'Planned'
+
+  return (
+    <div>
+      {/* Step indicator */}
+      <div style={{display:'flex',justifyContent:'flex-end',marginBottom:12}}>
+        <span style={{fontSize:12,color:'var(--c3)',background:'var(--c7)',padding:'3px 10px',borderRadius:20}}>Step 2 of 2</span>
+      </div>
+
+      {/* Success banner */}
+      <div style={{display:'flex',alignItems:'center',gap:10,background:'#e8f5e9',border:'1px solid #c8e6c9',borderRadius:8,padding:'10px 14px',marginBottom:16,fontSize:13,color:'#2e7d32',fontWeight:600}}>
+        <span>✓</span>
+        <span>{savedDomains.length} domain{savedDomains.length > 1 ? 's' : ''} saved — {domainNames}</span>
+        {invoicePlanned && (
+          <span className="badge badge-green" style={{marginLeft:'auto'}}>{statusLabel}: {monthLabel}</span>
+        )}
+      </div>
+
+      {/* Invoice summary */}
+      {invoicePlanned && (
+        <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',background:'#f0f4ff',border:'1px solid #d0d8f0',borderRadius:8,marginBottom:14,fontSize:13}}>
+          {'📅'} <span>Dodano v plan računov za <strong>{monthLabel}</strong> · {fmtEur(savedDomains.reduce((s, d) => s + (d.yearly_amount ?? 0), 0))} · <strong>{statusLabel}</strong></span>
+        </div>
+      )}
+
+      {/* Siel email */}
+      <div style={{border:'1px solid var(--c6)',borderRadius:8,marginBottom:12,overflow:'hidden'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',background:'var(--c7)',borderBottom:'1px solid var(--c6)'}}>
+          <div>
+            <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.5px',color:'var(--c3)'}}>Naročilo — Siel</div>
+            <div style={{fontSize:12,color:'var(--c1)',fontWeight:600}}>registrar@siel.si</div>
+          </div>
+          <button className="btn btn-secondary btn-xs" onClick={() => onCopy(sielEmail, 'Siel email')}>Copy</button>
+        </div>
+        <pre style={{margin:0,padding:'12px 14px',fontSize:12,lineHeight:1.7,color:'var(--c1)',fontFamily:'inherit',whiteSpace:'pre-wrap',background:'#fff'}}>{sielEmail}</pre>
+      </div>
+
+      {/* Accounting email */}
+      <div style={{border:'1px solid var(--c6)',borderRadius:8,overflow:'hidden'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',background:'var(--c7)',borderBottom:'1px solid var(--c6)'}}>
+          <div>
+            <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.5px',color:'var(--c3)'}}>Obvestilo — računovodstvo</div>
+            <div style={{fontSize:12,color:'var(--c1)',fontWeight:600}}>fakturiranje@pristop.si</div>
+          </div>
+          <button className="btn btn-secondary btn-xs" onClick={() => onCopy(accountingEmail, 'Accounting email')}>Copy</button>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 14px',borderBottom:'1px solid var(--c6)',background:'#fafbfd'}}>
+          <span style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.4px',color:'var(--c3)'}}>Rok plačila (dni):</span>
+          <input
+            type="number"
+            value={paymentDays}
+            onChange={e => onPaymentDaysChange(Number(e.target.value) || 30)}
+            style={{width:60,height:28,textAlign:'center',fontSize:13,fontWeight:600}}
+          />
+          <span style={{fontSize:11,color:'var(--c4)'}}>— spremenite pred kopiranjem</span>
+        </div>
+        <pre style={{margin:0,padding:'12px 14px',fontSize:12,lineHeight:1.7,color:'var(--c1)',fontFamily:'inherit',whiteSpace:'pre-wrap',background:'#fff'}}>{accountingEmail}</pre>
+      </div>
+    </div>
+  )
+}
+
 // ── Main view ─────────────────────────────────────────────────────────────────
 
 export function DomainsView() {
@@ -153,8 +263,23 @@ export function DomainsView() {
   const [showNewClient, setShowNewClient]     = useState(false)
   const [projectPn, setProjectPn]             = useState('')
   const [contractId, setContractId]           = useState('')
-  const [domainRows, setDomainRows]           = useState<DomainRow[]>([{ domain_name: '', expiry_date: '', yearly_amount: '' }])
+  const [domainRows, setDomainRows]           = useState<DomainRow[]>([{ domain_name: '', expiry_date: '', yearly_amount: '', isRenewal: false }])
   const [domainError, setDomainError]         = useState<string | null>(null)
+
+  // Invoice planning (add form)
+  const [invoicePlanMonth, setInvoicePlanMonth]   = useState('')
+  const [invoicePlanStatus, setInvoicePlanStatus] = useState<'planned' | 'issued' | null>(null)
+
+  // Wizard state
+  const [wizardStep, setWizardStep]         = useState<1 | 2>(1)
+  const [savedDomains, setSavedDomains]     = useState<Domain[]>([])
+  const [invoicePlanned, setInvoicePlanned] = useState(false)
+
+  // Step 2 / snapshot state
+  const [paymentDays, setPaymentDays]                       = useState(30)
+  const [domainRowsSnapshot, setDomainRowsSnapshot]         = useState<DomainRow[]>([])
+  const [invoicePlanMonthSnap, setInvoicePlanMonthSnap]     = useState('')
+  const [invoicePlanStatusSnap, setInvoicePlanStatusSnap]   = useState<'planned' | 'issued' | null>(null)
 
   // Edit form
   const [editDomain, setEditDomain] = useState<Domain | null>(null)
@@ -167,7 +292,28 @@ export function DomainsView() {
   const [archiveTarget, setArchiveTarget] = useState<Domain | null>(null)
   const [deleteTarget, setDeleteTarget]   = useState<Domain | null>(null)
 
+  // Domain renewal invoice
+  const [invoiceDomain, setInvoiceDomain]   = useState<Domain | null>(null)
+  const [invoiceAmount, setInvoiceAmount]   = useState('')
+  const [invoiceMonth, setInvoiceMonth]     = useState('')
+  const [invoiceDesc, setInvoiceDesc]       = useState('')
+  const [invoiceSaving, setInvoiceSaving]   = useState(false)
+  const [billedDomainIds, setBilledDomainIds] = useState<Set<string>>(new Set())
+
   useEffect(() => { store.fetchAll(); cStore.fetchAll() }, [])
+
+  useEffect(() => {
+    async function fetchBilledDomains() {
+      const { data } = await supabase
+        .from('revenue_planner')
+        .select('domain_id')
+        .not('domain_id', 'is', null)
+      if (data) {
+        setBilledDomainIds(new Set(data.map((r: { domain_id: string }) => r.domain_id)))
+      }
+    }
+    fetchBilledDomains()
+  }, [])
   useEffect(() => { setActivePage(1) }, [search, clientFilter])
 
   const activeDomains   = store.domains.filter(d => !d.archived)
@@ -259,8 +405,10 @@ export function DomainsView() {
   function resetAddForm() {
     setClientId(''); setProjectPn(''); setContractId('')
     setNewClientName(''); setShowNewClient(false)
-    setDomainRows([{ domain_name: '', expiry_date: '', yearly_amount: '' }])
+    setDomainRows([{ domain_name: '', expiry_date: '', yearly_amount: '', isRenewal: false }])
     setDomainError(null)
+    setInvoicePlanMonth('')
+    setInvoicePlanStatus(null)
   }
 
   // Single actions
@@ -271,6 +419,9 @@ export function DomainsView() {
     if (valid.length === 0) { setDomainError('Add at least one domain with a name and expiry date'); return }
     setDomainError(null)
     setSaving(true)
+    // Capture form state before any awaits (prevents async narrowing issues and survives resetAddForm)
+    const planMonth  = invoicePlanMonth
+    const planStatus = invoicePlanStatus
     try {
       let resolvedClientId = clientId
       if (showNewClient) {
@@ -280,17 +431,50 @@ export function DomainsView() {
         resolvedClientId = newClient.id
         await cStore.fetchAll()
       }
-      await store.addDomains(resolvedClientId, projectPn, valid.map(r => ({
-        domain_name:      r.domain_name,
-        expiry_date:      r.expiry_date,
-        yearly_amount:    r.yearly_amount ? parseFloat(r.yearly_amount) : undefined,
-        contract_id:      contractId || undefined,
+
+      // Snapshot form rows so Step 2 can use isRenewal after resetAddForm clears domainRows
+      setDomainRowsSnapshot([...valid])
+      setInvoicePlanMonthSnap(planMonth)
+      setInvoicePlanStatusSnap(planStatus)
+
+      const inserted = await store.addDomains(resolvedClientId, projectPn, valid.map(r => ({
+        domain_name:   r.domain_name,
+        expiry_date:   r.expiry_date,
+        yearly_amount: r.yearly_amount ? parseFloat(r.yearly_amount) : undefined,
+        contract_id:   contractId || undefined,
       })))
-      toast('success', `${valid.length} domain${valid.length > 1 ? 's' : ''} added`)
+
+      // Insert revenue_planner rows if invoice month was set
+      let invoiceSuccess = false
+      if (planMonth && planStatus) {
+        try {
+          const planRows = inserted.map(d => ({
+            domain_id:      d.id,
+            month:          planMonth + '-01',
+            planned_amount: d.yearly_amount ?? null,
+            actual_amount:  null,
+            status:         planStatus,   // narrowed local const — not the state var
+            probability:    100,
+            notes:          null,
+          }))
+          const { error: pe } = await supabase.from('revenue_planner').insert(planRows)
+          if (pe) throw pe
+          setBilledDomainIds(prev => new Set([...prev, ...inserted.map(d => d.id)]))
+          invoiceSuccess = true
+        } catch (err) {
+          toast('error', 'Domains saved but invoice planning failed: ' + (err as Error).message)
+        }
+      }
+
+      toast('success', `${inserted.length} domain${inserted.length > 1 ? 's' : ''} added`)
+
       if (keepOpen) {
         resetAddForm()
       } else {
-        setShowAdd(false)
+        // Go to Step 2
+        setSavedDomains(inserted)
+        setInvoicePlanned(invoiceSuccess && !!planMonth)
+        setWizardStep(2)
         resetAddForm()
       }
     } catch (err) {
@@ -298,6 +482,41 @@ export function DomainsView() {
     } finally {
       setSaving(false)
     }
+  }
+
+  function closeWizard() {
+    setShowAdd(false)
+    setWizardStep(1)
+    setSavedDomains([])
+    setInvoicePlanned(false)
+    setPaymentDays(30)
+    setDomainRowsSnapshot([])
+    setInvoicePlanMonthSnap('')
+    setInvoicePlanStatusSnap(null)
+    resetAddForm()
+  }
+
+  function buildSielEmail() {
+    const names = savedDomains.map(d => `- ${d.domain_name}`).join('\n')
+    return `Pozdravljeni,\n\nprosimo vas, da registrirate naslednje domene:\n\n${names}\n\nHvala in lep pozdrav,\nRenderspace`
+  }
+
+  function buildAccountingEmail() {
+    const today = new Date()
+    const dateStr = `${today.getDate()}. ${today.getMonth() + 1}. ${today.getFullYear()}`
+    const header = `Stranka: ${savedDomains[0]?.client?.name ?? '—'}\nDatum storitve: ${dateStr}\nRok plačila: ${paymentDays} dni`
+    const lines = savedDomains.map(d => {
+      const verb = (domainRowsSnapshot.find(r => r.domain_name === d.domain_name)?.isRenewal)
+        ? 'Podaljšanje' : 'Zakup'
+      const expiry = fmtSloDate(d.expiry_date)
+      const amount = d.yearly_amount != null ? ` — ${d.yearly_amount} EUR` : ''
+      return `${d.project_pn} — ${verb} domene ${d.domain_name} za 1 leto (velja do ${expiry})${amount}`
+    }).join('\n')
+    return `${header}\n\n${lines}`
+  }
+
+  function copyText(text: string, label: string) {
+    navigator.clipboard.writeText(text).then(() => toast('success', `${label} copied`))
   }
 
   async function handleSaveEdit() {
@@ -342,6 +561,39 @@ export function DomainsView() {
       toast('error', (err as Error).message)
     } finally {
       setDeleteTarget(null)
+    }
+  }
+
+  function openInvoiceDomain(d: Domain) {
+    const now = new Date()
+    const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    setInvoiceDomain(d)
+    setInvoiceAmount(d.yearly_amount != null ? String(d.yearly_amount) : '')
+    setInvoiceMonth(monthStr)
+    setInvoiceDesc(`Domain renewal: ${d.domain_name}`)
+  }
+
+  async function saveInvoiceDomain() {
+    if (!invoiceDomain) return
+    setInvoiceSaving(true)
+    try {
+      const { error } = await supabase.from('revenue_planner').insert({
+        domain_id: invoiceDomain.id,
+        month: invoiceMonth + '-01',
+        planned_amount: invoiceAmount ? parseFloat(invoiceAmount) : null,
+        actual_amount: null,
+        status: 'planned' as const,
+        probability: 100,
+        notes: invoiceDesc || null,
+      })
+      if (error) throw error
+      toast('success', `Invoice planned for ${invoiceDomain.domain_name}`)
+      setBilledDomainIds(prev => new Set([...prev, invoiceDomain.id]))
+      setInvoiceDomain(null)
+    } catch (err) {
+      toast('error', (err as Error).message)
+    } finally {
+      setInvoiceSaving(false)
     }
   }
 
@@ -456,7 +708,8 @@ export function DomainsView() {
                   <th style={{width:110}}>Contract ID</th>
                   <th className="th-right" style={{width:90}}>€/yr</th>
                   <th style={{width:110}}>Expiry</th>
-                  <th style={{width:140}}>Status</th>
+                  <th style={{width:100}}>Status</th>
+                  <th style={{width:100}}>Billing</th>
                   <th style={{width:120}}>Actions</th>
                 </tr>
               </thead>
@@ -476,10 +729,17 @@ export function DomainsView() {
                     <td style={{fontSize:13,color:'var(--c2)'}}>{d.project_pn ?? '—'}</td>
                     <td style={{fontSize:13,color:'var(--c2)'}}>{d.contract_id ?? <span className="text-xs">—</span>}</td>
                     <td className="td-right text-mono" style={{fontWeight:700}}>
-                      {d.yearly_amount ? `€${d.yearly_amount}` : <span className="text-xs" style={{fontWeight:400}}>—</span>}
+                      {d.yearly_amount ? `${d.yearly_amount} €` : <span className="text-xs" style={{fontWeight:400}}>—</span>}
                     </td>
                     <td style={{fontSize:13,color:'var(--c2)'}}>{fmtDate(d.expiry_date)}</td>
                     <td><ExpiryBadge expiryDate={d.expiry_date} /></td>
+                    <td>
+                      {billedDomainIds.has(d.id)
+                        ? <span className="badge badge-green">Billed</span>
+                        : daysUntil(d.expiry_date) <= 60
+                          ? <button className="btn btn-ghost btn-xs" onClick={() => openInvoiceDomain(d)} style={{color:'var(--navy)',fontWeight:600}}>Invoice</button>
+                          : null}
+                    </td>
                     <td>
                       <div style={{display:'flex',gap:4,justifyContent:'flex-end'}}>
                         <button className="btn btn-secondary btn-xs" onClick={() => setEditDomain({ ...d })}>Edit</button>
@@ -498,8 +758,9 @@ export function DomainsView() {
                 <tfoot>
                   <tr>
                     <td colSpan={7}></td>
+                    <td></td>
                     <td style={{textAlign:'right',fontSize:10,fontWeight:700,color:'var(--c3)',textTransform:'uppercase',letterSpacing:'0.6px',paddingRight:8}}>Total / year</td>
-                    <td className="td-right text-mono" style={{fontSize:15,fontWeight:800,color:'var(--navy)',paddingRight:16}}>€{totalYearly.toFixed(0)}</td>
+                    <td className="td-right text-mono" style={{fontSize:15,fontWeight:800,color:'var(--navy)',paddingRight:16}}>{totalYearly.toFixed(0)} €</td>
                   </tr>
                 </tfoot>
               )}
@@ -539,7 +800,7 @@ export function DomainsView() {
                     <td style={{fontSize:13,color:'var(--c2)'}}>{d.project_pn ?? '—'}</td>
                     <td style={{fontSize:13,color:'var(--c3)'}}>{fmtDate(d.expiry_date)}</td>
                     <td className="td-right text-mono" style={{color:'var(--c3)'}}>
-                      {d.yearly_amount ? `€${d.yearly_amount}` : <span className="text-xs">—</span>}
+                      {d.yearly_amount ? `${d.yearly_amount} €` : <span className="text-xs">—</span>}
                     </td>
                     <td>
                       <div style={{display:'flex',gap:4,justifyContent:'flex-end'}}>
@@ -558,52 +819,121 @@ export function DomainsView() {
       </div>
 
       {/* ── Add domains modal ── */}
-      <Modal open={showAdd} title="Add Client Domains" onClose={() => setShowAdd(false)}
-        footer={<>
-          <button className="btn btn-secondary btn-sm" onClick={() => { setShowAdd(false); resetAddForm() }}>Cancel</button>
-          <button className="btn btn-secondary btn-sm" onClick={() => handleSave(true)} disabled={saving}>Save & add new</button>
-          <button className="btn btn-primary btn-sm" onClick={() => handleSave(false)} disabled={saving}>{saving ? <span className="spinner"/> : null} Save domains</button>
-        </>}>
-        {domainError && <div className="alert alert-red" style={{marginBottom:12}}>{domainError}</div>}
-
-        {/* Client — full width */}
-        <div className="form-group" style={{marginBottom:12}}>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
-            <label className="form-label" style={{marginBottom:0}}>Client</label>
-            <button type="button" onClick={() => { setShowNewClient(!showNewClient); setClientId('') }}
-              style={{background:'none',border:'none',cursor:'pointer',fontSize:12,color:'var(--navy)',fontWeight:600,padding:0,fontFamily:'inherit'}}>
-              {showNewClient ? '← Pick existing' : '+ New client'}
-            </button>
-          </div>
-          {showNewClient ? (
-            <input placeholder="Enter new client name" value={newClientName} onChange={e => setNewClientName(e.target.value)} autoFocus />
+      <Modal open={showAdd} title={wizardStep === 1 ? 'Add Client Domains' : 'Next steps'} onClose={closeWizard}
+        footer={
+          wizardStep === 1 ? (
+            <>
+              <button className="btn btn-secondary btn-sm" onClick={() => { setShowAdd(false); resetAddForm() }}>Cancel</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => handleSave(true)} disabled={saving}>Save &amp; add new</button>
+              <button className="btn btn-primary btn-sm" onClick={() => handleSave(false)} disabled={saving}>
+                {saving ? <span className="spinner"/> : null} Save › Next step
+              </button>
+            </>
           ) : (
-            <Select
-              value={clientId}
-              onChange={setClientId}
-              placeholder="Select client"
-              options={cStore.clients.map(c => ({ value: c.id, label: c.name }))}
-            />
-          )}
-        </div>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',width:'100%'}}>
+              <span style={{fontSize:12,color:'var(--c4)'}}>Kopirajte kar potrebujete, nato zaprite</span>
+              <button className="btn btn-primary btn-sm" onClick={closeWizard}>Done</button>
+            </div>
+          )
+        }>
 
-        {/* Project # + Contract ID — side by side */}
-        <div className="form-row" style={{marginBottom:14}}>
-          <div className="form-group">
-            <label className="form-label">Project #</label>
-            <input placeholder="e.g. 1159" value={projectPn} onChange={e => setProjectPn(e.target.value)} />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Contract / Order ID <span className="form-hint" style={{display:'inline'}}>optional</span></label>
-            <input placeholder="e.g. PO-2026-042" value={contractId} onChange={e => setContractId(e.target.value)} />
-          </div>
-        </div>
+        {wizardStep === 1 ? (
+          <>
+            {domainError && <div className="alert alert-red" style={{marginBottom:12}}>{domainError}</div>}
 
-        {/* Domains */}
-        <div style={{borderTop:'1px solid var(--c6)',paddingTop:14}}>
-          <p style={{margin:'0 0 10px',fontWeight:700,fontSize:15,color:'var(--c0)'}}>Domains</p>
-          <DomainRowInputs rows={domainRows} onChange={setDomainRows} />
-        </div>
+            {/* Client */}
+            <div className="form-group" style={{marginBottom:12}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+                <label className="form-label" style={{marginBottom:0}}>Client</label>
+                <button type="button" onClick={() => { setShowNewClient(!showNewClient); setClientId('') }}
+                  style={{background:'none',border:'none',cursor:'pointer',fontSize:12,color:'var(--navy)',fontWeight:600,padding:0,fontFamily:'inherit'}}>
+                  {showNewClient ? '← Pick existing' : '+ New client'}
+                </button>
+              </div>
+              {showNewClient ? (
+                <input placeholder="Enter new client name" value={newClientName} onChange={e => setNewClientName(e.target.value)} autoFocus />
+              ) : (
+                <Select
+                  value={clientId}
+                  onChange={setClientId}
+                  placeholder="Select client"
+                  options={cStore.clients.map(c => ({ value: c.id, label: c.name }))}
+                />
+              )}
+            </div>
+
+            {/* Project # + Contract ID */}
+            <div className="form-row" style={{marginBottom:14}}>
+              <div className="form-group">
+                <label className="form-label">Project #</label>
+                <input placeholder="e.g. 1159" value={projectPn} onChange={e => setProjectPn(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Contract / Order ID <span className="form-hint" style={{display:'inline'}}>optional</span></label>
+                <input placeholder="e.g. PO-2026-042" value={contractId} onChange={e => setContractId(e.target.value)} />
+              </div>
+            </div>
+
+            {/* Domains */}
+            <div style={{borderTop:'1px solid var(--c6)',paddingTop:14}}>
+              <p style={{margin:'0 0 10px',fontWeight:700,fontSize:15,color:'var(--c0)'}}>Domains</p>
+              <DomainRowInputs rows={domainRows} onChange={setDomainRows} />
+            </div>
+
+            {/* Invoice planning */}
+            <div style={{borderTop:'1px solid var(--c6)',paddingTop:14,marginTop:14}}>
+              <p style={{margin:'0 0 10px',fontWeight:700,fontSize:13,color:'var(--c0)'}}>
+                📅 Invoice planning <span style={{fontWeight:400,fontSize:11,color:'var(--c4)'}}>— optional</span>
+              </p>
+              <div style={{display:'flex',alignItems:'flex-end',gap:12,flexWrap:'wrap'}}>
+                <div className="form-group" style={{marginBottom:0,minWidth:160}}>
+                  <label className="form-label">Invoice month</label>
+                  <input
+                    type="month"
+                    value={invoicePlanMonth}
+                    onChange={e => {
+                      setInvoicePlanMonth(e.target.value)
+                      if (!invoicePlanStatus) setInvoicePlanStatus('planned')
+                    }}
+                  />
+                </div>
+                {invoicePlanMonth && (
+                  <div className="form-group" style={{marginBottom:0}}>
+                    <label className="form-label">Status</label>
+                    <div style={{display:'flex',gap:6}}>
+                      <button type="button" onClick={() => setInvoicePlanStatus('planned')}
+                        className={`btn btn-sm${invoicePlanStatus === 'planned' ? ' btn-primary' : ' btn-secondary'}`}>
+                        Plan
+                      </button>
+                      <button type="button" onClick={() => setInvoicePlanStatus('issued')}
+                        className={`btn btn-sm${invoicePlanStatus === 'issued' ? ' btn-primary' : ' btn-secondary'}`}
+                        style={invoicePlanStatus === 'issued' ? {background:'var(--green)',borderColor:'var(--green)'} : {}}>
+                        Already billed
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {!invoicePlanMonth && (
+                <p style={{margin:'8px 0 0',fontSize:11,color:'var(--c4)'}}>
+                  Leave empty to skip — you can invoice from the table later.
+                </p>
+              )}
+            </div>
+          </>
+        ) : (
+          <Step2Panel
+            savedDomains={savedDomains}
+            invoicePlanned={invoicePlanned}
+            invoicePlanMonth={invoicePlanMonthSnap}
+            invoicePlanStatus={invoicePlanStatusSnap}
+            paymentDays={paymentDays}
+            onPaymentDaysChange={setPaymentDays}
+            sielEmail={buildSielEmail()}
+            accountingEmail={buildAccountingEmail()}
+            onCopy={copyText}
+          />
+        )}
       </Modal>
 
       {/* ── Edit domain modal (single) ── */}
@@ -703,6 +1033,43 @@ export function DomainsView() {
         onConfirm={() => deleteTarget && handleDelete(deleteTarget)}
         onClose={() => setDeleteTarget(null)}
       />
+
+      {/* ── Domain renewal invoice modal ── */}
+      <Modal
+        open={!!invoiceDomain}
+        title={`Issue Invoice — ${invoiceDomain?.domain_name ?? ''}`}
+        onClose={() => setInvoiceDomain(null)}
+        footer={<>
+          <button className="btn btn-secondary btn-sm" onClick={() => setInvoiceDomain(null)}>Cancel</button>
+          <button className="btn btn-primary btn-sm" onClick={saveInvoiceDomain} disabled={invoiceSaving || !invoiceMonth}>
+            {invoiceSaving ? 'Saving…' : 'Add to Invoice Plan'}
+          </button>
+        </>}
+      >
+        {invoiceDomain && (
+          <>
+            {invoiceDomain.client && (
+              <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--c2)' }}>
+                Client: <strong>{invoiceDomain.client.name}</strong>
+              </div>
+            )}
+            <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+              <div className="form-group">
+                <label className="form-label">Month</label>
+                <input type="month" value={invoiceMonth} onChange={e => setInvoiceMonth(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Amount (€)</label>
+                <input type="number" value={invoiceAmount} onChange={e => setInvoiceAmount(e.target.value)} placeholder="0" />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Description</label>
+              <input value={invoiceDesc} onChange={e => setInvoiceDesc(e.target.value)} />
+            </div>
+          </>
+        )}
+      </Modal>
 
       {/* ── Bulk confirm modals ── */}
       <ConfirmModal

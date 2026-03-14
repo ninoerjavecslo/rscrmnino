@@ -14,7 +14,7 @@ interface DomainState {
 
   // Actions
   fetchAll: () => Promise<void>
-  addDomains: (clientId: string, projectPn: string, entries: { domain_name: string; expiry_date: string; yearly_amount?: number; contract_id?: string; accounting_email?: boolean }[]) => Promise<void>
+  addDomains: (clientId: string, projectPn: string, entries: { domain_name: string; expiry_date: string; yearly_amount?: number; contract_id?: string; accounting_email?: boolean }[]) => Promise<Domain[]>
   updateDomain: (id: string, data: Partial<Omit<Domain, 'id' | 'status' | 'client'>>) => Promise<void>
   deleteDomain: (id: string) => Promise<void>
 }
@@ -75,9 +75,13 @@ export const useDomainsStore = create<DomainState>((set, get) => ({
       accounting_email: e.accounting_email ?? false,
       auto_renew: true,
     }))
-    const { error } = await supabase.from('domains').insert(rows)
+    const { data, error } = await supabase
+      .from('domains')
+      .insert(rows)
+      .select('*, client:clients(id, name)')
     if (error) throw error
     await get().fetchAll()
+    return (data ?? []) as Domain[]
   },
 
   updateDomain: async (id, data) => {

@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useProjectsStore } from '../stores/projects'
 import { useClientsStore } from '../stores/clients'
+import { useChangeRequestsStore } from '../stores/changeRequests'
 import { supabase } from '../lib/supabase'
-import type { RevenuePlanner, Project } from '../lib/types'
+import { toast } from '../lib/toast'
+import type { RevenuePlanner, Project, ChangeRequest } from '../lib/types'
 import { Select } from '../components/Select'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -12,12 +14,6 @@ const TYPE_BADGE: Record<string, string> = {
   fixed: 'badge-blue',
   maintenance: 'badge-amber',
   variable: 'badge-green',
-}
-const STATUS_BADGE: Record<string, string> = {
-  active: 'badge-green',
-  paused: 'badge-amber',
-  completed: 'badge-gray',
-  cancelled: 'badge-red',
 }
 const RP_STATUS_BADGE: Record<string, string> = {
   paid: 'badge-green',
@@ -33,7 +29,7 @@ function fmtMonth(m: string) {
 }
 
 function fmt(n?: number | null) {
-  return n != null ? `€${n.toLocaleString()}` : '—'
+  return n != null ? n.toLocaleString() + ' €' : '—'
 }
 
 function cap(s: string) {
@@ -125,6 +121,19 @@ interface ProjectEditForm {
   status: string
   start_month: string
   end_month: string
+  contract_url: string
+  notes: string
+}
+
+interface CRForm {
+  title: string
+  status: ChangeRequest['status']
+  amount: string
+  description: string
+}
+
+interface MoveForm {
+  month: string
 }
 
 // ── component ─────────────────────────────────────────────────────────────────
@@ -134,6 +143,7 @@ export function ProjectDetailView() {
   const navigate = useNavigate()
   const pStore = useProjectsStore()
   const cStore = useClientsStore()
+  const crStore = useChangeRequestsStore()
 
   // revenue_planner rows fetched directly
   const [rpRows, setRpRows] = useState<RevenuePlanner[]>([])
@@ -160,8 +170,16 @@ export function ProjectDetailView() {
 
   // project edit modal
   const [showProjectEdit, setShowProjectEdit] = useState(false)
-  const [projectEditForm, setProjectEditForm] = useState<ProjectEditForm>({ pn: '', name: '', client_id: '', pm: '', value: '', status: 'active', start_month: '', end_month: '' })
+  const [projectEditForm, setProjectEditForm] = useState<ProjectEditForm>({ pn: '', name: '', client_id: '', pm: '', value: '', status: 'active', start_month: '', end_month: '', contract_url: '', notes: '' })
   const [projectEditSaving, setProjectEditSaving] = useState(false)
+
+  // inline status change
+  const [statusSaving, setStatusSaving] = useState(false)
+
+  // contract & notes modal
+  const [showContractEdit, setShowContractEdit] = useState(false)
+  const [contractForm, setContractForm] = useState({ contract_url: '', notes: '' })
+  const [contractSaving, setContractSaving] = useState(false)
 
   // confirm-issue popup
   const [showConfirm, setShowConfirm] = useState(false)
@@ -171,6 +189,19 @@ export function ProjectDetailView() {
 
   // inline actual-amount edit for planned/retainer rows
   const [inlineEdits, setInlineEdits] = useState<Record<string, string>>({})
+
+  // move invoice month modal
+  const [showMove, setShowMove] = useState(false)
+  const [moveRow, setMoveRow] = useState<RevenuePlanner | null>(null)
+  const [moveForm, setMoveForm] = useState<MoveForm>({ month: '' })
+  const [moveSaving, setMoveSaving] = useState(false)
+
+  // change requests
+  const [showAddCR, setShowAddCR] = useState(false)
+  const [showEditCR, setShowEditCR] = useState(false)
+  const [editCRTarget, setEditCRTarget] = useState<ChangeRequest | null>(null)
+  const [crForm, setCrForm] = useState<CRForm>({ title: '', status: 'pending', amount: '', description: '' })
+  const [crSaving, setCrSaving] = useState(false)
 
   useEffect(() => {
     pStore.fetchAll()
@@ -190,7 +221,8 @@ export function ProjectDetailView() {
         setRpRows((data ?? []) as RevenuePlanner[])
         setRpLoading(false)
       })
-  }, [id])
+    crStore.fetchByProject(id)
+  }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const project = pStore.projects.find(p => p.id === id)
   const client = project?.client
@@ -389,14 +421,16 @@ export function ProjectDetailView() {
   function openProjectEdit() {
     if (!project) return
     setProjectEditForm({
-      pn:          project.pn ?? '',
-      name:        project.name,
-      client_id:   project.client_id ?? '',
-      pm:          project.pm ?? '',
-      value:       project.contract_value != null ? String(project.contract_value) : '',
-      status:      project.status,
-      start_month: project.start_date ? project.start_date.slice(0, 7) : '',
-      end_month:   project.end_date   ? project.end_date.slice(0, 7)   : '',
+      pn:           project.pn ?? '',
+      name:         project.name,
+      client_id:    project.client_id ?? '',
+      pm:           project.pm ?? '',
+      value:        project.contract_value != null ? String(project.contract_value) : '',
+      status:       project.status,
+      start_month:  project.start_date ? project.start_date.slice(0, 7) : '',
+      end_month:    project.end_date   ? project.end_date.slice(0, 7)   : '',
+      contract_url: project.contract_url ?? '',
+      notes:        project.notes ?? '',
     })
     setShowProjectEdit(true)
   }
@@ -414,10 +448,150 @@ export function ProjectDetailView() {
         status:         projectEditForm.status as Project['status'],
         start_date:     projectEditForm.start_month ? projectEditForm.start_month + '-01' : null,
         end_date:       projectEditForm.end_month   ? projectEditForm.end_month   + '-01' : null,
+        contract_url:   projectEditForm.contract_url.trim() || null,
+        notes:          projectEditForm.notes.trim() || null,
       })
       setShowProjectEdit(false)
     } catch (e) { alert((e as Error).message) }
     finally { setProjectEditSaving(false) }
+  }
+
+  async function saveStatus(val: string) {
+    if (!project) return
+    setStatusSaving(true)
+    try {
+      await pStore.update(project.id, { status: val as Project['status'] })
+      toast('success', 'Status updated')
+    } catch (e) { toast('error', (e as Error).message) }
+    finally { setStatusSaving(false) }
+  }
+
+  function openContractEdit() {
+    if (!project) return
+    setContractForm({ contract_url: project.contract_url ?? '', notes: project.notes ?? '' })
+    setShowContractEdit(true)
+  }
+
+  async function saveContractEdit() {
+    if (!project) return
+    setContractSaving(true)
+    try {
+      await pStore.update(project.id, {
+        contract_url: contractForm.contract_url.trim() || null,
+        notes:        contractForm.notes.trim() || null,
+      })
+      setShowContractEdit(false)
+      toast('success', 'Saved')
+    } catch (e) { toast('error', (e as Error).message) }
+    finally { setContractSaving(false) }
+  }
+
+  // ── move invoice month ────────────────────────────────────────────────────
+  function openMove(r: RevenuePlanner) {
+    setMoveRow(r)
+    setMoveForm({ month: r.month.slice(0, 7) })
+    setShowMove(true)
+  }
+
+  async function saveMove() {
+    if (!moveRow || !moveForm.month) return
+    setMoveSaving(true)
+    try {
+      const { data } = await supabase
+        .from('revenue_planner')
+        .update({ month: moveForm.month + '-01' })
+        .eq('id', moveRow.id)
+        .select('*, project:projects(id, pn, name, type)')
+      if (data && data.length > 0) {
+        setRpRows(prev => prev.map(r => r.id === moveRow.id ? (data[0] as RevenuePlanner) : r).sort((a, b) => a.month.localeCompare(b.month)))
+      }
+      setShowMove(false)
+      setMoveRow(null)
+      toast('success', 'Invoice moved')
+    } catch (e) { toast('error', (e as Error).message) }
+    finally { setMoveSaving(false) }
+  }
+
+  // ── change request handlers ───────────────────────────────────────────────
+  function openAddCR() {
+    setCrForm({ title: '', status: 'pending', amount: '', description: '' })
+    setShowAddCR(true)
+  }
+
+  async function saveAddCR() {
+    if (!id || !crForm.title.trim()) return
+    setCrSaving(true)
+    try {
+      await crStore.add({
+        project_id: id,
+        title: crForm.title.trim(),
+        status: crForm.status,
+        amount: crForm.amount ? parseFloat(crForm.amount) : null,
+        description: crForm.description.trim() || null,
+      })
+      setShowAddCR(false)
+      toast('success', 'Change request added')
+    } catch (e) { toast('error', (e as Error).message) }
+    finally { setCrSaving(false) }
+  }
+
+  function openEditCR(cr: ChangeRequest) {
+    setEditCRTarget(cr)
+    setCrForm({
+      title: cr.title,
+      status: cr.status,
+      amount: cr.amount != null ? String(cr.amount) : '',
+      description: cr.description ?? '',
+    })
+    setShowEditCR(true)
+  }
+
+  async function saveEditCR() {
+    if (!editCRTarget) return
+    setCrSaving(true)
+    try {
+      await crStore.update(editCRTarget.id, {
+        title: crForm.title.trim(),
+        status: crForm.status,
+        amount: crForm.amount ? parseFloat(crForm.amount) : null,
+        description: crForm.description.trim() || null,
+      })
+      setShowEditCR(false)
+      setEditCRTarget(null)
+      toast('success', 'Change request updated')
+    } catch (e) { toast('error', (e as Error).message) }
+    finally { setCrSaving(false) }
+  }
+
+  async function deleteCR(cr: ChangeRequest) {
+    if (!confirm(`Delete change request "${cr.title}"?`)) return
+    try {
+      await crStore.remove(cr.id)
+      toast('success', 'Deleted')
+    } catch (e) { toast('error', (e as Error).message) }
+  }
+
+  async function addCRToInvoicePlan(cr: ChangeRequest) {
+    if (!id || !cr.amount) return
+    const now = new Date()
+    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+    try {
+      const { data, error } = await supabase
+        .from('revenue_planner')
+        .insert({
+          project_id: id,
+          month,
+          notes: `CR: ${cr.title}`,
+          planned_amount: cr.amount,
+          actual_amount: null,
+          status: 'planned' as const,
+          probability: 100,
+        })
+        .select('*, project:projects(id, pn, name, type)')
+      if (error) throw error
+      if (data) setRpRows(prev => [...prev, ...(data as RevenuePlanner[])].sort((a, b) => a.month.localeCompare(b.month)))
+      toast('success', 'Added to Invoice Plan')
+    } catch (e) { toast('error', (e as Error).message) }
   }
 
   // ── loading / not found ────────────────────────────────────────────────────
@@ -453,7 +627,7 @@ export function ProjectDetailView() {
   const isRecurring = project.type === 'maintenance' || project.type === 'variable'
   const valueLabel = contractVal != null
     ? isRecurring
-      ? `€${contractVal.toLocaleString()}/mo`
+      ? `${contractVal.toLocaleString()} €/mo`
       : fmt(contractVal)
     : '—'
   const plannedTotal = isRecurring && contractVal && invoiceRows.length > 0
@@ -462,6 +636,26 @@ export function ProjectDetailView() {
 
   return (
     <div>
+      {/* ── Contract & notes modal ── */}
+      {showContractEdit && (
+        <Modal title="Contract & Notes" onClose={() => setShowContractEdit(false)}>
+          <div className="form-group" style={{ marginBottom: 14 }}>
+            <label className="form-label">Contract URL</label>
+            <input value={contractForm.contract_url} onChange={e => setContractForm(f => ({ ...f, contract_url: e.target.value }))} placeholder="https://…" autoFocus />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Notes</label>
+            <textarea rows={4} value={contractForm.notes} onChange={e => setContractForm(f => ({ ...f, notes: e.target.value }))} placeholder="Any internal notes about this project…" style={{ width: '100%', resize: 'vertical' }} />
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowContractEdit(false)}>Cancel</button>
+            <button className="btn btn-primary btn-sm" onClick={saveContractEdit} disabled={contractSaving}>
+              {contractSaving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
       {/* ── Project edit modal ── */}
       {showProjectEdit && (
         <Modal title="Edit Project" onClose={() => setShowProjectEdit(false)}>
@@ -517,7 +711,7 @@ export function ProjectDetailView() {
               />
             </div>
           </div>
-          <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
             <div className="form-group">
               <label className="form-label">Start month</label>
               <input type="month" value={projectEditForm.start_month} onChange={e => setProjectEditForm(f => ({ ...f, start_month: e.target.value }))} />
@@ -526,6 +720,14 @@ export function ProjectDetailView() {
               <label className="form-label">End month</label>
               <input type="month" value={projectEditForm.end_month} onChange={e => setProjectEditForm(f => ({ ...f, end_month: e.target.value }))} />
             </div>
+          </div>
+          <div className="form-group" style={{ marginBottom: 14 }}>
+            <label className="form-label">Contract URL <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
+            <input type="url" value={projectEditForm.contract_url} onChange={e => setProjectEditForm(f => ({ ...f, contract_url: e.target.value }))} placeholder="https://..." />
+          </div>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Notes <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
+            <textarea rows={3} value={projectEditForm.notes} onChange={e => setProjectEditForm(f => ({ ...f, notes: e.target.value }))} placeholder="Any internal notes about this project…" style={{ width: '100%', resize: 'vertical' }} />
           </div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 24 }}>
             <button className="btn btn-secondary btn-sm" onClick={() => setShowProjectEdit(false)}>Cancel</button>
@@ -795,6 +997,93 @@ export function ProjectDetailView() {
         </Modal>
       )}
 
+      {/* ── Move invoice month modal ── */}
+      {showMove && moveRow && (
+        <Modal title="Move Invoice to Another Month" onClose={() => { setShowMove(false); setMoveRow(null) }}>
+          <p style={{ fontSize: 13, color: 'var(--c2)', marginBottom: 16 }}>
+            Current month: <strong>{fmtMonth(moveRow.month)}</strong>
+          </p>
+          <div className="form-group" style={{ marginBottom: 20 }}>
+            <label className="form-label">New month</label>
+            <input type="month" value={moveForm.month} onChange={e => setMoveForm({ month: e.target.value })} autoFocus />
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => { setShowMove(false); setMoveRow(null) }}>Cancel</button>
+            <button className="btn btn-primary btn-sm" onClick={saveMove} disabled={moveSaving || !moveForm.month || moveForm.month === moveRow.month.slice(0, 7)}>
+              {moveSaving ? 'Saving…' : 'Move'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Add change request modal ── */}
+      {showAddCR && (
+        <Modal title="Add Change Request" onClose={() => setShowAddCR(false)}>
+          <div className="form-group" style={{ marginBottom: 14 }}>
+            <label className="form-label">Title</label>
+            <input value={crForm.title} onChange={e => setCrForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Add CRM integration" autoFocus />
+          </div>
+          <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+            <div className="form-group">
+              <label className="form-label">Status</label>
+              <Select value={crForm.status} onChange={val => setCrForm(f => ({ ...f, status: val as ChangeRequest['status'] }))} options={[
+                { value: 'pending', label: 'Pending' }, { value: 'approved', label: 'Approved' },
+                { value: 'in_progress', label: 'In Progress' }, { value: 'completed', label: 'Completed' },
+                { value: 'rejected', label: 'Rejected' },
+              ]} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Amount (€) <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
+              <input type="number" value={crForm.amount} onChange={e => setCrForm(f => ({ ...f, amount: e.target.value }))} placeholder="0" />
+            </div>
+          </div>
+          <div className="form-group" style={{ marginBottom: 20 }}>
+            <label className="form-label">Description <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
+            <textarea rows={3} value={crForm.description} onChange={e => setCrForm(f => ({ ...f, description: e.target.value }))} placeholder="What does this change involve?" style={{ width: '100%', resize: 'vertical' }} />
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowAddCR(false)}>Cancel</button>
+            <button className="btn btn-primary btn-sm" onClick={saveAddCR} disabled={crSaving || !crForm.title.trim()}>
+              {crSaving ? 'Saving…' : 'Add Change Request'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Edit change request modal ── */}
+      {showEditCR && editCRTarget && (
+        <Modal title="Edit Change Request" onClose={() => { setShowEditCR(false); setEditCRTarget(null) }}>
+          <div className="form-group" style={{ marginBottom: 14 }}>
+            <label className="form-label">Title</label>
+            <input value={crForm.title} onChange={e => setCrForm(f => ({ ...f, title: e.target.value }))} autoFocus />
+          </div>
+          <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+            <div className="form-group">
+              <label className="form-label">Status</label>
+              <Select value={crForm.status} onChange={val => setCrForm(f => ({ ...f, status: val as ChangeRequest['status'] }))} options={[
+                { value: 'pending', label: 'Pending' }, { value: 'approved', label: 'Approved' },
+                { value: 'in_progress', label: 'In Progress' }, { value: 'completed', label: 'Completed' },
+                { value: 'rejected', label: 'Rejected' },
+              ]} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Amount (€) <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
+              <input type="number" value={crForm.amount} onChange={e => setCrForm(f => ({ ...f, amount: e.target.value }))} placeholder="0" />
+            </div>
+          </div>
+          <div className="form-group" style={{ marginBottom: 20 }}>
+            <label className="form-label">Description <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
+            <textarea rows={3} value={crForm.description} onChange={e => setCrForm(f => ({ ...f, description: e.target.value }))} style={{ width: '100%', resize: 'vertical' }} />
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => { setShowEditCR(false); setEditCRTarget(null) }}>Cancel</button>
+            <button className="btn btn-primary btn-sm" onClick={saveEditCR} disabled={crSaving || !crForm.title.trim()}>
+              {crSaving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
       {/* ── Page header ── */}
       <div className="page-header">
         <div>
@@ -824,9 +1113,24 @@ export function ProjectDetailView() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <span className={`badge ${STATUS_BADGE[project.status] ?? 'badge-gray'}`} style={{ marginRight: 4 }}>
-            {cap(project.status)}
-          </span>
+          <select
+            value={project.status}
+            disabled={statusSaving}
+            onChange={e => saveStatus(e.target.value)}
+            style={{
+              fontSize: 12, fontWeight: 700, padding: '4px 8px', borderRadius: 6,
+              border: '1px solid var(--c5)', background: 'var(--c7)', cursor: 'pointer',
+              color: project.status === 'active' ? 'var(--green)' : project.status === 'paused' ? 'var(--amber)' : project.status === 'cancelled' ? 'var(--red)' : 'var(--c3)',
+            }}
+          >
+            <option value="active">Active</option>
+            <option value="paused">Paused</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+          <button className="btn btn-secondary btn-sm" onClick={openContractEdit}>
+            Contract & notes
+          </button>
           <button className="btn btn-secondary btn-sm" onClick={openProjectEdit}>
             Edit
           </button>
@@ -886,6 +1190,28 @@ export function ProjectDetailView() {
                 {totalCosts > 0 ? fmt(totalCosts) : '—'}
               </div>
             </div>
+
+            {/* Contract URL + Notes (only if set) */}
+            {project.contract_url && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Contract</div>
+                <a
+                  href={project.contract_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ fontSize: 13, color: 'var(--navy)', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                >
+                  {project.contract_url.replace(/^https?:\/\//, '').slice(0, 60)}
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                </a>
+              </div>
+            )}
+            {project.notes && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Notes</div>
+                <div style={{ fontSize: 13, color: 'var(--c2)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{project.notes}</div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -975,12 +1301,21 @@ export function ProjectDetailView() {
                       <td>
                         <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                           {isPending && (
-                            <button
-                              className="btn btn-primary btn-xs"
-                              onClick={() => openConfirm(r)}
-                            >
-                              ✓ Confirm
-                            </button>
+                            <>
+                              <button
+                                className="btn btn-primary btn-xs"
+                                onClick={() => openConfirm(r)}
+                              >
+                                ✓ Confirm
+                              </button>
+                              <button
+                                className="btn btn-ghost btn-xs"
+                                onClick={() => openMove(r)}
+                                title="Move to another month"
+                              >
+                                Move
+                              </button>
+                            </>
                           )}
                           {isSettled && (
                             <button
@@ -990,6 +1325,69 @@ export function ProjectDetailView() {
                               Edit
                             </button>
                           )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* ── Change Requests section ── */}
+        <div className="section-bar" style={{ marginBottom: 10 }}>
+          <h2>Change Requests</h2>
+          <button className="btn btn-secondary btn-sm" onClick={openAddCR}>
+            + Add change request
+          </button>
+        </div>
+        <div className="card" style={{ marginBottom: 24 }}>
+          {crStore.changeRequests.length === 0 ? (
+            <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>
+              No change requests yet.
+            </div>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>STATUS</th>
+                  <th>TITLE</th>
+                  <th className="th-right">AMOUNT</th>
+                  <th>DESCRIPTION</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {crStore.changeRequests.map(cr => {
+                  const CR_BADGE: Record<string, string> = {
+                    pending: 'badge-amber', approved: 'badge-blue',
+                    in_progress: 'badge-navy', completed: 'badge-green', rejected: 'badge-gray',
+                  }
+                  const CR_LABEL: Record<string, string> = {
+                    pending: 'Pending', approved: 'Approved',
+                    in_progress: 'In Progress', completed: 'Completed', rejected: 'Rejected',
+                  }
+                  const canPlan = (cr.status === 'approved' || cr.status === 'in_progress') && cr.amount != null
+                  return (
+                    <tr key={cr.id}>
+                      <td><span className={`badge ${CR_BADGE[cr.status] ?? 'badge-gray'}`}>{CR_LABEL[cr.status] ?? cr.status}</span></td>
+                      <td style={{ fontSize: 13, fontWeight: 600, color: 'var(--c0)' }}>{cr.title}</td>
+                      <td className="td-right text-mono" style={{ fontSize: 13, color: 'var(--c2)' }}>
+                        {cr.amount != null ? fmt(cr.amount) : <span className="text-muted">—</span>}
+                      </td>
+                      <td style={{ fontSize: 12, color: 'var(--c3)', maxWidth: 300 }}>{cr.description ?? <span className="text-muted">—</span>}</td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                          {canPlan && (
+                            <button className="btn btn-ghost btn-xs" onClick={() => addCRToInvoicePlan(cr)} title="Add to invoice plan">
+                              + Plan
+                            </button>
+                          )}
+                          <button className="btn btn-secondary btn-xs" onClick={() => openEditCR(cr)}>Edit</button>
+                          <button className="btn btn-ghost btn-xs" onClick={() => deleteCR(cr)} style={{ color: 'var(--red)' }}>
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                          </button>
                         </div>
                       </td>
                     </tr>

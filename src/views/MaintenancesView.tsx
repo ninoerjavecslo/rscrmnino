@@ -48,6 +48,7 @@ function Modal({ open, title, onClose, children, footer }: {
 
 interface FormState {
   client_id: string
+  project_pn: string
   name: string
   monthly_retainer: string
   help_requests_included: string
@@ -67,7 +68,7 @@ interface FormState {
 }
 
 const EMPTY_FORM: FormState = {
-  client_id: '', name: '', monthly_retainer: '',
+  client_id: '', project_pn: '', name: '', monthly_retainer: '',
   help_requests_included: '', hours_included: '',
   contract_start: '', contract_duration_months: '', contract_url: '',
   status: 'active', notes: '',
@@ -141,6 +142,7 @@ export function MaintenancesView() {
 
     setForm({
       client_id: m.client_id,
+      project_pn: m.project_pn ?? '',
       name: m.name,
       monthly_retainer: String(m.monthly_retainer),
       help_requests_included: String(m.help_requests_included),
@@ -181,6 +183,7 @@ export function MaintenancesView() {
     try {
       const payload = {
         client_id: form.client_id,
+        project_pn: form.project_pn.trim() || null,
         name: form.name.trim(),
         monthly_retainer: Number(form.monthly_retainer),
         help_requests_included: Number(form.help_requests_included) || 0,
@@ -263,10 +266,16 @@ export function MaintenancesView() {
           </div>
         </div>
 
-        {/* Contract name */}
-        <div className="form-group" style={{ marginBottom: 14 }}>
-          <label className="form-label">Contract name</label>
-          <input value={form.name} onChange={f('name')} placeholder="e.g. Website Support" autoFocus={!editing} />
+        {/* Contract name + Project # */}
+        <div className="form-row" style={{ marginBottom: 14 }}>
+          <div className="form-group" style={{ flex: 2 }}>
+            <label className="form-label">Contract name</label>
+            <input value={form.name} onChange={f('name')} placeholder="e.g. Website Support" autoFocus={!editing} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Project # <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
+            <input value={form.project_pn} onChange={f('project_pn')} placeholder="e.g. RS-2026-001" />
+          </div>
         </div>
 
         {/* Row 2: Retainer + Requests + Hours */}

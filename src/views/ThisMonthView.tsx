@@ -5,7 +5,7 @@ import { useClientsStore } from '../stores/clients'
 import { useInfraStore } from '../stores/infrastructure'
 import { supabase } from '../lib/supabase'
 import { toast } from '../lib/toast'
-import type { RevenuePlanner, Project } from '../lib/types'
+import type { RevenuePlanner, Project, HostingClient } from '../lib/types'
 
 // ── Probability helpers ───────────────────────────────────────────────────────
 
@@ -54,7 +54,7 @@ type PlannerStatus = RevenuePlanner['status']
 function statusBadge(status: PlannerStatus): React.ReactElement {
   if (status === 'paid') return <span className="badge badge-green">Paid</span>
   if (status === 'issued') return <span className="badge badge-blue">Issued</span>
-  if (status === 'retainer') return <span className="badge badge-gray">Not Invoiced</span>
+  if (status === 'deferred' || status === 'retainer') return <span className="badge badge-red">Not issued</span>
   return <span className="badge badge-amber">Not issued</span>
 }
 
@@ -144,14 +144,12 @@ function PlanForm({ project, month, onSave, onCancel, saving }: PlanFormProps) {
 // ── Actual amount cell (static display only) ────────────────────────────────
 
 function ActualAmountCell({ row }: { row: RevenuePlanner }) {
-  if (row.status === 'planned') {
-    return row.actual_amount != null
-      ? <span className="text-mono" style={{ fontWeight: 600 }}>{fmtEuro(row.actual_amount)}</span>
-      : <span style={{ color: 'var(--c5)' }}>—</span>
+  if (row.status === 'deferred' || row.status === 'retainer' || row.status === 'planned') {
+    return <span style={{ color: 'var(--c5)' }}>—</span>
   }
-
   // issued or paid
-  const amount = row.actual_amount ?? row.planned_amount ?? 0
+  const amount = row.actual_amount ?? row.planned_amount
+  if (!amount) return <span style={{ color: 'var(--c5)' }}>—</span>
   const color = row.status === 'paid' ? 'var(--green)' : 'var(--blue)'
   return (
     <span style={{ fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>
@@ -233,13 +231,60 @@ export function ThisMonthView() {
 
   // ── Stats calculations ──────────────────────────────────────────────────────
 
-  const plannedTotal = rows.reduce((s, r) => s + (r.planned_amount ?? 0), 0)
+  const nonHostingRows = rows.filter(r => r.hosting_client_id == null && r.status !== 'cost' && (r.project_id != null || r.maintenance_id != null || r.domain_id != null))
 
-  const issuedRows = rows.filter(r => r.status === 'issued' || r.status === 'paid')
-  const issuedTotal = issuedRows.reduce((s, r) => s + (r.actual_amount ?? r.planned_amount ?? 0), 0)
+  const maintenanceHostingExtra = rows
+    .filter(r => r.maintenance_id != null && r.domain_id == null)
+    .reduce((s, r) => {
+      const h = infraStore.hostingClients.find(h => h.maintenance_id === r.maintenance_id && h.cycle === 'monthly' && h.status === 'active')
+      return s + (h?.amount ?? 0)
+    }, 0)
+  const standaloneHostingTotal = infraStore.hostingClients
+    .filter(h => h.status === 'active' && h.cycle === 'monthly' && !h.maintenance_id)
+    .reduce((s, h) => s + h.amount, 0)
 
-  const notYetIssuedRows = rows.filter(r => (r.status === 'planned' || r.status === 'retainer') && r.domain_id == null)
-  const notYetIssuedTotal = notYetIssuedRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0)
+  // Yearly hosting: look for revenue_planner rows this month with a yearly hosting client
+  const yearlyHostingItems = rows
+    .filter(r => r.hosting_client_id != null)
+    .map(r => {
+      const h = infraStore.hostingClients.find(h => h.id === r.hosting_client_id && h.cycle === 'yearly')
+      return h ? { row: r, h } : null
+    })
+    .filter((x): x is { row: RevenuePlanner; h: HostingClient } => x != null)
+
+  // Set of hosting_client_ids already confirmed (issued) this month in revenue_planner
+  const confirmedHostingIds = new Set(
+    rStore.rows
+      .filter(r => r.hosting_client_id != null && r.month === currentMonth && (r.status === 'issued' || r.status === 'paid'))
+      .map(r => r.hosting_client_id as string)
+  )
+
+  const yearlyHostingTotal = yearlyHostingItems.reduce((s, x) => s + (x.row.planned_amount ?? 0), 0)
+  const plannedTotal = nonHostingRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0) + maintenanceHostingExtra + standaloneHostingTotal + yearlyHostingTotal
+
+  const issuedRows = nonHostingRows.filter(r => r.status === 'issued' || r.status === 'paid')
+  const confirmedStandaloneHostingTotal = infraStore.hostingClients
+    .filter(h => h.status === 'active' && h.cycle === 'monthly' && !h.maintenance_id && confirmedHostingIds.has(h.id))
+    .reduce((s, h) => s + h.amount, 0)
+  const confirmedYearlyHostingTotal = yearlyHostingItems
+    .filter(x => x.row.status === 'issued' || x.row.status === 'paid')
+    .reduce((s, x) => s + (x.row.actual_amount ?? x.row.planned_amount ?? 0), 0)
+  const issuedTotal = issuedRows.reduce((s, r) => s + (r.actual_amount ?? r.planned_amount ?? 0), 0) + confirmedStandaloneHostingTotal + confirmedYearlyHostingTotal
+
+  const notYetIssuedRows = nonHostingRows.filter(r => r.status === 'planned' && r.domain_id == null)
+  const notYetIssuedMaintHostingExtra = notYetIssuedRows
+    .filter(r => r.maintenance_id != null)
+    .reduce((s, r) => {
+      const h = infraStore.hostingClients.find(h => h.maintenance_id === r.maintenance_id && h.cycle === 'monthly' && h.status === 'active')
+      return s + (h?.amount ?? 0)
+    }, 0)
+  const notYetIssuedStandaloneHosting = infraStore.hostingClients
+    .filter(h => h.status === 'active' && h.cycle === 'monthly' && !h.maintenance_id && !confirmedHostingIds.has(h.id))
+    .reduce((s, h) => s + h.amount, 0)
+  const notYetIssuedYearlyHosting = yearlyHostingItems
+    .filter(x => x.row.status === 'planned')
+    .reduce((s, x) => s + (x.row.planned_amount ?? 0), 0)
+  const notYetIssuedTotal = notYetIssuedRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0) + notYetIssuedMaintHostingExtra + notYetIssuedStandaloneHosting + notYetIssuedYearlyHosting
 
   const delta = issuedTotal - plannedTotal
 
@@ -252,27 +297,25 @@ export function ThisMonthView() {
   // ── Hosting revenue this month ───────────────────────────────────────────────
 
   const monthlyHosting = infraStore.hostingClients.filter(h =>
-    h.status === 'active' && h.cycle === 'monthly'
-  )
-
-  // Set of hosting_client_ids already confirmed (issued) this month in revenue_planner
-  const confirmedHostingIds = new Set(
-    rStore.rows
-      .filter(r => r.hosting_client_id != null && r.month === currentMonth)
-      .map(r => r.hosting_client_id as string)
+    h.status === 'active' && h.cycle === 'monthly' && !h.maintenance_id
   )
 
   // ── Row separation ────────────────────────────────────────────────────────────
 
   const domainRows = rows.filter(r => r.domain_id != null)
   const maintenanceRows = rows.filter(r => r.maintenance_id != null && r.domain_id == null)
-  const invoiceRows = rows.filter(r => r.domain_id == null && r.maintenance_id == null)
+  const costRows = rows.filter(r => r.status === 'cost')
+  const invoiceRows = rows.filter(r => r.project_id != null && r.domain_id == null && r.maintenance_id == null && r.hosting_client_id == null && r.status !== 'cost')
 
   // ── Status update helpers ───────────────────────────────────────────────────
 
   function openConfirmModal(row: RevenuePlanner) {
     setConfirmModal(row)
-    setConfirmActual(String(row.planned_amount ?? ''))
+    const linkedHosting = row.maintenance_id
+      ? infraStore.hostingClients.find(h => h.maintenance_id === row.maintenance_id && h.cycle === 'monthly' && h.status === 'active')
+      : undefined
+    const total = (row.planned_amount ?? 0) + (linkedHosting?.amount ?? 0)
+    setConfirmActual(String(total))
     setConfirmNote(row.notes ?? '')
   }
 
@@ -324,13 +367,13 @@ export function ThisMonthView() {
     if (!deferRow) return
     setDeferSaving(true)
     try {
-      // Mark current row as retainer (deferred)
+      // Mark current row as deferred
       const { error } = await supabase
         .from('revenue_planner')
-        .update({ status: 'retainer', notes: deferNote || deferRow.notes })
+        .update({ status: 'deferred', notes: deferNote || deferRow.notes })
         .eq('id', deferRow.id)
       if (error) throw error
-      setLocalOverrides(prev => ({ ...prev, [deferRow.id]: { ...prev[deferRow.id], status: 'retainer' } }))
+      setLocalOverrides(prev => ({ ...prev, [deferRow.id]: { ...prev[deferRow.id], status: 'deferred' } }))
 
       // If user picked a new month, upsert a planned entry there (handles existing row)
       if (deferMonth) {
@@ -364,10 +407,10 @@ export function ThisMonthView() {
       for (const row of pendingRows) {
         const { error } = await supabase
           .from('revenue_planner')
-          .update({ status: 'retainer', notes: deferDomainNote || row.notes })
+          .update({ status: 'deferred', notes: deferDomainNote || row.notes })
           .eq('id', row.id)
         if (error) throw error
-        setLocalOverrides(prev => ({ ...prev, [row.id]: { ...prev[row.id], status: 'retainer' } }))
+        setLocalOverrides(prev => ({ ...prev, [row.id]: { ...prev[row.id], status: 'deferred' } }))
 
         if (deferDomainMonth) {
           const { error: ie } = await supabase.from('revenue_planner').upsert({
@@ -405,15 +448,30 @@ export function ThisMonthView() {
   async function confirmHosting(hostingId: string, amount: number) {
     setHostingConfirming(hostingId)
     try {
-      const { error } = await supabase.from('revenue_planner').insert({
-        hosting_client_id: hostingId,
-        month: currentMonth,
-        planned_amount: amount,
-        actual_amount: amount,
-        status: 'issued' as const,
-        probability: 100,
-      })
-      if (error) throw error
+      // Try updating an existing planned row first
+      const { data: existing } = await supabase
+        .from('revenue_planner')
+        .select('id')
+        .eq('hosting_client_id', hostingId)
+        .eq('month', currentMonth)
+        .single()
+
+      if (existing) {
+        const { error } = await supabase.from('revenue_planner')
+          .update({ status: 'issued', actual_amount: amount })
+          .eq('id', existing.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('revenue_planner').insert({
+          hosting_client_id: hostingId,
+          month: currentMonth,
+          planned_amount: amount,
+          actual_amount: amount,
+          status: 'issued' as const,
+          probability: 100,
+        })
+        if (error) throw error
+      }
       await rStore.fetchByMonths([currentMonth])
       toast('success', 'Hosting invoice confirmed')
     } catch (err) {
@@ -668,6 +726,7 @@ export function ThisMonthView() {
                 <thead>
                   <tr>
                     <th>Project</th>
+                    <th>Description</th>
                     <th className="th-right">Planned</th>
                     <th className="th-right">Actual Amount</th>
                     <th>Status</th>
@@ -682,9 +741,10 @@ export function ThisMonthView() {
                     const displaySub  = row.project?.pn ?? (isMaintenance ? row.maintenance?.client?.name : null)
                     const isUpdating  = statusUpdating === row.id
                     const isPending   = row.status === 'planned'
+                    const isDeferred  = row.status === 'deferred' || row.status === 'retainer'
 
                     return (
-                      <tr key={row.id}>
+                      <tr key={row.id} style={isDeferred ? { background: 'rgba(239,68,68,0.04)' } : undefined}>
                         <td>
                           <div style={{ fontWeight: 700, color: 'var(--c0)', fontSize: 14 }} className="table-link">
                             {displayName}
@@ -694,6 +754,12 @@ export function ThisMonthView() {
                               {displaySub}
                             </div>
                           )}
+                        </td>
+
+                        <td>
+                          <span style={{ fontSize: 12, color: 'var(--c3)' }}>
+                            {row.notes ?? '—'}
+                          </span>
                         </td>
 
                         <td className="td-right">
@@ -747,7 +813,7 @@ export function ThisMonthView() {
                             )}
                             {!isPending && (
                               <span style={{ fontSize: 12, color: 'var(--c4)', fontStyle: 'italic' }}>
-                                {row.status === 'paid' ? 'Paid' : row.status === 'retainer' ? 'Deferred' : 'Issued'}
+                                {row.status === 'paid' ? 'Paid' : (row.status === 'deferred' || row.status === 'retainer') ? 'Not issued' : 'Issued'}
                               </span>
                             )}
                           </div>
@@ -786,7 +852,20 @@ export function ThisMonthView() {
                       <tr key={row.id}>
                         <td style={{ fontWeight: 700, fontSize: 14 }}>{row.maintenance?.name ?? '—'}</td>
                         <td style={{ fontSize: 13, color: 'var(--c2)' }}>{row.maintenance?.client?.name ?? '—'}</td>
-                        <td className="td-right text-mono">{row.planned_amount != null ? fmtEuro(row.planned_amount) : '—'}</td>
+                        <td className="td-right text-mono">
+                          {(() => {
+                            const linkedHosting = infraStore.hostingClients.find(h => h.maintenance_id === row.maintenance_id && h.cycle === 'monthly' && h.status === 'active')
+                            const total = (row.planned_amount ?? 0) + (linkedHosting?.amount ?? 0)
+                            return <>
+                              {fmtEuro(total)}
+                              {linkedHosting && (
+                                <div style={{ fontSize: 10, color: 'var(--c4)', fontWeight: 400 }}>
+                                  {fmtEuro(row.planned_amount ?? 0)} + {fmtEuro(linkedHosting.amount)}
+                                </div>
+                              )}
+                            </>
+                          })()}
+                        </td>
                         <td className="td-right">
                           <ActualAmountCell row={row} />
                         </td>
@@ -801,7 +880,7 @@ export function ThisMonthView() {
                             )}
                             {!isPending && (
                               <span style={{ fontSize: 12, color: 'var(--c4)', fontStyle: 'italic' }}>
-                                {row.status === 'retainer' ? 'Not billed' : row.status === 'paid' ? 'Paid' : 'Issued'}
+                                {row.status === 'paid' ? 'Paid' : 'Issued'}
                               </span>
                             )}
                           </div>
@@ -816,7 +895,7 @@ export function ThisMonthView() {
         )}
 
         {/* ── Hosting revenue this month ────────────────────────────────────── */}
-        {monthlyHosting.length > 0 && (
+        {(monthlyHosting.length > 0 || yearlyHostingItems.length > 0) && (
           <div>
             <div className="section-bar">
               <h2>Hosting Revenue — {monthLabel}</h2>
@@ -857,11 +936,46 @@ export function ThisMonthView() {
                             <span className="badge badge-green">Issued</span>
                           ) : (
                             <button
-                              className="btn btn-secondary btn-xs"
+                              className="btn btn-primary btn-xs"
                               onClick={() => confirmHosting(h.id, h.amount)}
                               disabled={hostingConfirming === h.id}
                             >
-                              {hostingConfirming === h.id ? 'Saving…' : '✓ Confirm'}
+                              {hostingConfirming === h.id ? 'Saving…' : 'Confirm'}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                  {yearlyHostingItems.map(({ row, h }) => {
+                    const confirmed = row.status === 'issued' || row.status === 'paid'
+                    return (
+                      <tr key={h.id}>
+                        <td>
+                          <div style={{ fontWeight: 700, color: 'var(--c0)', fontSize: 14 }}>
+                            {h.client?.name ?? '—'}
+                          </div>
+                        </td>
+                        <td>
+                          <span style={{ fontSize: 13, color: 'var(--c3)' }}>
+                            {h.description ?? '—'}<span style={{ marginLeft: 6, fontSize: 11, color: 'var(--c4)' }}>yearly</span>
+                          </span>
+                        </td>
+                        <td className="td-right">
+                          <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--c1)' }}>
+                            {(row.planned_amount ?? h.amount).toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €<span style={{ fontWeight: 400, color: 'var(--c4)', fontSize: 12 }}>/yr</span>
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          {confirmed ? (
+                            <span className="badge badge-green">Issued</span>
+                          ) : (
+                            <button
+                              className="btn btn-primary btn-xs"
+                              onClick={() => confirmHosting(h.id, row.planned_amount ?? h.amount)}
+                              disabled={hostingConfirming === h.id}
+                            >
+                              {hostingConfirming === h.id ? 'Saving…' : 'Confirm'}
                             </button>
                           )}
                         </td>
@@ -944,7 +1058,7 @@ export function ThisMonthView() {
                                   }}
                                   disabled={anyUpdating}
                                 >
-                                  {anyUpdating ? 'Saving…' : '✓ Confirm'}
+                                  {anyUpdating ? 'Saving…' : 'Confirm'}
                                 </button>
                                 <button
                                   className="btn btn-secondary btn-xs"
@@ -1045,53 +1159,53 @@ export function ThisMonthView() {
           </div>
         )}
 
-        {/* ── Costs this month (placeholder) ────────────────────────────────── */}
+        {/* ── Costs this month ─────────────────────────────────────────────── */}
         <div>
           <div className="section-bar">
             <h2>Costs this month</h2>
-            <button className="btn btn-secondary btn-sm">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-              Add cost
-            </button>
           </div>
 
           <div className="card">
-            <table>
-              <thead>
-                <tr>
-                  <th>Project</th>
-                  <th>Description</th>
-                  <th className="th-right">Planned</th>
-                  <th className="th-right">Actual</th>
-                  <th className="th-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td colSpan={5}>
-                    <div style={{
-                      textAlign: 'center',
-                      padding: '36px 20px',
-                      color: 'var(--c4)',
-                    }}>
-                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 10, opacity: 0.4 }}>
-                        <rect x="2" y="5" width="20" height="14" rx="2" />
-                        <line x1="2" y1="10" x2="22" y2="10" />
-                      </svg>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--c3)', marginBottom: 4 }}>
-                        No costs recorded this month
-                      </div>
-                      <div style={{ fontSize: 12, color: 'var(--c4)' }}>
-                        Click "+ Add cost" to track a project cost.
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+            {costRows.length === 0 ? (
+              <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>
+                No costs recorded this month.
+              </div>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>PROJECT</th>
+                    <th>DESCRIPTION</th>
+                    <th className="th-right">AMOUNT</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {costRows.map(r => {
+                    const proj = pStore.projects.find(p => p.id === r.project_id)
+                    const maint = r.maintenance_id ? maintenanceRows.find(m => m.maintenance_id === r.maintenance_id) : null
+                    return (
+                      <tr key={r.id}>
+                        <td style={{ fontSize: 13, color: 'var(--c2)' }}>
+                          {proj?.name ?? (maint ? 'Maintenance' : <span className="text-muted">—</span>)}
+                        </td>
+                        <td style={{ fontSize: 13, color: 'var(--c1)' }}>
+                          {r.notes ?? <span className="text-muted">—</span>}
+                        </td>
+                        <td className="td-right text-mono" style={{ fontWeight: 600, color: 'var(--red)', fontSize: 13 }}>
+                          {r.actual_amount != null ? fmtEuro(r.actual_amount) : <span className="text-muted">—</span>}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                  <tr style={{ background: 'var(--c7)', borderTop: '2px solid var(--c6)' }}>
+                    <td colSpan={2} style={{ fontWeight: 700, fontSize: 12, color: 'var(--c3)', letterSpacing: '0.05em' }}>TOTAL COSTS</td>
+                    <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--red)', fontSize: 14 }}>
+                      {fmtEuro(costRows.reduce((s, r) => s + (r.actual_amount ?? 0), 0))}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
 

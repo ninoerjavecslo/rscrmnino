@@ -4,11 +4,21 @@ import { useProjectsStore } from '../stores/projects'
 import { useClientsStore } from '../stores/clients'
 import { useInfraStore } from '../stores/infrastructure'
 import { useRevenuePlannerStore } from '../stores/revenuePlanner'
+import { useSettingsStore } from '../stores/settings'
 import { supabase } from '../lib/supabase'
 import type { Project } from '../lib/types'
 import { Select } from '../components/Select'
 
 const CURRENT_YEAR = new Date().getFullYear()
+
+function maintenanceMonths(p: { start_date?: string | null; end_date?: string | null }): number {
+  if (p.start_date && p.end_date) {
+    const s = new Date(p.start_date + 'T00:00:00')
+    const e = new Date(p.end_date + 'T00:00:00')
+    return Math.max(1, (e.getFullYear() - s.getFullYear()) * 12 + e.getMonth() - s.getMonth() + 1)
+  }
+  return 12
+}
 function currentYearMonths() {
   return Array.from({ length: 12 }, (_, i) => `${CURRENT_YEAR}-${String(i + 1).padStart(2, '0')}-01`)
 }
@@ -67,14 +77,14 @@ function TypePills({ value, onChange }: { value: string; onChange: (v: string) =
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
 
-function Modal({ open, title, onClose, children, footer }: {
+function Modal({ open, title, onClose, children, footer, wide }: {
   open: boolean; title: string; onClose: () => void
-  children: React.ReactNode; footer?: React.ReactNode
+  children: React.ReactNode; footer?: React.ReactNode; wide?: boolean
 }) {
   if (!open) return null
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box" style={{ maxWidth: 560 }}>
+      <div className="modal-box" style={{ maxWidth: wide ? 680 : 560 }}>
         <div className="modal-header"><h2>{title}</h2><button className="modal-close" onClick={onClose}>×</button></div>
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-footer">{footer}</div>}
@@ -85,31 +95,73 @@ function Modal({ open, title, onClose, children, footer }: {
 
 // ── Main view ─────────────────────────────────────────────────────────────────
 
-const EMPTY = { pn:'', name:'', client_id:'', type:'fixed', pm:'Nino', value:'', start_month:'', end_month:'', starting_from:'', probability:'70', num_months:'12' }
+const EMPTY = { pn:'', name:'', client_id:'', type:'fixed', pm:'Nino', value:'', start_month:'', end_month:'', starting_from:'', probability:'50', num_months:'12' }
+
+interface VarRow { month: string; amount: string; probability: string }
+
+function buildVarRows(startMonth: string, endMonth: string, defaultAmount: string, defaultProb: string): VarRow[] {
+  const [sy, sm] = startMonth.split('-').map(Number)
+  const [ey, em] = endMonth.split('-').map(Number)
+  const rows: VarRow[] = []
+  let y = sy, m = sm
+  while ((y < ey || (y === ey && m <= em)) && rows.length < 60) {
+    rows.push({ month: `${y}-${String(m).padStart(2, '0')}`, amount: defaultAmount, probability: defaultProb })
+    m++; if (m > 12) { m = 1; y++ }
+  }
+  return rows
+}
 
 export function ProjectsView() {
   const pStore = useProjectsStore()
   const cStore = useClientsStore()
   const iStore = useInfraStore()
   const rpStore = useRevenuePlannerStore()
+  const settingsStore = useSettingsStore()
   const navigate = useNavigate()
+  const pmOptions = settingsStore.projectManagers.map(m => ({ value: m, label: m }))
   const [showAdd, setShowAdd]         = useState(false)
   const [saving, setSaving]           = useState(false)
   const [form, setForm]               = useState({ ...EMPTY })
   const [newClientName, setNewClientName] = useState('')
   const [showNewClient, setShowNewClient] = useState(false)
+  const [varRows, setVarRows]         = useState<VarRow[]>([])
+  const [deleteTarget, setDeleteTarget] = useState<Project | null>(null)
+  const [deleting, setDeleting]       = useState(false)
 
   const months = useMemo(() => currentYearMonths(), [])
-  useEffect(() => { pStore.fetchAll(); cStore.fetchAll(); iStore.fetchAll(); rpStore.fetchByMonths(months) }, [])
+  useEffect(() => { pStore.fetchAll(); cStore.fetchAll(); iStore.fetchAll(); rpStore.fetchByMonths(months); settingsStore.fetch() }, [])
 
-  function setF(k: string, v: string) { setForm(f => ({ ...f, [k]: v })) }
+  function setF(k: string, v: string) {
+    setForm(f => {
+      const next = { ...f, [k]: v }
+      if (next.type === 'variable' && next.start_month && next.end_month &&
+          (k === 'start_month' || k === 'end_month' || k === 'type')) {
+        setVarRows(buildVarRows(next.start_month, next.end_month, next.value, next.probability))
+      }
+      return next
+    })
+  }
 
   function handleClientChange(v: string) {
     if (v === '__new__') { setShowNewClient(true); setF('client_id', '') }
     else { setShowNewClient(false); setNewClientName(''); setF('client_id', v) }
   }
 
-  function closeModal() { setShowAdd(false); setForm({ ...EMPTY }); setShowNewClient(false); setNewClientName('') }
+  function closeModal() { setShowAdd(false); setForm({ ...EMPTY }); setShowNewClient(false); setNewClientName(''); setVarRows([]) }
+
+  function updateVarRow(i: number, field: 'amount' | 'probability', val: string) {
+    setVarRows(rows => rows.map((r, idx) => idx === i ? { ...r, [field]: val } : r))
+  }
+
+  async function handleDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      await pStore.remove(deleteTarget.id)
+      setDeleteTarget(null)
+    } catch (e) { alert((e as Error).message) }
+    finally { setDeleting(false) }
+  }
 
   async function handleCreate() {
     if (!form.name.trim()) return
@@ -133,7 +185,14 @@ export function ProjectsView() {
           type:           form.type,
           status:         'active',
           pm:             form.pm || null,
-          contract_value: form.value ? parseFloat(form.value) : null,
+          contract_value: form.type === 'variable'
+            ? (varRows.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0) || null)
+            : form.value ? parseFloat(form.value) : null,
+          initial_contract_value: form.type === 'maintenance' && form.value
+            ? parseFloat(form.value) * Math.max(1, Math.min(60, parseInt(form.num_months) || 12))
+            : form.type === 'variable'
+              ? (varRows.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0) || null)
+              : form.value ? parseFloat(form.value) : null,
           currency:       'EUR',
           start_date:     form.start_month ? form.start_month + '-01' : null,
           end_date:       form.end_month   ? form.end_month   + '-01' : null,
@@ -142,11 +201,10 @@ export function ProjectsView() {
         .select('id').single()
       if (pe) throw pe
 
-      // Auto-generate monthly invoice plan rows for maintenance/retainer
-      if ((form.type === 'maintenance' || form.type === 'variable') && form.starting_from && form.value) {
+      // Auto-generate monthly invoice plan rows
+      if (form.type === 'maintenance' && form.starting_from && form.value) {
         const numMonths = Math.max(1, Math.min(60, parseInt(form.num_months) || 12))
         const [y, m] = form.starting_from.split('-').map(Number)
-        const defaultProb = form.type === 'variable' ? 75 : 100
         const rows = Array.from({ length: numMonths }, (_, i) => {
           const d = new Date(y, m - 1 + i, 1)
           return {
@@ -155,12 +213,28 @@ export function ProjectsView() {
             planned_amount: parseFloat(form.value),
             actual_amount:  null,
             status:         'planned',
-            probability:    defaultProb,
-            notes:          null,
+            probability:    100,
+            notes:          form.name.trim() || null,
           }
         })
         const { error: re } = await supabase.from('revenue_planner').insert(rows)
         if (re) throw re
+      } else if (form.type === 'variable' && varRows.length > 0) {
+        const rows = varRows
+          .filter(r => r.amount && parseFloat(r.amount) > 0)
+          .map(r => ({
+            project_id:     proj.id,
+            month:          r.month + '-01',
+            planned_amount: parseFloat(r.amount),
+            actual_amount:  null,
+            status:         'planned',
+            probability:    Math.max(0, Math.min(100, parseInt(r.probability) || 50)),
+            notes:          null,
+          }))
+        if (rows.length > 0) {
+          const { error: re } = await supabase.from('revenue_planner').insert(rows)
+          if (re) throw re
+        }
       }
 
       await pStore.fetchAll()
@@ -172,10 +246,13 @@ export function ProjectsView() {
   const activeCount    = pStore.projects.filter(p => p.status === 'active').length
   const portfolioValue = pStore.projects
     .filter(p => p.status === 'active')
-    .reduce((sum, p) => sum + (p.contract_value ?? 0), 0)
+    .reduce((sum, p) => {
+      if (p.contract_value == null) return sum
+      return sum + (p.type === 'maintenance' ? p.contract_value * maintenanceMonths(p) : p.contract_value)
+    }, 0)
   const monthsElapsed  = new Date().getMonth() + 1
   const costsYTD       = iStore.totalMonthlyCost() * monthsElapsed
-  const invoicedYTD    = rpStore.rows.reduce((s, r) => s + (r.actual_amount ?? 0), 0)
+  const invoicedYTD    = rpStore.rows.filter(r => r.project_id != null && r.hosting_client_id == null && r.maintenance_id == null && r.domain_id == null && r.status !== 'cost').reduce((s, r) => s + (r.actual_amount ?? 0), 0)
 
   return (
     <div>
@@ -238,13 +315,19 @@ export function ProjectsView() {
                       onClick={() => p.client && navigate(`/clients/${p.client.id}`)}>{p.client?.name ?? '—'}</td>
                     <td><span className={`badge ${TYPE_BADGE[p.type] ?? 'badge-gray'}`}>{TYPE_LABEL[p.type] ?? p.type}</span></td>
                     <td className="td-right text-mono" style={{fontWeight:600}}>
-                      {p.contract_value
-                        ? `${p.contract_value.toLocaleString()} €${p.type === 'maintenance' || p.type === 'variable' ? '/mo' : ''}`
-                        : <span className="text-muted">—</span>}
+                      {(() => {
+                        const val = p.initial_contract_value
+                          ?? (p.contract_value ? (p.type === 'maintenance' ? p.contract_value * maintenanceMonths(p) : p.contract_value) : null)
+                        return val ? `${val.toLocaleString()} €` : <span className="text-muted">—</span>
+                      })()}
                     </td>
                     <td className="text-sm" style={{color:'var(--c2)'}}>{p.pm ?? <span className="text-muted">—</span>}</td>
                     <td><span className={`badge ${STATUS_BADGE[p.status] ?? 'badge-gray'}`}>{p.status.charAt(0).toUpperCase()+p.status.slice(1)}</span></td>
-                    <td><button className="btn btn-secondary btn-xs" onClick={() => navigate(`/projects/${p.id}`)}>Edit</button></td>
+                    <td style={{whiteSpace:'nowrap'}}>
+                      <button className="btn btn-secondary btn-xs" onClick={() => navigate(`/projects/${p.id}`)}>Edit</button>
+                      {' '}
+                      <button className="btn btn-ghost btn-xs" style={{color:'var(--red)'}} onClick={() => setDeleteTarget(p)}>Delete</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -253,7 +336,7 @@ export function ProjectsView() {
         )}
       </div>
 
-      <Modal open={showAdd} title="New Project" onClose={closeModal}
+      <Modal open={showAdd} title="New Project" onClose={closeModal} wide={form.type === 'variable'}
         footer={<>
           <button className="btn btn-secondary btn-sm" onClick={closeModal}>Cancel</button>
           <button className="btn btn-primary btn-sm" onClick={handleCreate} disabled={saving || !form.name.trim()}>
@@ -290,25 +373,23 @@ export function ProjectsView() {
           </div>
         </div>
 
-        <div className="form-row" style={{marginBottom: form.type !== 'fixed' ? 14 : 0}}>
+        <div className="form-row" style={{marginBottom: 14}}>
           <div className="form-group">
             <label className="form-label">Project Manager</label>
             <Select
               value={form.pm}
               onChange={val => setF('pm', val)}
-              options={[
-                { value: 'Nino', label: 'Nino' },
-                { value: 'Ana', label: 'Ana' },
-                { value: 'Maja', label: 'Maja' },
-              ]}
+              options={pmOptions}
             />
           </div>
-          <div className="form-group">
-            <label className="form-label">
-              {form.type === 'maintenance' ? 'Monthly amount (€)' : form.type === 'variable' ? 'Est. monthly (€)' : 'Project value (€)'}
-            </label>
-            <input type="number" value={form.value} onChange={e => setF('value', e.target.value)} placeholder={form.type === 'fixed' ? '45000' : '2000'} />
-          </div>
+          {form.type !== 'variable' && (
+            <div className="form-group">
+              <label className="form-label">
+                {form.type === 'maintenance' ? 'Monthly amount (€)' : 'Project value (€)'}
+              </label>
+              <input type="number" value={form.value} onChange={e => setF('value', e.target.value)} placeholder={form.type === 'maintenance' ? '2000' : '45000'} />
+            </div>
+          )}
         </div>
 
 
@@ -324,6 +405,15 @@ export function ProjectsView() {
                 <input type="number" min="1" max="60" value={form.num_months} onChange={e => setF('num_months', e.target.value)} placeholder="12" />
               </div>
             </div>
+            {form.value && form.num_months && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, padding: '8px 12px', background: 'var(--c7)', borderRadius: 6 }}>
+                <span style={{ fontSize: 12, color: 'var(--c3)' }}>Initial value:</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--navy)' }}>
+                  {(parseFloat(form.value) * Math.max(1, Math.min(60, parseInt(form.num_months) || 12))).toLocaleString()} €
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--c4)' }}>({form.value} €/mo × {form.num_months} mo)</span>
+              </div>
+            )}
             <div className="info-box">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
               {form.num_months && form.starting_from
@@ -334,22 +424,121 @@ export function ProjectsView() {
         )}
 
         {form.type === 'variable' && (
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Probability (%)</label>
-              <input type="number" value={form.probability} onChange={e => setF('probability', e.target.value)} placeholder="70" />
+          <>
+            <div className="form-row" style={{marginBottom: 12}}>
+              <div className="form-group">
+                <label className="form-label">Start month</label>
+                <input type="month" value={form.start_month} onChange={e => setF('start_month', e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">End month</label>
+                <input type="month" value={form.end_month} onChange={e => setF('end_month', e.target.value)} />
+              </div>
+              <div className="form-group" style={{maxWidth:140}}>
+                <label className="form-label">Default amount (€)</label>
+                <input type="number" value={form.value} onChange={e => {
+                  setF('value', e.target.value)
+                  setVarRows(rows => rows.map(r => ({ ...r, amount: e.target.value })))
+                }} placeholder="0" />
+              </div>
+              <div className="form-group" style={{maxWidth:200}}>
+                <label className="form-label">Set all rows to</label>
+                <div style={{display:'flex',gap:6}}>
+                  <select value={form.probability} onChange={e => setF('probability', e.target.value)}
+                    style={{flex:1,height:42,border:'1px solid var(--c6)',borderRadius:10,padding:'0 10px',fontSize:14,background:'#fff',fontFamily:'inherit'}}>
+                    <option value="25">25%</option>
+                    <option value="50">50%</option>
+                    <option value="100">100%</option>
+                  </select>
+                  <button type="button" className="btn btn-secondary btn-sm"
+                    onClick={() => setVarRows(rows => rows.map(r => ({ ...r, probability: form.probability })))}>
+                    Apply
+                  </button>
+                </div>
+              </div>
             </div>
-            <div className="form-group">
-              <label className="form-label">Starting from</label>
-              <input type="month" value={form.starting_from} onChange={e => setF('starting_from', e.target.value)} />
-            </div>
-            <div className="form-group" style={{maxWidth:130}}>
-              <label className="form-label">Number of months</label>
-              <input type="number" min="1" max="60" value={form.num_months} onChange={e => setF('num_months', e.target.value)} placeholder="12" />
-            </div>
-          </div>
+            {varRows.length > 0 && (
+              <div style={{marginBottom:12}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                  <span className="form-label" style={{marginBottom:0}}>Monthly plan</span>
+                  <span style={{fontSize:12,color:'var(--c3)'}}>
+                    {(() => {
+                      const total = varRows.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0)
+                      const weighted = varRows.reduce((s, r) => s + (parseFloat(r.amount) || 0) * (parseInt(r.probability) || 0) / 100, 0)
+                      return total > 0 ? `Total ${total.toLocaleString()} € · Expected cash ${weighted.toLocaleString(undefined, {maximumFractionDigits:0})} €` : ''
+                    })()}
+                  </span>
+                </div>
+                <div style={{border:'1px solid var(--c6)',borderRadius:'var(--r)',overflow:'hidden'}}>
+                  <table style={{width:'100%',borderCollapse:'collapse'}}>
+                    <thead>
+                      <tr style={{background:'var(--c7)',borderBottom:'1px solid var(--c6)'}}>
+                        <th style={{padding:'8px 14px',fontWeight:600,fontSize:11,textAlign:'left',color:'var(--c3)'}}>MONTH</th>
+                        <th style={{padding:'8px 14px',fontWeight:600,fontSize:11,textAlign:'right',color:'var(--c3)'}}>AMOUNT (€)</th>
+                        <th style={{padding:'8px 14px',fontWeight:600,fontSize:11,textAlign:'right',color:'var(--c3)'}}>LIKELIHOOD</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {varRows.map((r, i) => (
+                        <tr key={r.month} style={{borderBottom: i < varRows.length-1 ? '1px solid var(--c6)' : undefined}}>
+                          <td style={{padding:'8px 14px',color:'var(--c1)',fontWeight:600,fontSize:13}}>
+                            {new Date(r.month + '-01T00:00:00').toLocaleDateString('en-GB', {month:'long',year:'numeric'})}
+                          </td>
+                          <td style={{padding:'6px 8px'}}>
+                            <input
+                              type="number"
+                              value={r.amount}
+                              onChange={e => updateVarRow(i, 'amount', e.target.value)}
+                              placeholder="0"
+                              style={{width:'100%',textAlign:'right',padding:'6px 10px',fontSize:13,border:'1px solid var(--c6)',borderRadius:4}}
+                            />
+                          </td>
+                          <td style={{padding:'6px 8px',minWidth:110}}>
+                            <select value={r.probability} onChange={e => updateVarRow(i, 'probability', e.target.value)}
+                              style={{width:'100%',height:36,border:'1px solid var(--c6)',borderRadius:6,padding:'0 8px',fontSize:13,background:'#fff',fontFamily:'inherit'}}>
+                              <option value="25">25%</option>
+                              <option value="50">50%</option>
+                              <option value="100">100%</option>
+                            </select>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+            {(!form.start_month || !form.end_month) && (
+              <div className="info-box">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                Set start and end months to generate the per-month plan table.
+              </div>
+            )}
+          </>
         )}
       </Modal>
+
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setDeleteTarget(null)}>
+          <div className="modal-box" style={{maxWidth:420}}>
+            <div className="modal-header">
+              <h2>Delete project</h2>
+              <button className="modal-close" onClick={() => setDeleteTarget(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              <p>Are you sure you want to delete <strong>{deleteTarget.name}</strong> ({deleteTarget.pn})?</p>
+              <p style={{color:'var(--red)',fontSize:13,marginTop:8}}>This will also delete all invoice plans for this project. This cannot be undone.</p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary btn-sm" onClick={() => setDeleteTarget(null)}>Cancel</button>
+              <button className="btn btn-primary btn-sm" style={{background:'var(--red)',borderColor:'var(--red)'}} onClick={handleDelete} disabled={deleting}>
+                {deleting ? <span className="spinner" style={{borderTopColor:'#fff'}}/> : null}
+                Delete project
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

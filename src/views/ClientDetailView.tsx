@@ -8,8 +8,10 @@ import { useInfraStore } from '../stores/infrastructure'
 import { useRevenuePlannerStore } from '../stores/revenuePlanner'
 import { useMaintenancesStore } from '../stores/maintenances'
 import { usePipelineStore } from '../stores/pipeline'
+import { useSettingsStore } from '../stores/settings'
 import { toast } from '../lib/toast'
 import type { Project, Domain, HostingClient, RevenuePlanner, Maintenance, PipelineItem } from '../lib/types'
+import { hostingContractValue } from '../lib/types'
 import { Select } from '../components/Select'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -20,6 +22,20 @@ function safeUrl(url: string | null | undefined): string | undefined {
 }
 
 const CURRENT_YEAR = new Date().getFullYear()
+
+// How many months of a maintenance contract fall within the current year
+function maintMonthsThisYear(m: { contract_start?: string | null; contract_end?: string | null }): number {
+  const yearStart = `${CURRENT_YEAR}-01`
+  const yearEnd   = `${CURRENT_YEAR}-12`
+  const cStart = m.contract_start ? m.contract_start.slice(0, 7) : yearStart
+  const cEnd   = m.contract_end   ? m.contract_end.slice(0, 7)   : yearEnd
+  const effStart = cStart > yearStart ? cStart : yearStart
+  const effEnd   = cEnd   < yearEnd   ? cEnd   : yearEnd
+  if (effStart > effEnd) return 0
+  const [sy, sm] = effStart.split('-').map(Number)
+  const [ey, em] = effEnd.split('-').map(Number)
+  return (ey - sy) * 12 + (em - sm) + 1
+}
 
 function clientMonths(): string[] {
   const months: string[] = []
@@ -86,6 +102,11 @@ const TYPE_BADGE: Record<string, string> = {
   fixed: 'badge-blue',
   maintenance: 'badge-amber',
   variable: 'badge-green',
+}
+const TYPE_LABEL: Record<string, string> = {
+  fixed: 'Fixed',
+  maintenance: 'Recurring',
+  variable: 'Variable',
 }
 const RP_STATUS_BADGE: Record<string, string> = {
   paid: 'badge-green',
@@ -156,7 +177,19 @@ function TypePills({ value, onChange }: { value: ProjectType; onChange: (v: Proj
   )
 }
 
-interface DomainRowData { domain_name: string; expiry_date: string; yearly_amount: string }
+interface DomainRowData { domain_name: string; registered_date: string; expiry_date: string; yearly_amount: string }
+
+function isoToDMY(s: string): string {
+  if (!s) return ''
+  const [y, m, d] = s.split('-')
+  if (!y || !m || !d) return s
+  return `${d}/${m}/${y}`
+}
+function parseDMY(s: string): string {
+  const parts = s.split('/')
+  if (parts.length !== 3 || parts[2].length !== 4) return s
+  return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`
+}
 
 function DomainRowInputs({ rows, onChange }: { rows: DomainRowData[]; onChange: (rows: DomainRowData[]) => void }) {
   function update(i: number, field: keyof DomainRowData, val: string) {
@@ -164,16 +197,24 @@ function DomainRowInputs({ rows, onChange }: { rows: DomainRowData[]; onChange: 
   }
   return (
     <div>
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 130px 130px 90px 32px', gap: '4px 8px', marginBottom: 4 }}>
+        <span style={{ fontSize: 11, color: 'var(--c4)', fontWeight: 600 }}>Domain</span>
+        <span style={{ fontSize: 11, color: 'var(--c4)', fontWeight: 600 }}>Registered</span>
+        <span style={{ fontSize: 11, color: 'var(--c4)', fontWeight: 600 }}>Expiry</span>
+        <span style={{ fontSize: 11, color: 'var(--c4)', fontWeight: 600 }}>€/yr</span>
+        <span />
+      </div>
       {rows.map((r, i) => (
-        <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 140px 110px 32px', gap: 6, marginBottom: 8, alignItems: 'center' }}>
-          <input placeholder="domain.com" value={r.domain_name} onChange={e => update(i, 'domain_name', e.target.value)} />
-          <input type="date" value={r.expiry_date} onChange={e => update(i, 'expiry_date', e.target.value)} />
-          <input placeholder="€/yr" type="number" value={r.yearly_amount} onChange={e => update(i, 'yearly_amount', e.target.value)} />
+        <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 130px 130px 90px 32px', gap: '4px 8px', marginBottom: 8, alignItems: 'center' }}>
+          <input placeholder="example.si" value={r.domain_name} onChange={e => update(i, 'domain_name', e.target.value)} />
+          <input placeholder="DD/MM/YYYY" value={isoToDMY(r.registered_date)} onChange={e => update(i, 'registered_date', parseDMY(e.target.value))} />
+          <input placeholder="DD/MM/YYYY" value={isoToDMY(r.expiry_date)} onChange={e => update(i, 'expiry_date', parseDMY(e.target.value))} />
+          <input placeholder="25" type="number" value={r.yearly_amount} onChange={e => update(i, 'yearly_amount', e.target.value)} />
           <button type="button" onClick={() => onChange(rows.filter((_, idx) => idx !== i))}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--red)', fontSize: 18, lineHeight: 1 }}>×</button>
         </div>
       ))}
-      <button type="button" className="btn btn-secondary btn-sm" onClick={() => onChange([...rows, { domain_name: '', expiry_date: '', yearly_amount: '' }])} style={{ marginTop: 4 }}>
+      <button type="button" className="btn btn-secondary btn-sm" onClick={() => onChange([...rows, { domain_name: '', registered_date: '', expiry_date: '', yearly_amount: '' }])} style={{ marginTop: 4 }}>
         + Add domain
       </button>
     </div>
@@ -197,14 +238,38 @@ const EMPTY_PROJ: ProjFormState = {
   start_month: '', end_month: '', starting_from: '', probability: '70',
 }
 
+interface PipelineScheduleRow { month: string; amount: string }
 interface PipelineFormState {
   title: string; status: PipelineItem['status']; estimated_amount: string
-  probability: string; expected_month: string; description: string; notes: string
+  probability: string; expected_month: string; expected_end_month: string
+  deal_type: 'one_time' | 'monthly' | 'fixed'
+  description: string; notes: string; schedule: PipelineScheduleRow[]
 }
 
 const EMPTY_PIPELINE: PipelineFormState = {
   title: '', status: 'proposal', estimated_amount: '',
-  probability: '75', expected_month: '', description: '', notes: '',
+  probability: '75', expected_month: '', expected_end_month: '',
+  deal_type: 'one_time', description: '', notes: '', schedule: [],
+}
+
+const PIPELINE_STATUS_OPTS = [
+  { value: 'proposal', label: 'Proposal' },
+  { value: 'won',      label: 'Won' },
+  { value: 'lost',     label: 'Lost' },
+]
+const PIPELINE_PROB_OPTS = [
+  { value: '10', label: '10%' }, { value: '25', label: '25%' },
+  { value: '50', label: '50%' }, { value: '75', label: '75%' },
+  { value: '90', label: '90%' }, { value: '100', label: '100%' },
+]
+const PIPELINE_TYPE_OPTS = [
+  { value: 'one_time', label: 'One-time payment' },
+  { value: 'monthly',  label: 'Monthly recurring' },
+  { value: 'fixed',    label: 'Fixed — plan by month' },
+]
+function plMonthCount(start: string, end: string): number {
+  const s = new Date(start + 'T00:00:00'), e = new Date(end + 'T00:00:00')
+  return Math.max(1, (e.getFullYear() - s.getFullYear()) * 12 + e.getMonth() - s.getMonth() + 1)
 }
 
 type TabId = 'overview' | 'projects' | 'infra' | 'maintenances' | 'invoices' | 'pipeline'
@@ -222,6 +287,8 @@ export function ClientDetailView() {
   const rpStore = useRevenuePlannerStore()
   const mStore = useMaintenancesStore()
   const plStore = usePipelineStore()
+  const settingsStore = useSettingsStore()
+  const pmOptions = settingsStore.projectManagers.map(m => ({ value: m, label: m }))
 
   const allMonths = useMemo(() => clientMonths(), [])
   const yearMonths = useMemo(() => currentYearMonths(), [])
@@ -231,6 +298,8 @@ export function ClientDetailView() {
 
   // ── edit client modal ────────────────────────────────────────────────────
   const [showEdit, setShowEdit] = useState(false)
+  const [showDeleteClient, setShowDeleteClient] = useState(false)
+  const [deleteClientSaving, setDeleteClientSaving] = useState(false)
   const [editForm, setEditForm] = useState<EditFormState>({
     name: '', email: '', phone: '', address: '', vat_id: '',
     contact_person: '', contact_email: '', contact_phone: '',
@@ -244,8 +313,10 @@ export function ClientDetailView() {
 
   // ── add domain modal ─────────────────────────────────────────────────────
   const [showAddDomain, setShowAddDomain] = useState(false)
-  const [domainRows, setDomainRows] = useState<DomainRowData[]>([{ domain_name: '', expiry_date: '', yearly_amount: '' }])
+  const [domainRows, setDomainRows] = useState<DomainRowData[]>([{ domain_name: '', registered_date: '', expiry_date: '', yearly_amount: '' }])
   const [domainPn, setDomainPn] = useState('')
+  const [domainInvoiceMonth, setDomainInvoiceMonth] = useState('')
+  const [domainAlreadyBilled, setDomainAlreadyBilled] = useState(false)
   const [domainSaving, setDomainSaving] = useState(false)
 
   // ── add hosting modal ────────────────────────────────────────────────────
@@ -253,7 +324,7 @@ export function ClientDetailView() {
   const [hostingForm, setHostingForm] = useState({
     project_pn: '', description: '', cycle: 'monthly' as 'monthly' | 'yearly',
     amount: '', billing_since: '', next_invoice_date: '',
-    invoice_month: '', already_billed: false, contract_id: '',
+    invoice_month: '', already_billed: false, contract_id: '', contract_expiry: '',
   })
   const [hostingSaving, setHostingSaving] = useState(false)
 
@@ -274,7 +345,8 @@ export function ClientDetailView() {
     infraStore.fetchAll()
     rpStore.fetchByMonths(allMonths)
     mStore.fetchAll()
-    if (id) plStore.fetchByClient(id)
+    if (id) plStore.fetchAll()
+    settingsStore.fetch()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const client = cStore.clients.find(c => c.id === id)
@@ -283,7 +355,11 @@ export function ClientDetailView() {
   const hostingRows = infraStore.hostingClients.filter(h => h.client_id === id)
   const clientDomains = dStore.domains.filter(d => d.client_id === id && !d.archived)
   const maintenances = mStore.maintenances.filter(m => m.client_id === id)
-  const pipelineItems = plStore.items.filter(i => i.client_id === id)
+  const pipelineItems = plStore.items.filter(i =>
+    i.client_id === id ||
+    (!i.client_id && i.company_name && client?.name &&
+      i.company_name.toLowerCase() === client.name.toLowerCase())
+  )
 
   // ── revenue planner rows ─────────────────────────────────────────────────
   const clientMaintIds = useMemo(() => new Set(maintenances.map(m => m.id)), [maintenances])
@@ -299,14 +375,17 @@ export function ClientDetailView() {
 
   // ── stats ────────────────────────────────────────────────────────────────
   const activeProjects = projects.filter(p => p.status === 'active')
-  const contractsValue = activeProjects.reduce((s, p) => s + (p.contract_value ?? 0), 0)
-  const hostingAnnual = hostingRows.reduce((s, h) => s + (h.cycle === 'monthly' ? h.amount * 12 : h.amount), 0)
-  const domainsAnnual = clientDomains.reduce((s, d) => s + (d.yearly_amount ?? 0), 0)
-  const totalValue = contractsValue + hostingAnnual + domainsAnnual
+  const hostingAnnual = hostingRows.reduce((s, h) => s + hostingContractValue(h), 0)
+  const domainsAnnual = clientDomains.filter(d => !d.archived).reduce((s, d) => s + (d.yearly_amount ?? 0), 0)
+  const maintAnnual = maintenances.filter(m => m.status === 'active').reduce((s, m) => s + m.monthly_retainer * maintMonthsThisYear(m), 0)
+  const projectRpSum = allClientRpRows
+    .filter(r => r.project_id != null && projectIds.has(r.project_id))
+    .reduce((s, r) => s + (r.planned_amount ?? 0), 0)
+  const totalValue = projectRpSum + hostingAnnual + domainsAnnual + maintAnnual
 
   const invoicedYTD = allClientRpRows
-    .filter(r => yearMonths.some(m => m === r.month))
-    .reduce((s, r) => s + (r.actual_amount ?? 0), 0)
+    .filter(r => yearMonths.some(m => m === r.month) && (r.status === 'issued' || r.status === 'paid'))
+    .reduce((s, r) => s + (r.actual_amount ?? r.planned_amount ?? 0), 0)
 
   const invoicedByProject = useMemo(() => {
     const map = new Map<string, number>()
@@ -320,7 +399,7 @@ export function ClientDetailView() {
 
   const fullInvoiceHistory: RevenuePlanner[] = useMemo(() =>
     [...allClientRpRows]
-      .filter(r => r.actual_amount != null && r.actual_amount > 0)
+      .filter(r => (r.status === 'issued' || r.status === 'paid') && (r.actual_amount ?? r.planned_amount ?? 0) > 0)
       .sort((a, b) => b.month.localeCompare(a.month)),
     [allClientRpRows])
 
@@ -389,6 +468,37 @@ export function ClientDetailView() {
     }
   }
 
+  async function deleteClient() {
+    if (!id) return
+    setDeleteClientSaving(true)
+    try {
+      // Delete revenue_planner rows linked to this client's data
+      const projectIds = projects.map(p => p.id)
+      const maintIds = maintenances.map(m => m.id)
+      const hostingIds = hostingRows.map(h => h.id)
+      const domainIds = clientDomains.map(d => d.id)
+      if (projectIds.length) await supabase.from('revenue_planner').delete().in('project_id', projectIds)
+      if (maintIds.length) await supabase.from('revenue_planner').delete().in('maintenance_id', maintIds)
+      if (hostingIds.length) await supabase.from('revenue_planner').delete().in('hosting_client_id', hostingIds)
+      if (domainIds.length) await supabase.from('revenue_planner').delete().in('domain_id', domainIds)
+      // Delete related records
+      await supabase.from('pipeline_items').delete().eq('client_id', id)
+      await supabase.from('domains').delete().eq('client_id', id)
+      await supabase.from('hosting_clients').delete().eq('client_id', id)
+      await supabase.from('maintenances').delete().eq('client_id', id)
+      await supabase.from('projects').delete().eq('client_id', id)
+      // Delete client
+      await supabase.from('clients').delete().eq('id', id)
+      await cStore.fetchAll()
+      toast('success', 'Client deleted')
+      navigate('/clients')
+    } catch (err) {
+      toast('error', (err as Error).message)
+    } finally {
+      setDeleteClientSaving(false)
+    }
+  }
+
   async function saveProject() {
     if (!id) return
     setProjSaving(true)
@@ -421,17 +531,36 @@ export function ClientDetailView() {
     setDomainSaving(true)
     try {
       const filled = domainRows.filter(r => r.domain_name.trim() && r.expiry_date)
-      await dStore.addDomains(id, domainPn, filled.map(r => ({
+      const planMonth = domainInvoiceMonth
+      const planStatus = domainAlreadyBilled ? 'issued' : (planMonth ? 'planned' : null)
+      const inserted = await dStore.addDomains(id, domainPn, filled.map(r => ({
         domain_name: r.domain_name.trim(),
+        registered_date: r.registered_date || undefined,
         expiry_date: r.expiry_date,
         yearly_amount: r.yearly_amount ? Number(r.yearly_amount) : undefined,
         contract_id: domainContractId.trim() || undefined,
       })))
+      if (planMonth && planStatus) {
+        const planRows = inserted.map((d: { id: string; yearly_amount?: number | null }) => ({
+          domain_id: d.id,
+          month: planMonth + '-01',
+          planned_amount: d.yearly_amount ?? null,
+          actual_amount: null,
+          status: planStatus,
+          probability: 100,
+          notes: null,
+        }))
+        const { error: pe } = await supabase.from('revenue_planner').insert(planRows)
+        if (pe) throw pe
+        await rpStore.fetchByMonths(allMonths)
+      }
       toast('success', 'Domains added')
       setShowAddDomain(false)
-      setDomainRows([{ domain_name: '', expiry_date: '', yearly_amount: '' }])
+      setDomainRows([{ domain_name: '', registered_date: '', expiry_date: '', yearly_amount: '' }])
       setDomainPn('')
       setDomainContractId('')
+      setDomainInvoiceMonth('')
+      setDomainAlreadyBilled(false)
     } catch (err) {
       toast('error', (err as Error).message)
     } finally {
@@ -456,6 +585,7 @@ export function ClientDetailView() {
           status: 'active',
           notes: null,
           contract_id: hostingForm.contract_id.trim() || null,
+          contract_expiry: hostingForm.contract_expiry ? hostingForm.contract_expiry + '-01' : null,
         })
         .select('id')
         .single()
@@ -501,7 +631,7 @@ export function ClientDetailView() {
 
       toast('success', 'Hosting added')
       setShowAddHosting(false)
-      setHostingForm({ project_pn: '', description: '', cycle: 'monthly', amount: '', billing_since: '', next_invoice_date: '', invoice_month: '', already_billed: false, contract_id: '' })
+      setHostingForm({ project_pn: '', description: '', cycle: 'monthly', amount: '', billing_since: '', next_invoice_date: '', invoice_month: '', already_billed: false, contract_id: '', contract_expiry: '' })
     } catch (err) {
       toast('error', (err as Error).message)
     } finally {
@@ -520,11 +650,14 @@ export function ClientDetailView() {
     setPipelineForm({
       title: item.title,
       status: item.status,
+      deal_type: item.deal_type ?? 'one_time',
       estimated_amount: item.estimated_amount != null ? String(item.estimated_amount) : '',
       probability: String(item.probability),
       expected_month: item.expected_month ? item.expected_month.slice(0, 7) : '',
+      expected_end_month: item.expected_end_month ? item.expected_end_month.slice(0, 7) : '',
       description: item.description ?? '',
       notes: item.notes ?? '',
+      schedule: item.monthly_schedule?.map(r => ({ month: r.month.slice(0, 7), amount: String(r.amount) })) ?? [],
     })
     setShowPipeline(true)
   }
@@ -533,15 +666,19 @@ export function ClientDetailView() {
     if (!id || !pipelineForm.title.trim()) return
     setPipelineSaving(true)
     try {
+      const schedule = pipelineForm.deal_type === 'fixed' && pipelineForm.schedule.length > 0
+        ? pipelineForm.schedule.filter(r => r.month && r.amount).map(r => ({ month: r.month + '-01', amount: Number(r.amount) }))
+        : null
       const data = {
         client_id: id,
         title: pipelineForm.title.trim(),
         status: pipelineForm.status,
-        estimated_amount: pipelineForm.estimated_amount ? parseFloat(pipelineForm.estimated_amount) : null,
-        deal_type: (editPipelineTarget?.deal_type ?? 'one_time') as PipelineItem['deal_type'],
-        monthly_schedule: editPipelineTarget?.monthly_schedule ?? null,
+        deal_type: pipelineForm.deal_type,
+        estimated_amount: pipelineForm.deal_type !== 'fixed' && pipelineForm.estimated_amount ? parseFloat(pipelineForm.estimated_amount) : null,
         probability: parseInt(pipelineForm.probability),
-        expected_month: pipelineForm.expected_month ? pipelineForm.expected_month + '-01' : null,
+        expected_month: pipelineForm.deal_type !== 'fixed' && pipelineForm.expected_month ? pipelineForm.expected_month + '-01' : null,
+        expected_end_month: pipelineForm.deal_type === 'monthly' && pipelineForm.expected_end_month ? pipelineForm.expected_end_month + '-01' : null,
+        monthly_schedule: schedule,
         description: pipelineForm.description.trim() || null,
         notes: pipelineForm.notes.trim() || null,
       }
@@ -558,6 +695,21 @@ export function ClientDetailView() {
     } finally {
       setPipelineSaving(false)
     }
+  }
+
+  function addScheduleRow() {
+    setPipelineForm(f => ({ ...f, schedule: [...f.schedule, { month: '', amount: '' }] }))
+  }
+  function updateScheduleRow(i: number, key: 'month' | 'amount', val: string) {
+    setPipelineForm(f => {
+      const s = [...f.schedule]; s[i] = { ...s[i], [key]: val }; return { ...f, schedule: s }
+    })
+  }
+  function removeScheduleRow(i: number) {
+    setPipelineForm(f => ({ ...f, schedule: f.schedule.filter((_, idx) => idx !== i) }))
+  }
+  function fixedScheduleTotal() {
+    return pipelineForm.schedule.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0)
   }
 
   async function deletePipeline(item: PipelineItem) {
@@ -628,7 +780,10 @@ export function ClientDetailView() {
           <div className="card-body">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
               <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{client!.name}</h3>
-              <button className="btn btn-secondary btn-xs" onClick={openEdit}>Edit</button>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="btn btn-secondary btn-xs" onClick={openEdit}>Edit</button>
+                <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red)' }} onClick={() => setShowDeleteClient(true)}>Delete client</button>
+              </div>
             </div>
 
             {companyFields.length === 0 && contactFields.length === 0 ? (
@@ -667,34 +822,26 @@ export function ClientDetailView() {
         </div>
 
         {/* Quick stats row */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
-          <div className="card">
-            <div className="card-body" style={{ textAlign: 'center', padding: '16px 12px' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Active Maintenances</div>
-              <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--navy)' }}>{maintenances.filter(m => m.status === 'active').length}</div>
-              <div style={{ fontSize: 12, color: 'var(--c3)' }}>
-                {maintenances.filter(m => m.status === 'active').length > 0
-                  ? fmtEuro(maintenances.filter(m => m.status === 'active').reduce((s, m) => s + m.monthly_retainer, 0)) + '/mo'
-                  : 'none'}
-              </div>
+        <div className="stats-strip" style={{ marginBottom: 20 }}>
+          <div className="stat-card" style={{ '--left-color': 'var(--navy)' } as React.CSSProperties}>
+            <div className="stat-card-label">MAINTENANCES</div>
+            <div className="stat-card-value">{maintenances.filter(m => m.status === 'active').length}</div>
+            <div className="stat-card-sub">
+              {maintenances.filter(m => m.status === 'active').length > 0
+                ? fmtEuro(maintenances.filter(m => m.status === 'active').reduce((s, m) => s + m.monthly_retainer, 0)) + '/mo'
+                : 'none active'}
             </div>
           </div>
-          <div className="card">
-            <div className="card-body" style={{ textAlign: 'center', padding: '16px 12px' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Pipeline Items</div>
-              <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--amber, #d97706)' }}>{activePipelineItems.length}</div>
-              <div style={{ fontSize: 12, color: 'var(--c3)' }}>
-                {pipelineWeighted > 0 ? fmtEuro(Math.round(pipelineWeighted)) + ' weighted' : 'no active items'}
-              </div>
-            </div>
+          <div className="stat-card" style={{ '--left-color': 'var(--blue)' } as React.CSSProperties}>
+            <div className="stat-card-label">HOSTING</div>
+            <div className="stat-card-value" style={{ color: hostingAnnual > 0 ? 'var(--blue)' : undefined }}>{hostingRows.length}</div>
+            <div className="stat-card-sub">{hostingAnnual > 0 ? fmtEuro(hostingAnnual) + '/yr' : 'none'}</div>
           </div>
-          <div className="card">
-            <div className="card-body" style={{ textAlign: 'center', padding: '16px 12px' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Domains</div>
-              <div style={{ fontSize: 26, fontWeight: 800, color: expiringDomains.length > 0 ? 'var(--amber, #d97706)' : 'var(--c1)' }}>{clientDomains.length}</div>
-              <div style={{ fontSize: 12, color: expiringDomains.length > 0 ? 'var(--amber, #d97706)' : 'var(--c3)' }}>
-                {expiringDomains.length > 0 ? `${expiringDomains.length} expiring soon` : 'all active'}
-              </div>
+          <div className="stat-card" style={{ '--left-color': expiringDomains.length > 0 ? 'var(--amber, #d97706)' : 'var(--c5)' } as React.CSSProperties}>
+            <div className="stat-card-label">DOMAINS</div>
+            <div className="stat-card-value" style={{ color: expiringDomains.length > 0 ? 'var(--amber, #d97706)' : undefined }}>{clientDomains.length}</div>
+            <div className="stat-card-sub" style={{ color: expiringDomains.length > 0 ? 'var(--amber, #d97706)' : undefined }}>
+              {expiringDomains.length > 0 ? `${expiringDomains.length} expiring soon` : 'all active'}
             </div>
           </div>
         </div>
@@ -750,8 +897,6 @@ export function ClientDetailView() {
                   <th style={{ width: 140 }}>PROJECT #</th>
                   <th>PROJECT</th>
                   <th style={{ width: 120 }}>TYPE</th>
-                  <th className="th-right" style={{ width: 130 }}>VALUE</th>
-                  <th>OCCURRENCE</th>
                   <th className="th-right">TOTAL VALUE</th>
                   <th className="th-right">INVOICED</th>
                   <th>STATUS</th>
@@ -778,11 +923,7 @@ export function ClientDetailView() {
                           {p.name}
                         </Link>
                       </td>
-                      <td><span className={`badge ${TYPE_BADGE[p.type] ?? 'badge-gray'}`}>{p.type.charAt(0).toUpperCase() + p.type.slice(1)}</span></td>
-                      <td className="td-right text-mono" style={{ fontWeight: 600 }}>
-                        {p.contract_value ? isRecurring ? `${p.contract_value.toLocaleString()} €/mo` : fmtEuro(p.contract_value) : <span className="text-muted">—</span>}
-                      </td>
-                      <td style={{ fontSize: 12, color: 'var(--c3)' }}>{isRecurring ? 'Monthly' : 'One-time'}</td>
+                      <td><span className={`badge ${TYPE_BADGE[p.type] ?? 'badge-gray'}`}>{TYPE_LABEL[p.type] ?? p.type}</span></td>
                       <td className="td-right text-mono" style={{ fontWeight: 600 }}>
                         {totalProjectValue > 0 ? fmtEuro(totalProjectValue) : <span className="text-muted">—</span>}
                       </td>
@@ -795,6 +936,26 @@ export function ClientDetailView() {
                   )
                 })}
               </tbody>
+              <tfoot>
+                {(() => {
+                  const totalVal = projects.reduce((s, p) => {
+                    const isRecurring = p.type === 'maintenance' || p.type === 'variable'
+                    const projRpRows = allClientRpRows.filter(r => r.project_id === p.id)
+                    return s + (isRecurring
+                      ? projRpRows.reduce((r, row) => r + (row.planned_amount ?? 0), 0)
+                      : p.contract_value ?? 0)
+                  }, 0)
+                  const totalInvoiced = projects.reduce((s, p) => s + (invoicedByProject.get(p.id) ?? 0), 0)
+                  return (
+                    <tr style={{ background: 'var(--c7)', borderTop: '2px solid var(--c6)' }}>
+                      <td colSpan={3} style={{ fontWeight: 700, fontSize: 12, color: 'var(--c3)', letterSpacing: '0.05em' }}>TOTAL</td>
+                      <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)', fontSize: 14 }}>{totalVal > 0 ? fmtEuro(totalVal) : '—'}</td>
+                      <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--green)', fontSize: 14 }}>{totalInvoiced > 0 ? fmtEuro(totalInvoiced) : '—'}</td>
+                      <td colSpan={2} />
+                    </tr>
+                  )
+                })()}
+              </tfoot>
             </table>
           )}
         </div>
@@ -821,12 +982,12 @@ export function ClientDetailView() {
                 <tr>
                   <th>TYPE</th><th>PROJECT #</th><th>DESCRIPTION</th>
                   <th className="th-right">AMOUNT</th><th>OCCURRENCE</th>
-                  <th className="th-right">TOTAL VALUE</th><th>NEXT BILLING</th><th>STATUS</th>
+                  <th className="th-right">TOTAL VALUE</th><th>NEXT BILLING</th><th>CONTRACT EXPIRY</th><th>STATUS</th>
                 </tr>
               </thead>
               <tbody>
                 {hostingRows.map((h: HostingClient) => {
-                  const totalVal = h.cycle === 'monthly' ? h.amount * 12 : h.amount
+                  const totalVal = hostingContractValue(h)
                   return (
                     <tr key={h.id}>
                       <td><span className="badge badge-blue">Hosting</span></td>
@@ -836,6 +997,12 @@ export function ClientDetailView() {
                       <td style={{ fontSize: 12, color: 'var(--c3)' }}>{h.cycle === 'monthly' ? 'Monthly' : 'Yearly'}</td>
                       <td className="td-right text-mono" style={{ fontWeight: 600, fontSize: 13 }}>{fmtEuro(totalVal)}</td>
                       <td style={{ fontSize: 13, color: 'var(--c2)' }}>{h.cycle === 'monthly' ? nextMonthLabel() : fmtDate(h.next_invoice_date)}</td>
+                      <td style={{ fontSize: 13 }}>
+                        {h.contract_expiry
+                          ? <span style={{ color: daysUntil(h.contract_expiry) <= 30 ? 'var(--red)' : 'var(--c2)', fontWeight: daysUntil(h.contract_expiry) <= 30 ? 700 : 400 }}>{fmtDate(h.contract_expiry)}</span>
+                          : <span className="text-muted" style={{ fontSize: 12 }}>No expiration</span>
+                        }
+                      </td>
                       <td><span className={`badge ${STATUS_BADGE[h.status] ?? 'badge-gray'}`}>{h.status.charAt(0).toUpperCase() + h.status.slice(1)}</span></td>
                     </tr>
                   )
@@ -860,6 +1027,7 @@ export function ClientDetailView() {
                         {d.yearly_amount ? fmtEuro(d.yearly_amount) : <span className="text-muted">—</span>}
                       </td>
                       <td style={{ fontSize: 13, color: expiryColor ?? 'var(--c2)', fontWeight: expiryColor ? 700 : 400 }}>{fmtDate(d.expiry_date)}</td>
+                      <td><span className="text-muted" style={{ fontSize: 12 }}>—</span></td>
                       <td>{domainStatus}</td>
                     </tr>
                   )
@@ -868,7 +1036,7 @@ export function ClientDetailView() {
                   <tr style={{ background: 'var(--c7)', borderTop: '2px solid var(--c6)' }}>
                     <td colSpan={5} style={{ fontWeight: 700, fontSize: 12, color: 'var(--c3)', letterSpacing: '0.05em' }}>TOTAL VALUE / YEAR</td>
                     <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)', fontSize: 14 }}>{fmtEuro(hostingAnnual + domainsAnnual)}</td>
-                    <td colSpan={2} />
+                    <td colSpan={3} />
                   </tr>
                 )}
               </tbody>
@@ -947,6 +1115,15 @@ export function ClientDetailView() {
                   )
                 })}
               </tbody>
+              <tfoot>
+                <tr style={{ background: 'var(--c7)', borderTop: '2px solid var(--c6)' }}>
+                  <td style={{ fontWeight: 700, fontSize: 12, color: 'var(--c3)', letterSpacing: '0.05em' }}>TOTAL / YEAR {CURRENT_YEAR}</td>
+                  <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)', fontSize: 14 }}>
+                    {fmtEuro(maintenances.reduce((s, m) => s + m.monthly_retainer * maintMonthsThisYear(m), 0))}
+                  </td>
+                  <td colSpan={5} />
+                </tr>
+              </tfoot>
             </table>
           )}
         </div>
@@ -992,7 +1169,7 @@ export function ClientDetailView() {
                       <td className="text-mono" style={{ fontSize: 13, color: 'var(--c2)' }}>{fmtMonth(r.month)}</td>
                       <td>{getCategoryBadge(r)}</td>
                       <td style={{ fontSize: 13, color: 'var(--c1)' }}>{getDescription(r)}</td>
-                      <td className="td-right text-mono" style={{ color: amtColor, fontWeight: 600, fontSize: 13 }}>{fmtEuro(r.actual_amount)}</td>
+                      <td className="td-right text-mono" style={{ color: amtColor, fontWeight: 600, fontSize: 13 }}>{fmtEuro(r.actual_amount ?? r.planned_amount)}</td>
                       <td><span className={`badge ${RP_STATUS_BADGE[r.status] ?? 'badge-gray'}`}>{r.status.charAt(0).toUpperCase() + r.status.slice(1)}</span></td>
                     </tr>
                   )
@@ -1112,7 +1289,7 @@ export function ClientDetailView() {
   const TABS: { id: TabId; label: string }[] = [
     { id: 'overview', label: 'Overview' },
     { id: 'projects', label: `Projects${projects.length > 0 ? ` (${projects.length})` : ''}` },
-    { id: 'infra', label: 'Infrastructure' },
+    { id: 'infra', label: 'Domains & Hosting' },
     { id: 'maintenances', label: `Maintenances${maintenances.length > 0 ? ` (${maintenances.length})` : ''}` },
     { id: 'invoices', label: 'Invoices' },
     { id: 'pipeline', label: `Pipeline${activePipelineItems.length > 0 ? ` (${activePipelineItems.length})` : ''}` },
@@ -1173,6 +1350,37 @@ export function ClientDetailView() {
         </Modal>
       )}
 
+      {/* ── Delete client confirm ── */}
+      {showDeleteClient && (
+        <Modal title="Delete client" onClose={() => setShowDeleteClient(false)}>
+          <div className="alert alert-red" style={{ marginBottom: 16 }}>
+            <strong>This action is permanent and cannot be undone.</strong>
+          </div>
+          <p style={{ margin: '0 0 12px', fontSize: 14 }}>
+            Deleting <strong>{client!.name}</strong> will permanently remove:
+          </p>
+          <ul style={{ margin: '0 0 20px', padding: '0 0 0 20px', fontSize: 13, lineHeight: 1.8, color: 'var(--c2)' }}>
+            {projects.length > 0 && <li><strong>{projects.length}</strong> project{projects.length !== 1 ? 's' : ''}: {projects.map(p => p.name).join(', ')}</li>}
+            {maintenances.length > 0 && <li><strong>{maintenances.length}</strong> maintenance contract{maintenances.length !== 1 ? 's' : ''}: {maintenances.map(m => m.name).join(', ')}</li>}
+            {hostingRows.length > 0 && <li><strong>{hostingRows.length}</strong> hosting client{hostingRows.length !== 1 ? 's' : ''}</li>}
+            {clientDomains.length > 0 && <li><strong>{clientDomains.length}</strong> domain{clientDomains.length !== 1 ? 's' : ''}: {clientDomains.map(d => d.domain_name).join(', ')}</li>}
+            {plStore.items.filter(i => i.client_id === id).length > 0 && <li><strong>{plStore.items.filter(i => i.client_id === id).length}</strong> pipeline item{plStore.items.filter(i => i.client_id === id).length !== 1 ? 's' : ''}</li>}
+            <li>All related invoice planning rows</li>
+          </ul>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowDeleteClient(false)}>Cancel</button>
+            <button
+              className="btn btn-sm"
+              style={{ background: 'var(--red)', color: '#fff', borderColor: 'var(--red)' }}
+              onClick={deleteClient}
+              disabled={deleteClientSaving}
+            >
+              {deleteClientSaving ? 'Deleting…' : `Delete ${client!.name}`}
+            </button>
+          </div>
+        </Modal>
+      )}
+
       {/* ── New project modal ── */}
       {showAddProject && (
         <Modal title="New Project" onClose={() => { setShowAddProject(false); setProjForm(EMPTY_PROJ) }}>
@@ -1185,7 +1393,7 @@ export function ClientDetailView() {
             <div className="form-group">
               <label className="form-label">Project Manager</label>
               <Select value={projForm.pm} onChange={val => setProjForm(f => ({ ...f, pm: val }))}
-                options={[{ value: 'Nino', label: 'Nino' }, { value: 'Ana', label: 'Ana' }, { value: 'Maja', label: 'Maja' }]} />
+                options={pmOptions} />
             </div>
           </div>
           <div className="form-row" style={{ marginBottom: 14 }}>
@@ -1261,9 +1469,15 @@ export function ClientDetailView() {
               <input type="month" value={hostingForm.next_invoice_date?.slice(0, 7) ?? ''} onChange={e => setHostingForm(f => ({ ...f, next_invoice_date: e.target.value ? e.target.value + '-01' : '' }))} />
             </div>
           )}
-          <div className="form-group" style={{ marginBottom: 12 }}>
-            <label className="form-label">Contract / Order ID <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
-            <input placeholder="e.g. PO-2026-042" value={hostingForm.contract_id} onChange={e => setHostingForm(f => ({ ...f, contract_id: e.target.value }))} />
+          <div className="form-row" style={{ marginBottom: 12 }}>
+            <div className="form-group">
+              <label className="form-label">Contract / Order ID <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
+              <input placeholder="e.g. PO-2026-042" value={hostingForm.contract_id} onChange={e => setHostingForm(f => ({ ...f, contract_id: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Contract expiry <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
+              <input type="month" value={hostingForm.contract_expiry} onChange={e => setHostingForm(f => ({ ...f, contract_expiry: e.target.value }))} />
+            </div>
           </div>
           <div style={{ borderTop: '1px solid var(--c6)', paddingTop: 12, marginBottom: 12 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>Invoice planning</div>
@@ -1298,7 +1512,7 @@ export function ClientDetailView() {
       {/* ── Add domains modal ── */}
       {showAddDomain && (
         <Modal title="Add Domains" onClose={() => setShowAddDomain(false)}>
-          <div className="form-row" style={{ marginBottom: 12 }}>
+          <div className="form-row" style={{ marginBottom: 14 }}>
             <div className="form-group">
               <label className="form-label">Project #</label>
               <input placeholder="e.g. 1159" value={domainPn} onChange={e => setDomainPn(e.target.value)} autoFocus />
@@ -1308,9 +1522,31 @@ export function ClientDetailView() {
               <input placeholder="e.g. PO-2026-042" value={domainContractId} onChange={e => setDomainContractId(e.target.value)} />
             </div>
           </div>
-          <div className="form-group">
-            <label className="form-label" style={{ marginBottom: 6, display: 'block' }}>Domains</label>
+          <div style={{ borderTop: '1px solid var(--c6)', paddingTop: 14 }}>
+            <p style={{ margin: '0 0 10px', fontWeight: 700, fontSize: 15, color: 'var(--c0)' }}>Domains</p>
             <DomainRowInputs rows={domainRows} onChange={setDomainRows} />
+          </div>
+          <div style={{ borderTop: '1px solid var(--c6)', paddingTop: 14, marginTop: 14 }}>
+            <p style={{ margin: '0 0 12px', fontWeight: 700, fontSize: 13, color: 'var(--c0)' }}>
+              Billing <span style={{ fontWeight: 400, fontSize: 11, color: 'var(--c4)' }}>— optional</span>
+            </p>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 12, fontSize: 13, fontWeight: 500 }}>
+              <input type="checkbox" checked={domainAlreadyBilled} onChange={e => {
+                setDomainAlreadyBilled(e.target.checked)
+                if (!domainInvoiceMonth) {
+                  const now = new Date()
+                  setDomainInvoiceMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
+                }
+              }} style={{ width: 15, height: 15 }} />
+              Already billed
+            </label>
+            <div className="form-group" style={{ marginBottom: 0, maxWidth: 200 }}>
+              <label className="form-label">{domainAlreadyBilled ? 'Billed in which month?' : 'Add to invoice month'}</label>
+              <input type="month" value={domainInvoiceMonth} onChange={e => setDomainInvoiceMonth(e.target.value)} />
+            </div>
+            {!domainAlreadyBilled && !domainInvoiceMonth && (
+              <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--c4)' }}>Leave empty to skip — you can invoice from the table later.</p>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
             <button className="btn btn-secondary btn-sm" onClick={() => setShowAddDomain(false)}>Cancel</button>
@@ -1331,48 +1567,68 @@ export function ClientDetailView() {
           <div className="form-row" style={{ marginBottom: 14 }}>
             <div className="form-group">
               <label className="form-label">Status</label>
-              <Select value={pipelineForm.status} onChange={val => setPipelineForm(f => ({ ...f, status: val as PipelineItem['status'] }))}
-                options={[
-                  { value: 'proposal', label: 'Proposal' },
-                  { value: 'won', label: 'Won' },
-                  { value: 'lost', label: 'Lost' },
-                ]} />
+              <Select value={pipelineForm.status} onChange={val => setPipelineForm(f => ({ ...f, status: val as PipelineItem['status'] }))} options={PIPELINE_STATUS_OPTS} />
             </div>
             <div className="form-group">
               <label className="form-label">Probability</label>
-              <Select value={pipelineForm.probability} onChange={val => setPipelineForm(f => ({ ...f, probability: val }))}
-                options={[
-                  { value: '10', label: '10%' },
-                  { value: '25', label: '25%' },
-                  { value: '50', label: '50%' },
-                  { value: '75', label: '75%' },
-                  { value: '90', label: '90%' },
-                ]} />
-            </div>
-          </div>
-          <div className="form-row" style={{ marginBottom: 14 }}>
-            <div className="form-group">
-              <label className="form-label">Estimated Amount (€)</label>
-              <input type="number" value={pipelineForm.estimated_amount} onChange={e => setPipelineForm(f => ({ ...f, estimated_amount: e.target.value }))} placeholder="0" />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Expected Month</label>
-              <input type="month" value={pipelineForm.expected_month} onChange={e => setPipelineForm(f => ({ ...f, expected_month: e.target.value }))} />
+              <Select value={pipelineForm.probability} onChange={val => setPipelineForm(f => ({ ...f, probability: val }))} options={PIPELINE_PROB_OPTS} />
             </div>
           </div>
           <div className="form-group" style={{ marginBottom: 14 }}>
-            <label className="form-label">Description <span className="form-hint" style={{ display: 'inline' }}>optional</span></label>
-            <textarea value={pipelineForm.description} onChange={e => setPipelineForm(f => ({ ...f, description: e.target.value }))} rows={2} style={{ resize: 'vertical' }} />
+            <label className="form-label">Deal type</label>
+            <Select value={pipelineForm.deal_type} onChange={val => setPipelineForm(f => ({ ...f, deal_type: val as 'one_time' | 'monthly' | 'fixed' }))} options={PIPELINE_TYPE_OPTS} />
           </div>
+          {pipelineForm.deal_type !== 'fixed' && (
+            <div className="form-row" style={{ marginBottom: 14 }}>
+              <div className="form-group">
+                <label className="form-label">{pipelineForm.deal_type === 'monthly' ? 'Amount / month (€)' : 'Amount (€)'}</label>
+                <input type="number" value={pipelineForm.estimated_amount} onChange={e => setPipelineForm(f => ({ ...f, estimated_amount: e.target.value }))} placeholder="0" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">{pipelineForm.deal_type === 'monthly' ? 'Start month' : 'Expected month'}</label>
+                <input type="month" value={pipelineForm.expected_month} onChange={e => setPipelineForm(f => ({ ...f, expected_month: e.target.value }))} />
+              </div>
+            </div>
+          )}
+          {pipelineForm.deal_type === 'monthly' && (
+            <div className="form-group" style={{ marginBottom: 14 }}>
+              <label className="form-label">End month</label>
+              <input type="month" value={pipelineForm.expected_end_month} onChange={e => setPipelineForm(f => ({ ...f, expected_end_month: e.target.value }))} />
+              {pipelineForm.expected_month && pipelineForm.expected_end_month && (() => {
+                const count = plMonthCount(pipelineForm.expected_month + '-01', pipelineForm.expected_end_month + '-01')
+                const total = Number(pipelineForm.estimated_amount || 0) * count
+                return <div className="form-hint">{count} month{count !== 1 ? 's' : ''} · total {fmtEuro(total)}</div>
+              })()}
+            </div>
+          )}
+          {pipelineForm.deal_type === 'fixed' && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <label className="form-label" style={{ margin: 0 }}>Payment schedule</label>
+                <button className="btn btn-secondary btn-xs" onClick={addScheduleRow} type="button">+ Add month</button>
+              </div>
+              {pipelineForm.schedule.length === 0 && (
+                <div style={{ fontSize: 12, color: 'var(--c4)', padding: '10px 0' }}>No payments added yet.</div>
+              )}
+              {pipelineForm.schedule.map((row, i) => (
+                <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                  <input type="month" value={row.month} onChange={e => updateScheduleRow(i, 'month', e.target.value)} style={{ flex: 1 }} />
+                  <div style={{ position: 'relative', flex: 1 }}>
+                    <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--c3)', fontSize: 13, pointerEvents: 'none' }}>€</span>
+                    <input type="number" value={row.amount} onChange={e => updateScheduleRow(i, 'amount', e.target.value)} placeholder="0" style={{ paddingLeft: 22, width: '100%' }} />
+                  </div>
+                  <button type="button" onClick={() => removeScheduleRow(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c4)', fontSize: 16, padding: '0 4px', lineHeight: 1 }}>×</button>
+                </div>
+              ))}
+              {pipelineForm.schedule.length > 0 && (
+                <div className="form-hint" style={{ textAlign: 'right' }}>Total: {fmtEuro(fixedScheduleTotal())}</div>
+              )}
+            </div>
+          )}
           <div className="form-group" style={{ marginBottom: 14 }}>
             <label className="form-label">Notes <span className="form-hint" style={{ display: 'inline' }}>optional</span></label>
             <textarea value={pipelineForm.notes} onChange={e => setPipelineForm(f => ({ ...f, notes: e.target.value }))} rows={2} style={{ resize: 'vertical' }} />
           </div>
-          {pipelineForm.estimated_amount && (
-            <div style={{ background: 'var(--navy-light)', border: '1px solid var(--navy)', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: 'var(--navy)', marginBottom: 14 }}>
-              Weighted value: <strong>{fmtEuro(Math.round(parseFloat(pipelineForm.estimated_amount) * parseInt(pipelineForm.probability) / 100))}</strong>
-            </div>
-          )}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
             <button className="btn btn-secondary btn-sm" onClick={() => setShowPipeline(false)}>Cancel</button>
             <button className="btn btn-primary btn-sm" onClick={savePipeline} disabled={pipelineSaving || !pipelineForm.title.trim()}>

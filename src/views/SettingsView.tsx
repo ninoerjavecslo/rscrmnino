@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useSettingsStore } from '../stores/settings'
+import { toast } from '../lib/toast'
 
 const FUNCTIONS_URL = import.meta.env.VITE_SUPABASE_URL?.replace('.supabase.co', '.supabase.co/functions/v1')
 const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -20,6 +22,62 @@ function TelegramIcon() {
 // ── Settings view ─────────────────────────────────────────────────────────────
 
 export function SettingsView() {
+  const settingsStore = useSettingsStore()
+  const [agencyInput, setAgencyInput] = useState('')
+  const [agencySaving, setAgencySaving] = useState(false)
+  const [editingAgency, setEditingAgency] = useState(false)
+
+  // ── project managers ──────────────────────────────────────────────────────
+  const [pmInput, setPmInput] = useState('')
+  const [pmSaving, setPmSaving] = useState(false)
+
+  useEffect(() => {
+    settingsStore.fetch().then(() => {
+      setAgencyInput(settingsStore.agencyName)
+      setEditingAgency(!settingsStore.agencyName)
+    })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function saveAgency() {
+    setAgencySaving(true)
+    try {
+      await settingsStore.setAgencyName(agencyInput.trim())
+      toast('success', 'Agency name saved')
+      setEditingAgency(false)
+    } catch {
+      toast('error', 'Failed to save')
+    } finally {
+      setAgencySaving(false)
+    }
+  }
+
+  async function addPM() {
+    const name = pmInput.trim()
+    if (!name || settingsStore.projectManagers.includes(name)) return
+    setPmSaving(true)
+    try {
+      await settingsStore.setProjectManagers([...settingsStore.projectManagers, name])
+      setPmInput('')
+      toast('success', `${name} added`)
+    } catch {
+      toast('error', 'Failed to save')
+    } finally {
+      setPmSaving(false)
+    }
+  }
+
+  async function removePM(name: string) {
+    setPmSaving(true)
+    try {
+      await settingsStore.setProjectManagers(settingsStore.projectManagers.filter(m => m !== name))
+      toast('success', `${name} removed`)
+    } catch {
+      toast('error', 'Failed to save')
+    } finally {
+      setPmSaving(false)
+    }
+  }
+
   const [linked, setLinked] = useState<boolean | null>(null)
   const [linkedAt, setLinkedAt] = useState<string | null>(null)
   const [linkCode, setLinkCode] = useState<string | null>(null)
@@ -105,6 +163,92 @@ export function SettingsView() {
       </div>
 
       <div className="page-content">
+        {/* Studio Section */}
+        <div className="card" style={{ padding: 24, maxWidth: 560, marginBottom: 20 }}>
+          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--c1)', marginBottom: 4 }}>Studio</div>
+          <div className="text-muted" style={{ fontSize: 13, marginBottom: 20 }}>Your agency name is used for internal/non-billable domains.</div>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">Agency name</label>
+            {editingAgency ? (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  value={agencyInput}
+                  onChange={e => setAgencyInput(e.target.value)}
+                  placeholder="e.g. Renderspace d.o.o."
+                  onKeyDown={e => e.key === 'Enter' && saveAgency()}
+                  style={{ flex: 1 }}
+                  autoFocus
+                />
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={saveAgency}
+                  disabled={agencySaving || !agencyInput.trim()}
+                >
+                  {agencySaving ? 'Saving…' : 'Save'}
+                </button>
+                {settingsStore.agencyName && (
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => { setAgencyInput(settingsStore.agencyName); setEditingAgency(false) }}
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 14, color: 'var(--c1)', fontWeight: 500 }}>
+                  {settingsStore.agencyName || <span className="text-muted">Not set</span>}
+                </span>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => { setAgencyInput(settingsStore.agencyName); setEditingAgency(true) }}
+                >
+                  Edit
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Project Managers Section */}
+        <div className="card" style={{ padding: 24, maxWidth: 560, marginBottom: 20 }}>
+          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--c1)', marginBottom: 4 }}>Project Managers</div>
+          <div className="text-muted" style={{ fontSize: 13, marginBottom: 20 }}>People available as project managers in project forms.</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+            {settingsStore.projectManagers.map(name => (
+              <div key={name} style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                background: 'var(--c7)', borderRadius: 'var(--r)',
+                padding: '5px 10px', fontSize: 13, color: 'var(--c1)',
+              }}>
+                <span>{name}</span>
+                <button
+                  onClick={() => removePM(name)}
+                  disabled={pmSaving}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c4)', fontSize: 15, lineHeight: 1, padding: 0 }}
+                >×</button>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              value={pmInput}
+              onChange={e => setPmInput(e.target.value)}
+              placeholder="Add name…"
+              onKeyDown={e => e.key === 'Enter' && addPM()}
+              style={{ flex: 1 }}
+            />
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={addPM}
+              disabled={pmSaving || !pmInput.trim()}
+            >
+              Add
+            </button>
+          </div>
+        </div>
+
         {/* Telegram Bot Section */}
         <div className="card" style={{ padding: 24, maxWidth: 560 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>

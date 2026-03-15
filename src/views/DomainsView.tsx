@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useDomainsStore } from '../stores/domains'
 import { useClientsStore } from '../stores/clients'
+import { useSettingsStore } from '../stores/settings'
 import { supabase } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import type { Domain } from '../lib/types'
@@ -15,6 +16,19 @@ function daysUntil(d: string) {
 function fmtDate(d: string) {
   const [y, m, day] = d.split('-')
   return `${day}/${m}/${y}`
+}
+// Parse dd/mm/yyyy → YYYY-MM-DD (for storage)
+function parseDMY(s: string): string {
+  const parts = s.split('/')
+  if (parts.length !== 3 || parts[2].length !== 4) return s
+  return `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`
+}
+// Convert YYYY-MM-DD → dd/mm/yyyy (for display in text input)
+function isoToDMY(s: string): string {
+  if (!s) return ''
+  const [y, m, d] = s.split('-')
+  if (!y || !m || !d) return s
+  return `${d}/${m}/${y}`
 }
 function fmtEur(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 0 }) + ' €'
@@ -55,34 +69,31 @@ function ExpiryBadge({ expiryDate }: { expiryDate: string }) {
 
 // ── Domain row input (in add modal) ──────────────────────────────────────────
 
-interface DomainRow { domain_name: string; expiry_date: string; yearly_amount: string; isRenewal: boolean }
+interface DomainRow { domain_name: string; registered_date: string; expiry_date: string; yearly_amount: string }
 
 function DomainRowInputs({ rows, onChange }: { rows: DomainRow[]; onChange: (r: DomainRow[]) => void }) {
   function update<K extends keyof DomainRow>(i: number, f: K, v: DomainRow[K]) {
     onChange(rows.map((r, idx) => idx === i ? { ...r, [f]: v } : r))
   }
-  function add()     { onChange([...rows, { domain_name: '', expiry_date: '', yearly_amount: '', isRenewal: false }]) }
+  function add()     { onChange([...rows, { domain_name: '', registered_date: '', expiry_date: '', yearly_amount: '' }]) }
   function remove(i: number) { onChange(rows.filter((_, idx) => idx !== i)) }
 
-  const cols = '2fr 155px 90px 105px 32px'
+  const cols = '2fr 140px 140px 90px 32px'
   return (
     <div>
       <div style={{display:'grid',gridTemplateColumns:cols,gap:'4px 10px',marginBottom:6,paddingBottom:4,borderBottom:'1px solid var(--c6)'}}>
         <span className="form-label" style={{margin:0}}>Domain</span>
+        <span className="form-label" style={{margin:0}}>Purchased</span>
         <span className="form-label" style={{margin:0}}>Expiry date</span>
         <span className="form-label" style={{margin:0}}>€ / year</span>
-        <span className="form-label" style={{margin:0}}>Type</span>
         <span></span>
       </div>
       {rows.map((row, i) => (
         <div key={i} style={{display:'grid',gridTemplateColumns:cols,gap:'6px 10px',alignItems:'center',marginBottom:8}}>
           <input value={row.domain_name} onChange={e => update(i,'domain_name',e.target.value)} placeholder="example.si" style={{height:36}} />
-          <input type="date" value={row.expiry_date} onChange={e => update(i,'expiry_date',e.target.value)} style={{height:36,width:'100%'}} />
+          <input type="text" value={isoToDMY(row.registered_date)} onChange={e => update(i,'registered_date',parseDMY(e.target.value))} placeholder="DD/MM/YYYY" style={{height:36,width:'100%'}} />
+          <input type="text" value={isoToDMY(row.expiry_date)} onChange={e => update(i,'expiry_date',parseDMY(e.target.value))} placeholder="DD/MM/YYYY" style={{height:36,width:'100%'}} />
           <input type="number" value={row.yearly_amount} onChange={e => update(i,'yearly_amount',e.target.value)} placeholder="25" style={{height:36}} />
-          <div style={{display:'flex',border:'1px solid var(--c6)',borderRadius:6,overflow:'hidden',height:36}}>
-            <button type="button" onClick={() => update(i,'isRenewal',false)} style={{flex:1,fontSize:11,fontWeight:700,border:'none',cursor:'pointer',background:!row.isRenewal?'var(--navy)':'#fff',color:!row.isRenewal?'#fff':'var(--c4)'}}>New</button>
-            <button type="button" onClick={() => update(i,'isRenewal',true)} style={{flex:1,fontSize:11,fontWeight:700,border:'none',borderLeft:'1px solid var(--c6)',cursor:'pointer',background:row.isRenewal?'var(--amber)':'#fff',color:row.isRenewal?'#fff':'var(--c4)'}}>Renew</button>
-          </div>
           <button onClick={() => remove(i)} disabled={rows.length === 1}
             style={{width:32,height:36,border:'1px solid var(--c6)',borderRadius:6,background:'#fff',cursor:'pointer',color:'var(--c4)',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>×</button>
         </div>
@@ -225,6 +236,7 @@ function Step2Panel({
 export function DomainsView() {
   const store   = useDomainsStore()
   const cStore  = useClientsStore()
+  const settingsStore = useSettingsStore()
   const [showAdd, setShowAdd]           = useState(false)
   const [saving, setSaving]             = useState(false)
   const [search, setSearch]             = useState('')
@@ -246,7 +258,7 @@ export function DomainsView() {
   const [showNewClient, setShowNewClient]     = useState(false)
   const [projectPn, setProjectPn]             = useState('')
   const [contractId, setContractId]           = useState('')
-  const [domainRows, setDomainRows]           = useState<DomainRow[]>([{ domain_name: '', expiry_date: '', yearly_amount: '', isRenewal: false }])
+  const [domainRows, setDomainRows]           = useState<DomainRow[]>([{ domain_name: '', registered_date: '', expiry_date: '', yearly_amount: '' }])
   const [domainError, setDomainError]         = useState<string | null>(null)
 
   // Invoice planning (add form)
@@ -260,7 +272,7 @@ export function DomainsView() {
 
   // Step 2 / snapshot state
   const [paymentDays, setPaymentDays]                       = useState(30)
-  const [domainRowsSnapshot, setDomainRowsSnapshot]         = useState<DomainRow[]>([])
+  const [, setDomainRowsSnapshot]         = useState<DomainRow[]>([])
   const [invoicePlanMonthSnap, setInvoicePlanMonthSnap]     = useState('')
   const [invoicePlanStatusSnap, setInvoicePlanStatusSnap]   = useState<'planned' | 'issued' | null>(null)
 
@@ -283,7 +295,9 @@ export function DomainsView() {
   const [invoiceSaving, setInvoiceSaving]   = useState(false)
   const [domainBillingStatus, setDomainBillingStatus] = useState<Map<string, 'planned' | 'billed'>>(new Map())
 
-  useEffect(() => { store.fetchAll(); cStore.fetchAll() }, [])
+  const [isOwn, setIsOwn] = useState(false)
+
+  useEffect(() => { store.fetchAll(); cStore.fetchAll(); settingsStore.fetch() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     async function fetchDomainBilling() {
@@ -396,8 +410,8 @@ export function DomainsView() {
 
   function resetAddForm() {
     setClientId(''); setProjectPn(''); setContractId('')
-    setNewClientName(''); setShowNewClient(false)
-    setDomainRows([{ domain_name: '', expiry_date: '', yearly_amount: '', isRenewal: false }])
+    setNewClientName(''); setShowNewClient(false); setIsOwn(false)
+    setDomainRows([{ domain_name: '', registered_date: '', expiry_date: '', yearly_amount: '' }])
     setDomainError(null)
     setInvoicePlanMonth('')
     setInvoicePlanStatus(null)
@@ -406,8 +420,8 @@ export function DomainsView() {
   // Single actions
   async function handleSave(keepOpen = false) {
     const valid = domainRows.filter(r => r.domain_name && r.expiry_date)
-    if (!clientId && !showNewClient) { setDomainError('Select or create a client'); return }
-    if (showNewClient && !newClientName.trim()) { setDomainError('Enter a client name'); return }
+    if (!isOwn && !clientId && !showNewClient) { setDomainError('Select or create a client'); return }
+    if (!isOwn && showNewClient && !newClientName.trim()) { setDomainError('Enter a client name'); return }
     if (valid.length === 0) { setDomainError('Add at least one domain with a name and expiry date'); return }
     setDomainError(null)
     setSaving(true)
@@ -416,7 +430,7 @@ export function DomainsView() {
     const planStatus = invoicePlanStatus
     try {
       let resolvedClientId = clientId
-      if (showNewClient) {
+      if (!isOwn && showNewClient) {
         const { data: newClient, error: ce } = await supabase
           .from('clients').insert({ name: newClientName.trim() }).select('id').single()
         if (ce) throw ce
@@ -429,11 +443,13 @@ export function DomainsView() {
       setInvoicePlanMonthSnap(planMonth)
       setInvoicePlanStatusSnap(planStatus)
 
-      const inserted = await store.addDomains(resolvedClientId, projectPn, valid.map(r => ({
-        domain_name:   r.domain_name,
-        expiry_date:   r.expiry_date,
-        yearly_amount: r.yearly_amount ? parseFloat(r.yearly_amount) : undefined,
-        contract_id:   contractId || undefined,
+      const inserted = await store.addDomains(isOwn ? null : (resolvedClientId ?? null), projectPn, valid.map(r => ({
+        domain_name:     r.domain_name,
+        registered_date: r.registered_date || undefined,
+        expiry_date:     r.expiry_date,
+        yearly_amount:   r.yearly_amount ? parseFloat(r.yearly_amount) : undefined,
+        contract_id:     contractId || undefined,
+        billable:        !isOwn,
       })))
 
       // Insert revenue_planner rows if invoice month was set
@@ -499,8 +515,7 @@ export function DomainsView() {
     const dateStr = `${today.getDate()}. ${today.getMonth() + 1}. ${today.getFullYear()}`
     const header = `Stranka: ${savedDomains[0]?.client?.name ?? '—'}\nDatum storitve: ${dateStr}\nRok plačila: ${paymentDays} dni`
     const lines = savedDomains.map(d => {
-      const verb = (domainRowsSnapshot.find(r => r.domain_name === d.domain_name)?.isRenewal)
-        ? 'Podaljšanje' : 'Zakup'
+      const verb = 'Zakup'
       const expiry = fmtSloDate(d.expiry_date)
       const amount = d.yearly_amount != null ? ` — ${d.yearly_amount} EUR` : ''
       return `${d.project_pn} — ${verb} domene ${d.domain_name} za 1 leto (velja do ${expiry})${amount}`
@@ -836,7 +851,22 @@ export function DomainsView() {
           <>
             {domainError && <div className="alert alert-red" style={{marginBottom:12}}>{domainError}</div>}
 
+            {/* Own agency domain toggle */}
+            <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',marginBottom:12,fontSize:13,fontWeight:500,color:'var(--c1)'}}>
+              <input
+                type="checkbox"
+                checked={isOwn}
+                onChange={e => { setIsOwn(e.target.checked); setClientId(''); setShowNewClient(false) }}
+                style={{width:15,height:15,cursor:'pointer'}}
+              />
+              This is our agency domain
+              {settingsStore.agencyName && (
+                <span className="form-hint" style={{fontSize:11,marginLeft:4}}>({settingsStore.agencyName}) — will be set as non-billable</span>
+              )}
+            </label>
+
             {/* Client */}
+            {!isOwn && (
             <div className="form-group" style={{marginBottom:12}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
                 <label className="form-label" style={{marginBottom:0}}>Client</label>
@@ -856,6 +886,7 @@ export function DomainsView() {
                 />
               )}
             </div>
+            )}
 
             {/* Project # + Contract ID */}
             <div className="form-row" style={{marginBottom:14}}>
@@ -949,7 +980,7 @@ export function DomainsView() {
             </div>
             <div className="form-group">
               <label className="form-label">Expiry date</label>
-              <input type="date" value={editDomain.expiry_date} onChange={e => setEditDomain(d => d ? {...d, expiry_date: e.target.value} : d)} />
+              <input type="text" value={isoToDMY(editDomain.expiry_date)} onChange={e => setEditDomain(d => d ? {...d, expiry_date: parseDMY(e.target.value)} : d)} placeholder="DD/MM/YYYY" />
             </div>
           </div>
           <div className="form-row" style={{marginBottom:14}}>

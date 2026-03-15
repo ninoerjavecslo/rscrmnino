@@ -256,6 +256,7 @@ td {
 }
 tr:last-child td { border-bottom: none; }
 tbody tr:hover td { background: var(--c8); }
+table.no-row-hover tbody tr:hover td { background: inherit; }
 .td-right { text-align: right; }
 .th-right { text-align: right; }
 .table-link { font-weight: 700; color: var(--c0); cursor: pointer; }

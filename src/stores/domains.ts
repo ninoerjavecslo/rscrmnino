@@ -14,7 +14,7 @@ interface DomainState {
 
   // Actions
   fetchAll: () => Promise<void>
-  addDomains: (clientId: string, projectPn: string, entries: { domain_name: string; expiry_date: string; yearly_amount?: number; contract_id?: string; accounting_email?: boolean }[]) => Promise<Domain[]>
+  addDomains: (clientId: string | null, projectPn: string, entries: { domain_name: string; registered_date?: string; expiry_date: string; yearly_amount?: number; contract_id?: string; accounting_email?: boolean }[]) => Promise<Domain[]>
   updateDomain: (id: string, data: Partial<Omit<Domain, 'id' | 'status' | 'client'>>) => Promise<void>
   deleteDomain: (id: string) => Promise<void>
 }
@@ -69,6 +69,7 @@ export const useDomainsStore = create<DomainState>((set, get) => ({
       client_id: clientId,
       project_pn: projectPn,
       domain_name: e.domain_name,
+      registered_date: e.registered_date ?? null,
       expiry_date: e.expiry_date,
       yearly_amount: e.yearly_amount ?? null,
       contract_id: e.contract_id ?? null,

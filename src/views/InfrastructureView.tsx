@@ -5,6 +5,7 @@ import { useProjectsStore } from '../stores/projects'
 import { supabase } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import type { HostingClient } from '../lib/types'
+import { hostingContractValue } from '../lib/types'
 import { Select } from '../components/Select'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -39,14 +40,14 @@ function useHostingForm() {
     client_id: '', project_pn: '', description: '',
     cycle: 'monthly' as 'monthly' | 'yearly',
     amount: '', billing_since: '', next_invoice_date: '',
-    invoice_month: '', already_billed: false, contract_id: '',
+    invoice_month: '', already_billed: false, contract_id: '', contract_expiry: '',
   })
   function set(field: string, val: string | boolean) { setForm(f => ({ ...f, [field]: val })) }
   function reset() {
     setForm({
       client_id: '', project_pn: '', description: '',
       cycle: 'monthly', amount: '', billing_since: '', next_invoice_date: '',
-      invoice_month: '', already_billed: false, contract_id: '',
+      invoice_month: '', already_billed: false, contract_id: '', contract_expiry: '',
     })
   }
   return { form, set, reset }
@@ -85,6 +86,8 @@ export function InfrastructureView() {
   const [cancelTarget, setCancelTarget] = useState<HostingClient | null>(null)
   const [cancelFromMonth, setCancelFromMonth] = useState('')
   const [cancelling, setCancelling] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<HostingClient | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => { store.fetchAll(); cStore.fetchAll(); pStore.fetchAll() }, [])
 
@@ -192,6 +195,7 @@ export function InfrastructureView() {
           accounting_email:  false,
           notes:             null,
           contract_id:       hosting.form.contract_id || null,
+          contract_expiry:   hosting.form.contract_expiry ? hosting.form.contract_expiry + '-01' : null,
         })
         .select('id')
         .single()
@@ -209,9 +213,12 @@ export function InfrastructureView() {
       if (invoiceMonth) {
         if (hosting.form.cycle === 'monthly') {
           const [y, m] = invoiceMonth.split('-').map(Number)
+          const expiryStr = hosting.form.contract_expiry  // YYYY-MM
           const rows = Array.from({ length: 12 }, (_, i) => {
             const d = new Date(y, m - 1 + i, 1)
             const monthStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+            // Stop at contract expiry
+            if (expiryStr && monthStr > expiryStr + '-01') return null
             return {
               hosting_client_id: hostingClientId,
               month:          monthStr,
@@ -221,8 +228,8 @@ export function InfrastructureView() {
               notes:          desc,
               probability:    100,
             }
-          })
-          await supabase.from('revenue_planner').insert(rows)
+          }).filter(Boolean)
+          if (rows.length > 0) await supabase.from('revenue_planner').insert(rows)
         } else {
           const monthVal = hosting.form.next_invoice_date || hosting.form.billing_since || (invoiceMonth + '-01')
           await supabase.from('revenue_planner').insert({
@@ -270,6 +277,22 @@ export function InfrastructureView() {
     }
   }
 
+  async function handleDeleteHosting() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      await supabase.from('revenue_planner').delete().eq('hosting_client_id', deleteTarget.id)
+      await supabase.from('hosting_clients').delete().eq('id', deleteTarget.id)
+      await store.fetchAll()
+      toast('success', 'Hosting client deleted')
+      setDeleteTarget(null)
+    } catch (err) {
+      toast('error', (err as Error).message)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   async function handleSaveEditHosting() {
     const h = editHosting.form
     if (!h) return
@@ -286,6 +309,7 @@ export function InfrastructureView() {
         status:            h.status,
         accounting_email:  h.accounting_email,
         contract_id:       h.contract_id || null,
+        contract_expiry:   h.contract_expiry || null,
       })
       toast('success', 'Hosting client updated')
       editHosting.close()
@@ -376,7 +400,7 @@ export function InfrastructureView() {
               </thead>
               <tbody>
                 {store.hostingClients.map((h: HostingClient) => {
-                  const annualTotal = h.cycle === 'monthly' ? h.amount * 12 : h.amount
+                  const annualTotal = hostingContractValue(h)
                   const isStandalone = !h.maintenance_id
                   const entry = h.status === 'active' ? billingStatus.get(h.id) : undefined
                   return (
@@ -425,7 +449,7 @@ export function InfrastructureView() {
                         )}
                       </td>
                       <td>
-                        <div style={{display:'flex',gap:4}}>
+                        <div style={{display:'flex',gap:4,alignItems:'center'}}>
                           <button className="btn btn-secondary btn-xs" onClick={() => editHosting.open(h)}>Edit</button>
                           {h.status === 'active' && (
                             <button className="btn btn-xs" style={{background:'var(--red)',color:'#fff',border:'none'}}
@@ -433,6 +457,9 @@ export function InfrastructureView() {
                               Cancel
                             </button>
                           )}
+                          <button className="btn btn-ghost btn-xs" onClick={() => setDeleteTarget(h)} title="Delete" style={{color:'var(--red)'}}>
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -460,11 +487,11 @@ export function InfrastructureView() {
       <Modal open={showAddHosting} title="Add Hosting Client" maxWidth={580} onClose={() => setShowAddHosting(false)}
         footer={<>
           <button className="btn btn-secondary btn-sm" onClick={() => setShowAddHosting(false)}>Cancel</button>
-          <button className="btn btn-primary btn-sm" onClick={handleAddHosting} disabled={saving}>{saving ? <span className="spinner"/> : null} Add client</button>
+          <button className="btn btn-primary btn-sm" onClick={handleAddHosting} disabled={saving || !hosting.form.client_id || !hosting.form.project_pn || !hosting.form.amount}>{saving ? <span className="spinner"/> : null} Add client</button>
         </>}>
         <div className="form-row" style={{marginBottom:14}}>
           <div className="form-group">
-            <label className="form-label">Client</label>
+            <label className="form-label">Client <span style={{color:'var(--red)'}}>*</span></label>
             <Select
               value={showNewClient ? '__new__' : hosting.form.client_id}
               onChange={val => {
@@ -494,7 +521,7 @@ export function InfrastructureView() {
             )}
           </div>
           <div className="form-group">
-            <label className="form-label">Project #</label>
+            <label className="form-label">Project # <span style={{color:'var(--red)'}}>*</span></label>
             <input placeholder="RS-2026-001" value={hosting.form.project_pn} onChange={e => hosting.set('project_pn', e.target.value)} />
           </div>
         </div>
@@ -519,7 +546,7 @@ export function InfrastructureView() {
               ]}
             />
           </div>
-          <div className="form-group"><label className="form-label">Amount (€)</label><input type="number" placeholder="120" value={hosting.form.amount} onChange={e => hosting.set('amount', e.target.value)} /></div>
+          <div className="form-group"><label className="form-label">Amount (€) <span style={{color:'var(--red)'}}>*</span></label><input type="number" placeholder="120" value={hosting.form.amount} onChange={e => hosting.set('amount', e.target.value)} /></div>
         </div>
         <div className="form-row" style={{marginBottom:16}}>
           <div className="form-group"><label className="form-label">Billing since</label><input type="month" value={hosting.form.billing_since?.slice(0,7) ?? ''} onChange={e => {
@@ -538,10 +565,16 @@ export function InfrastructureView() {
           )}
         </div>
 
-        {/* Contract ID */}
-        <div className="form-group" style={{marginBottom:14}}>
-          <label className="form-label">Contract / Order ID <span className="form-hint" style={{display:'inline',marginLeft:4}}>optional</span></label>
-          <input placeholder="e.g. PO-2026-042" value={hosting.form.contract_id ?? ''} onChange={e => hosting.set('contract_id', e.target.value)} />
+        {/* Contract ID + Expiry */}
+        <div className="form-row" style={{marginBottom:14}}>
+          <div className="form-group">
+            <label className="form-label">Contract / Order ID <span className="form-hint" style={{display:'inline',marginLeft:4}}>optional</span></label>
+            <input placeholder="e.g. PO-2026-042" value={hosting.form.contract_id ?? ''} onChange={e => hosting.set('contract_id', e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Contract expiry <span className="form-hint" style={{display:'inline',marginLeft:4}}>optional</span></label>
+            <input type="month" value={hosting.form.contract_expiry ?? ''} onChange={e => hosting.set('contract_expiry', e.target.value)} />
+          </div>
         </div>
 
         {/* Invoice planning */}
@@ -565,7 +598,7 @@ export function InfrastructureView() {
           {(hosting.form.cycle === 'monthly' ? hosting.form.invoice_month : hosting.form.next_invoice_date) && (
             <div className="form-hint" style={{marginTop:6}}>
               {hosting.form.cycle === 'monthly'
-                ? `Will create 12 monthly rows from ${hosting.form.invoice_month}${hosting.form.already_billed ? ' (first marked as issued)' : ''}`
+                ? `Will create ${hosting.form.contract_expiry ? 'rows' : '12'} monthly rows from ${hosting.form.invoice_month}${hosting.form.contract_expiry ? ` until ${hosting.form.contract_expiry}` : ''}${hosting.form.already_billed ? ' (first marked as issued)' : ''}`
                 : `Will create 1 invoice row for ${hosting.form.next_invoice_date?.slice(0,7)}${hosting.form.already_billed ? ' (marked as issued)' : ''}`
               }
             </div>
@@ -605,6 +638,24 @@ export function InfrastructureView() {
           </div>
         )}
       </Modal>
+
+      {/* Delete Hosting modal */}
+      {deleteTarget && (
+        <Modal open title="Delete hosting client" maxWidth={420} onClose={() => setDeleteTarget(null)}
+          footer={<>
+            <button className="btn btn-secondary btn-sm" onClick={() => setDeleteTarget(null)}>Cancel</button>
+            <button className="btn btn-sm" style={{background:'var(--red)',color:'#fff',border:'none'}} onClick={handleDeleteHosting} disabled={deleting}>
+              {deleting ? '…' : 'Delete'}
+            </button>
+          </>}>
+          <p style={{margin:'0 0 8px',fontSize:14}}>
+            Delete <strong>{deleteTarget.description || deleteTarget.project_pn}</strong> for <strong>{deleteTarget.client?.name}</strong>?
+          </p>
+          <p style={{margin:0,fontSize:13,color:'var(--c3)'}}>
+            This will also delete all invoice plan rows linked to this hosting client.
+          </p>
+        </Modal>
+      )}
 
       {/* Edit Hosting Client modal */}
       <Modal open={!!editHosting.form} title="Edit Hosting Client" onClose={editHosting.close}
@@ -673,6 +724,12 @@ export function InfrastructureView() {
                 <input placeholder="e.g. PO-2026-042" value={editHosting.form.contract_id ?? ''} onChange={e => editHosting.set('contract_id', e.target.value)} />
               </div>
               <div className="form-group">
+                <label className="form-label">Contract expiry <span className="form-hint" style={{display:'inline',marginLeft:4}}>optional</span></label>
+                <input type="month" value={editHosting.form.contract_expiry?.slice(0,7) ?? ''} onChange={e => editHosting.set('contract_expiry', e.target.value ? e.target.value + '-01' : '')} />
+              </div>
+            </div>
+            <div className="form-row" style={{marginBottom:14}}>
+              <div className="form-group" style={{flex:'none',width:'48%'}}>
                 <label className="form-label">Status</label>
                 <Select
                   value={editHosting.form.status}

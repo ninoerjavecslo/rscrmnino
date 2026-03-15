@@ -50,7 +50,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
 
         <div className="sidebar-divider" />
 
-        <div className="sidebar-group-label">Infrastructure</div>
+        <div className="sidebar-group-label">Domains &amp; Hosting</div>
         <NavLink to="/infrastructure" className={nav}><IconServer /> Hosting</NavLink>
         <NavLink to="/domains"        className={nav}><IconGlobe /> Domains</NavLink>
 

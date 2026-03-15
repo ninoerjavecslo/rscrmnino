@@ -223,21 +223,32 @@ export function SalesView() {
 
   const activeItems = items.filter(i => i.status !== 'won' && i.status !== 'lost')
   const totalFace = activeItems.reduce((s, i) => s + dealTotal(i), 0)
-  const totalWeighted = activeItems.reduce((s, i) => s + dealTotal(i) * i.probability / 100, 0)
+  // Scenario totals: probability = chance of winning client (full amount or nothing)
+  const likelyItems = activeItems.filter(i => i.probability >= 50)
+  const hopefulItems = activeItems.filter(i => i.probability >= 25)
+  const totalLikely = likelyItems.reduce((s, i) => s + dealTotal(i), 0)
+  const totalHopefully = hopefulItems.reduce((s, i) => s + dealTotal(i), 0)
   const totalWon = items.filter(i => i.status === 'won').reduce((s, i) => s + dealTotal(i), 0)
 
-  // Forecast by month
-  const forecastMap = new Map<string, { face: number; weighted: number; count: number }>()
+  // Forecast by month — two scenario columns
+  const forecastMap = new Map<string, { face: number; likely: number; hopefully: number; count: number }>()
   for (const item of activeItems) {
-    const prob = item.probability / 100
+    const isLikely = item.probability >= 50
+    const isHopeful = item.probability >= 25
+
+    const addToMonth = (key: string, amt: number) => {
+      if (!forecastMap.has(key)) forecastMap.set(key, { face: 0, likely: 0, hopefully: 0, count: 0 })
+      const g = forecastMap.get(key)!
+      g.face += amt
+      if (isLikely) g.likely += amt
+      if (isHopeful) g.hopefully += amt
+      g.count += 1
+    }
+
     if (item.deal_type === 'fixed' && item.monthly_schedule?.length) {
       for (const row of item.monthly_schedule) {
         const key = row.month.length === 7 ? row.month + '-01' : row.month
-        if (!forecastMap.has(key)) forecastMap.set(key, { face: 0, weighted: 0, count: 0 })
-        const g = forecastMap.get(key)!
-        g.face += row.amount
-        g.weighted += row.amount * prob
-        g.count += 1
+        addToMonth(key, row.amount)
       }
     } else if (item.deal_type === 'monthly' && item.expected_month && item.expected_end_month) {
       const amt = item.estimated_amount ?? 0
@@ -246,21 +257,13 @@ export function SalesView() {
       const cur = new Date(s)
       while (cur <= e) {
         const key = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-01`
-        if (!forecastMap.has(key)) forecastMap.set(key, { face: 0, weighted: 0, count: 0 })
-        const g = forecastMap.get(key)!
-        g.face += amt
-        g.weighted += amt * prob
-        g.count += 1
+        addToMonth(key, amt)
         cur.setMonth(cur.getMonth() + 1)
       }
     } else if (item.expected_month) {
       const amt = item.estimated_amount ?? 0
       const key = item.expected_month.length === 7 ? item.expected_month + '-01' : item.expected_month
-      if (!forecastMap.has(key)) forecastMap.set(key, { face: 0, weighted: 0, count: 0 })
-      const g = forecastMap.get(key)!
-      g.face += amt
-      g.weighted += amt * prob
-      g.count += 1
+      addToMonth(key, amt)
     }
   }
   const forecastRows = [...forecastMap.entries()].sort(([a], [b]) => a.localeCompare(b))
@@ -286,21 +289,21 @@ export function SalesView() {
         <div className="stat-card" style={{ '--left-color': 'var(--amber, #d97706)' } as React.CSSProperties}>
           <div className="stat-card-label">ACTIVE DEALS</div>
           <div className="stat-card-value">{activeItems.length}</div>
-          <div className="stat-card-sub">{items.length} total</div>
+          <div className="stat-card-sub">{fmtEuro(totalFace)} face value</div>
         </div>
         <div className="stat-card" style={{ '--left-color': 'var(--navy)' } as React.CSSProperties}>
-          <div className="stat-card-label">PIPELINE (FACE VALUE)</div>
-          <div className="stat-card-value" style={{ color: 'var(--navy)' }}>{fmtEuro(totalFace)}</div>
-          <div className="stat-card-sub">all active deals</div>
+          <div className="stat-card-label">LIKELY SCENARIO</div>
+          <div className="stat-card-value" style={{ color: 'var(--navy)' }}>{fmtEuro(totalLikely) || '—'}</div>
+          <div className="stat-card-sub">{likelyItems.length} deals at ≥50% probability</div>
         </div>
         <div className="stat-card" style={{ '--left-color': 'var(--blue)' } as React.CSSProperties}>
-          <div className="stat-card-label">WEIGHTED FORECAST</div>
-          <div className="stat-card-value" style={{ color: 'var(--blue)' }}>{fmtEuro(Math.round(totalWeighted))}</div>
-          <div className="stat-card-sub">probability-adjusted</div>
+          <div className="stat-card-label">HOPEFULLY SCENARIO</div>
+          <div className="stat-card-value" style={{ color: 'var(--blue)' }}>{fmtEuro(totalHopefully) || '—'}</div>
+          <div className="stat-card-sub">{hopefulItems.length} deals at ≥25% probability</div>
         </div>
         <div className="stat-card" style={{ '--left-color': 'var(--green)' } as React.CSSProperties}>
           <div className="stat-card-label">WON</div>
-          <div className="stat-card-value" style={{ color: 'var(--green)' }}>{fmtEuro(totalWon)}</div>
+          <div className="stat-card-value" style={{ color: 'var(--green)' }}>{fmtEuro(totalWon) || '—'}</div>
           <div className="stat-card-sub">{items.filter(i => i.status === 'won').length} deals closed</div>
         </div>
       </div>
@@ -335,7 +338,7 @@ export function SalesView() {
                   <th>TYPE</th>
                   <th className="th-right">AMOUNT</th>
                   <th className="th-right">PROB</th>
-                  <th className="th-right">WEIGHTED</th>
+                  <th>SCENARIO</th>
                   <th>PERIOD</th>
                   <th></th>
                 </tr>
@@ -344,7 +347,12 @@ export function SalesView() {
                 {filtered.map(item => {
                   const name = item.company_name ?? item.client?.name ?? '—'
                   const total = dealTotal(item)
-                  const weighted = total * item.probability / 100
+                  const scenarioLabel = item.status === 'won' ? { label: 'Won', cls: 'badge-green' }
+                    : item.status === 'lost' ? { label: 'Lost', cls: 'badge-red' }
+                    : item.probability >= 75 ? { label: 'Likely', cls: 'badge-navy' }
+                    : item.probability >= 50 ? { label: 'Likely', cls: 'badge-navy' }
+                    : item.probability >= 25 ? { label: 'Hopefully', cls: 'badge-blue' }
+                    : { label: 'Stretch', cls: 'badge-gray' }
                   return (
                     <tr key={item.id}>
                       <td>
@@ -383,8 +391,10 @@ export function SalesView() {
                           {item.probability}%
                         </span>
                       </td>
-                      <td className="td-right text-mono" style={{ color: 'var(--navy)', fontWeight: 600 }}>
-                        {total > 0 ? fmtEuro(Math.round(weighted)) : '—'}
+                      <td>
+                        <span className={`badge ${scenarioLabel.cls}`} style={{ fontSize: 10 }}>
+                          {scenarioLabel.label}
+                        </span>
                       </td>
                       <td style={{ fontSize: 12, color: 'var(--c2)' }}>
                         {item.deal_type === 'fixed' && item.monthly_schedule?.length ? (
@@ -420,7 +430,7 @@ export function SalesView() {
           <>
             <div className="section-bar" style={{ marginTop: 24, marginBottom: 10 }}>
               <h2>Forecast by Month</h2>
-              <span style={{ fontSize: 12, color: 'var(--c4)' }}>active deals only · probability-weighted</span>
+              <span style={{ fontSize: 12, color: 'var(--c4)' }}>active deals · scenario-based</span>
             </div>
             <div className="card">
               <table>
@@ -429,7 +439,8 @@ export function SalesView() {
                     <th>MONTH</th>
                     <th className="th-right">DEALS</th>
                     <th className="th-right">FACE VALUE</th>
-                    <th className="th-right">WEIGHTED</th>
+                    <th className="th-right" style={{ color: 'var(--navy)' }}>LIKELY (≥50%)</th>
+                    <th className="th-right" style={{ color: 'var(--blue)' }}>HOPEFULLY (≥25%)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -438,7 +449,8 @@ export function SalesView() {
                       <td style={{ fontWeight: 600 }}>{fmtMonth(key)}</td>
                       <td className="td-right text-mono" style={{ color: 'var(--c3)' }}>{g.count}</td>
                       <td className="td-right text-mono">{fmtEuro(g.face)}</td>
-                      <td className="td-right text-mono" style={{ color: 'var(--navy)', fontWeight: 700 }}>{fmtEuro(Math.round(g.weighted))}</td>
+                      <td className="td-right text-mono" style={{ color: 'var(--navy)', fontWeight: 700 }}>{g.likely > 0 ? fmtEuro(g.likely) : '—'}</td>
+                      <td className="td-right text-mono" style={{ color: 'var(--blue)', fontWeight: 700 }}>{g.hopefully > 0 ? fmtEuro(g.hopefully) : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -447,7 +459,8 @@ export function SalesView() {
                     <td style={{ fontWeight: 700, fontSize: 12, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total</td>
                     <td className="td-right text-mono" style={{ color: 'var(--c3)' }}>{activeItems.length}</td>
                     <td className="td-right text-mono" style={{ fontWeight: 700 }}>{fmtEuro(totalFace)}</td>
-                    <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)' }}>{fmtEuro(Math.round(totalWeighted))}</td>
+                    <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)' }}>{fmtEuro(totalLikely) || '—'}</td>
+                    <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--blue)' }}>{fmtEuro(totalHopefully) || '—'}</td>
                   </tr>
                 </tfoot>
               </table>

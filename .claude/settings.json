@@ -20,7 +20,12 @@
       "Bash(bash scripts/start-server.sh --project-dir /Users/nino/Documents/GitHub/rscrmnino)",
       "Read(//Users/nino/.claude/plugins/cache/claude-plugins-official/superpowers/**)",
       "Bash(/tmp/spec_check.txt:*)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(npm install:*)",
+      "Bash(python3 -c \":*)"
+    ],
+    "additionalDirectories": [
+      "/private/tmp"
     ]
   }
 }

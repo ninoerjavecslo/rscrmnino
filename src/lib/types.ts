@@ -26,6 +26,7 @@ export interface Project {
   status: 'active' | 'paused' | 'completed' | 'cancelled'
   pm?: string | null
   contract_value?: number | null
+  initial_contract_value?: number | null
   currency: string
   start_date?: string | null
   end_date?: string | null
@@ -69,6 +70,7 @@ export interface HostingClient {
   accounting_email?: boolean
   notes?: string | null
   contract_id?: string | null
+  contract_expiry?: string | null
   cancelled_from?: string | null
   // Joined
   client?: Pick<Client, 'id' | 'name'> | null
@@ -89,11 +91,13 @@ export interface Domain {
   client_id?: string | null
   project_pn: string
   domain_name: string
+  registered_date?: string | null
   expiry_date: string
   yearly_amount?: number | null
   contract_id?: string | null
   registrar?: string | null
   auto_renew: boolean
+  billable: boolean
   status: 'active' | 'expiring_soon' | 'expired'  // computed column in DB
   accounting_email?: boolean
   archived?: boolean
@@ -105,6 +109,7 @@ export interface Domain {
 export interface Maintenance {
   id: string
   client_id: string
+  project_pn?: string | null
   name: string
   monthly_retainer: number
   help_requests_included: number
@@ -143,7 +148,7 @@ export interface RevenuePlanner {
   month: string
   planned_amount?: number | null
   actual_amount?: number | null
-  status: 'planned' | 'paid' | 'issued' | 'retainer' | 'cost'
+  status: 'planned' | 'paid' | 'issued' | 'retainer' | 'cost' | 'deferred'
   probability: number  // 25 | 50 | 75 | 100
   invoice_id?: string | null
   notes?: string | null
@@ -178,10 +183,30 @@ export interface ChangeRequest {
   project_id: string
   title: string
   description?: string | null
-  status: 'pending' | 'approved'
+  status: 'pending' | 'approved' | 'billed'
   amount?: number | null
   notes?: string | null
+  probability?: number | null
+  deal_type?: 'one_time' | 'monthly' | 'fixed' | null
+  expected_month?: string | null
+  expected_end_month?: string | null
+  monthly_schedule?: Array<{ month: string; amount: number }> | null
   created_at: string
+}
+
+// ── Hosting contract value helper ────────────────────────────────────────────
+// Returns the total contract value, capped at contract_expiry if set.
+export function hostingContractValue(h: Pick<HostingClient, 'cycle' | 'amount' | 'billing_since' | 'contract_expiry'>): number {
+  if (h.cycle === 'monthly') {
+    if (h.contract_expiry && h.billing_since) {
+      const start = new Date(h.billing_since + 'T00:00:00')
+      const end = new Date(h.contract_expiry + 'T00:00:00')
+      const months = Math.max(1, (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth() + 1)
+      return h.amount * months
+    }
+    return h.amount * 12
+  }
+  return h.amount
 }
 
 // ── Supabase Database type for typed client ──────────────────────────────────

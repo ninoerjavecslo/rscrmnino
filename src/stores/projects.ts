@@ -9,6 +9,7 @@ interface ProjectsState {
   fetchAll: () => Promise<void>
   add: (data: Omit<Project, 'id' | 'client'>) => Promise<void>
   update: (id: string, data: Partial<Omit<Project, 'id' | 'client'>>) => Promise<void>
+  remove: (id: string) => Promise<void>
 }
 
 export const useProjectsStore = create<ProjectsState>((set, get) => ({
@@ -33,7 +34,9 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   },
 
   add: async (data) => {
-    const { error } = await supabase.from('projects').insert(data)
+    // Set initial_contract_value once at creation — never overwritten on edit
+    const insertData = { ...data, initial_contract_value: data.contract_value ?? null }
+    const { error } = await supabase.from('projects').insert(insertData)
     if (error) throw error
     await get().fetchAll()
   },
@@ -43,6 +46,12 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
       .from('projects')
       .update({ ...data, updated_at: new Date().toISOString() })
       .eq('id', id)
+    if (error) throw error
+    await get().fetchAll()
+  },
+
+  remove: async (id) => {
+    const { error } = await supabase.from('projects').delete().eq('id', id)
     if (error) throw error
     await get().fetchAll()
   },

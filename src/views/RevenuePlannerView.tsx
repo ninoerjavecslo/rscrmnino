@@ -37,6 +37,7 @@ function TypeBadge({ type }: { type: Project['type'] }) {
     maintenance: { background: '#dbeafe', color: '#1d4ed8', border: '1px solid #bfdbfe' },
     variable: { background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a' },
   }
+  const labels: Record<Project['type'], string> = { fixed: 'Fixed', maintenance: 'Recurring', variable: 'Variable' }
   return (
     <span style={{
       display: 'inline-block',
@@ -48,34 +49,42 @@ function TypeBadge({ type }: { type: Project['type'] }) {
       borderRadius: 3,
       ...styles[type],
     }}>
-      {type}
+      {labels[type]}
     </span>
   )
 }
 
 // ── Probability helpers ───────────────────────────────────────────────────────
 
-const PROB_OPTIONS = [100, 75, 50, 25] as const
-
-function probLabel(p: number): string {
-  if (p === 100) return 'Confirmed'
-  if (p === 75)  return 'Likely'
-  if (p === 50)  return 'Maybe'
-  return 'Unlikely'
-}
-
 function probColors(p: number): { bg: string; text: string; border: string } {
   if (p === 100) return { bg: '#f0fdf4', text: '#15803d', border: '#86efac' }
-  if (p === 75)  return { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe' }
-  if (p === 50)  return { bg: '#fffbeb', text: '#92400e', border: '#fde68a' }
-  return           { bg: '#fef2f2', text: '#dc2626', border: '#fecaca' }
+  if (p >= 50)   return { bg: '#fffbeb', text: '#92400e', border: '#fde68a' }
+  return                { bg: '#fff7ed', text: '#c2410c', border: '#fed7aa' }
 }
 
 
 // ── Cell background helpers ───────────────────────────────────────────────────
 
-function getCellBg(row: RevenuePlanner | undefined): string {
+interface AggCell {
+  planned_amount: number | null
+  actual_amount: number | null
+  status: RevenuePlanner['status']
+  probability: number
+  notes: string | null
+}
+
+function statusRank(s: RevenuePlanner['status']): number {
+  if (s === 'paid') return 5
+  if (s === 'issued') return 4
+  if (s === 'planned') return 3
+  if (s === 'retainer') return 2
+  if (s === 'deferred') return 1
+  return 0
+}
+
+function getCellBg(row: AggCell | undefined): string {
   if (!row) return 'transparent'
+  if (row.status === 'deferred') return '#fef2f2'
   if (row.status === 'issued' || row.status === 'paid') return '#eff6ff'
   if (row.status === 'retainer') return '#fffbf0'
   if (row.status === 'planned') return probColors(row.probability ?? 100).bg
@@ -109,10 +118,35 @@ export function RevenuePlannerView() {
 
   const activeProjects = pStore.projects.filter(p => p.status === 'active')
 
-  // Build lookup: `${projectId}:${month}` → RevenuePlanner row
-  const rowMap = new Map<string, RevenuePlanner>()
+  // Build aggregated lookup: `${projectId}:${month}` → summed cell data
+  // Deferred and cost rows are excluded from planned_amount (they don't count as active invoices)
+  const rowMap = new Map<string, AggCell>()
   for (const r of rpStore.rows) {
-    rowMap.set(`${r.project_id}:${r.month}`, r)
+    if (!r.project_id) continue
+    const key = `${r.project_id}:${r.month}`
+    const existing = rowMap.get(key)
+    const isIssuedOrPaid = r.status === 'issued' || r.status === 'paid'
+    const countsAsPlanned = r.status !== 'deferred' && r.status !== 'cost'
+    if (!existing) {
+      rowMap.set(key, {
+        planned_amount: countsAsPlanned ? (r.planned_amount ?? null) : null,
+        actual_amount: isIssuedOrPaid ? (r.actual_amount ?? null) : null,
+        status: r.status,
+        probability: r.probability ?? 100,
+        notes: r.notes ?? null,
+      })
+    } else {
+      const addPlanned = countsAsPlanned ? (r.planned_amount ?? 0) : 0
+      rowMap.set(key, {
+        planned_amount: ((existing.planned_amount ?? 0) + addPlanned) || null,
+        actual_amount: isIssuedOrPaid
+          ? ((existing.actual_amount ?? 0) + (r.actual_amount ?? 0)) || null
+          : existing.actual_amount,
+        status: statusRank(r.status) > statusRank(existing.status) ? r.status : existing.status,
+        probability: Math.min(existing.probability, r.probability ?? 100),
+        notes: [existing.notes, r.notes].filter(Boolean).join(' | ') || null,
+      })
+    }
   }
 
   // Maintenance retainer rows for this half
@@ -132,10 +166,15 @@ export function RevenuePlannerView() {
   }
 
   // Effective display amount for a cell
+  // For issued/paid rows: use actual_amount (what was really invoiced)
+  // For planned rows: use planned_amount
   function cellAmount(project: Project, month: string): number | null {
     const key = `${project.id}:${month}`
     const row = rowMap.get(key)
     if (row) {
+      if ((row.status === 'issued' || row.status === 'paid') && row.actual_amount != null) {
+        return row.actual_amount
+      }
       return row.planned_amount ?? row.actual_amount ?? null
     }
     // Auto-fill maintenance from contract value
@@ -145,32 +184,17 @@ export function RevenuePlannerView() {
     return null
   }
 
-  // ── Probability popover state ──────────────────────────────────────────────
-  const [probPopover, setProbPopover] = useState<string | null>(null) // `${projectId}:${month}`
-
   // ── Stats ──────────────────────────────────────────────────────────────────
 
-  function halfTotal(): number {
-    return months.reduce((sum, m) => {
-      return sum + activeProjects.reduce((s, p) => s + (cellAmount(p, m) ?? 0), 0)
-    }, 0)
-  }
-
-  function halfForecast(): number {
+  // Sum invoices where probability >= minProb (additive scenario, not weighted)
+  function scenarioSum(minProb: number): number {
     return months.reduce((sum, m) => {
       return sum + activeProjects.reduce((s, p) => {
-        const amount = cellAmount(p, m) ?? 0
         const row = rowMap.get(`${p.id}:${m}`)
         const prob = row?.probability ?? 100
-        return s + (amount * prob / 100)
+        if (prob < minProb) return s
+        return s + (cellAmount(p, m) ?? 0)
       }, 0)
-    }, 0)
-  }
-
-  function typeTotal(type: Project['type']): number {
-    const ps = activeProjects.filter(p => p.type === type)
-    return months.reduce((sum, m) => {
-      return sum + ps.reduce((s, p) => s + (cellAmount(p, m) ?? 0), 0)
     }, 0)
   }
 
@@ -183,24 +207,27 @@ export function RevenuePlannerView() {
     }, 0)
   }
 
-  const totalPlanned = halfTotal()
-  const totalForecast = halfForecast()
-  const fixedSum = typeTotal('fixed')
-  const maintenanceSum = typeTotal('maintenance')
-  const actualSum = actualIssuedTotal()
-  const totalForPct = totalPlanned || 1
+  const confirmedTotal = scenarioSum(100)   // 100% only
+  const likelyTotal    = scenarioSum(50)    // 100% + 50%
+  const bestCaseTotal  = scenarioSum(25)    // 100% + 50% + 25%
+  const totalPlanned   = bestCaseTotal
+  const actualSum      = actualIssuedTotal()
 
   // ── Monthly column totals ──────────────────────────────────────────────────
   function monthPlannedTotal(month: string): number {
-    return activeProjects.reduce((sum, p) => sum + (cellAmount(p, month) ?? 0), 0)
+    return activeProjects.reduce((sum, p) => {
+      const row = rowMap.get(`${p.id}:${month}`)
+      return sum + (row?.planned_amount ?? 0)
+    }, 0)
   }
 
-  function monthForecastTotal(month: string): number {
+  function monthActualTotal(month: string): number {
     return activeProjects.reduce((sum, p) => {
-      const amount = cellAmount(p, month) ?? 0
       const row = rowMap.get(`${p.id}:${month}`)
-      const prob = row?.probability ?? 100
-      return sum + (amount * prob / 100)
+      if (row?.status === 'issued' || row?.status === 'paid') {
+        return sum + (row.actual_amount ?? row.planned_amount ?? 0)
+      }
+      return sum
     }, 0)
   }
 
@@ -218,6 +245,8 @@ export function RevenuePlannerView() {
   function hostingCellAmount(hostingId: string, month: string): number | null {
     const h = activeHostingClients.find(hc => hc.id === hostingId)
     if (!h) return null
+    // Stop showing after contract expiry
+    if (h.contract_expiry && month > h.contract_expiry) return null
     if (h.cycle === 'monthly') return h.amount
     // Yearly: show amount only in the month matching next_invoice_date
     if (h.cycle === 'yearly' && h.next_invoice_date) {
@@ -238,14 +267,15 @@ export function RevenuePlannerView() {
   const hostingGrandTotal = months.reduce((sum, m) => sum + hostingMonthTotal(m), 0)
 
   // ── Domain helpers ──────────────────────────────────────────────────────────
-  const domainsInHalf = domainsStore.domains.filter(d => {
-    const expiryMonth = d.expiry_date.slice(0, 7) + '-01'
-    return months.includes(expiryMonth)
-  })
+  function domainInvoiceMonth(d: { registered_date?: string | null; expiry_date: string }) {
+    return (d.registered_date ?? d.expiry_date).slice(0, 7) + '-01'
+  }
+
+  const domainsInHalf = domainsStore.domains.filter(d => months.includes(domainInvoiceMonth(d)))
 
   function domainMonthTotal(month: string): number {
     return domainsInHalf
-      .filter(d => d.expiry_date.slice(0, 7) + '-01' === month)
+      .filter(d => domainInvoiceMonth(d) === month)
       .reduce((sum, d) => sum + (d.yearly_amount ?? 0), 0)
   }
 
@@ -321,26 +351,21 @@ export function RevenuePlannerView() {
       )}
 
       {/* Stats strip */}
-      <div className="stats-strip" style={{ gridTemplateColumns: 'repeat(5,1fr)' }}>
+      <div className="stats-strip" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
+        <div className="stat-card" style={{ '--left-color': '#15803d' } as React.CSSProperties}>
+          <div className="stat-card-label">Confirmed</div>
+          <div className="stat-card-value">{fmtAmt(confirmedTotal)}</div>
+          <div className="stat-card-sub">100% — will issue</div>
+        </div>
+        <div className="stat-card" style={{ '--left-color': '#92400e' } as React.CSSProperties}>
+          <div className="stat-card-label">Likely</div>
+          <div className="stat-card-value">{fmtAmt(likelyTotal)}</div>
+          <div className="stat-card-sub">100% + 50% invoices</div>
+        </div>
         <div className="stat-card" style={{ '--left-color': 'var(--navy)' } as React.CSSProperties}>
-          <div className="stat-card-label">Planned {half} {year}</div>
-          <div className="stat-card-value">{fmtAmt(totalPlanned)}</div>
-          <div className="stat-card-sub">all invoices</div>
-        </div>
-        <div className="stat-card" style={{ '--left-color': '#16a34a' } as React.CSSProperties}>
-          <div className="stat-card-label">Forecast {half} {year}</div>
-          <div className="stat-card-value">{fmtAmt(totalForecast)}</div>
-          <div className="stat-card-sub">probability-weighted</div>
-        </div>
-        <div className="stat-card" style={{ '--left-color': 'var(--green)' } as React.CSSProperties}>
-          <div className="stat-card-label">Fixed</div>
-          <div className="stat-card-value">{fmtAmt(fixedSum)}</div>
-          <div className="stat-card-sub">{Math.round((fixedSum / totalForPct) * 100)}% of total</div>
-        </div>
-        <div className="stat-card" style={{ '--left-color': 'var(--blue, #3b82f6)' } as React.CSSProperties}>
-          <div className="stat-card-label">Maintenance</div>
-          <div className="stat-card-value">{fmtAmt(maintenanceSum)}</div>
-          <div className="stat-card-sub">{Math.round((maintenanceSum / totalForPct) * 100)}% of total</div>
+          <div className="stat-card-label">Best Case</div>
+          <div className="stat-card-value">{fmtAmt(bestCaseTotal)}</div>
+          <div className="stat-card-sub">100% + 50% + 25%</div>
         </div>
         <div className="stat-card" style={{ '--left-color': '#4338ca' } as React.CSSProperties}>
           <div className="stat-card-label">Actual Issued</div>
@@ -368,84 +393,76 @@ export function RevenuePlannerView() {
         ) : (
           <div className="card" style={{ overflow: 'hidden' }}>
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: 1100 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: 900 }}>
                 <colgroup>
-                  <col style={{ width: 200 }} />
+                  <col style={{ width: 210 }} />
                   {months.map(m => (
                     <React.Fragment key={m}>
                       <col style={{ width: 80 }} />
                       <col style={{ width: 80 }} />
                     </React.Fragment>
                   ))}
-                  <col style={{ width: 90 }} />
-                  <col style={{ width: 90 }} />
+                  <col style={{ width: 100 }} />
                 </colgroup>
 
                 <thead>
-                  {/* Month labels row */}
                   <tr style={{ background: '#f9fafb' }}>
                     <th rowSpan={2} style={{
                       padding: '10px 16px', textAlign: 'left', fontSize: 10, fontWeight: 700,
                       textTransform: 'uppercase', letterSpacing: '0.7px', color: '#6b7280',
                       background: '#f9fafb', position: 'sticky', left: 0, zIndex: 2,
-                      borderRight: '2px solid #e5e7eb', borderBottom: '2px solid #e5e7eb',
+                      borderRight: '2px solid #e5e7eb', borderBottom: '2px solid #e5e7eb', verticalAlign: 'bottom',
                     }}>
                       Project / Client
                     </th>
                     {months.map(m => (
                       <th key={m} colSpan={2} style={{
-                        padding: '8px 8px 4px', textAlign: 'center', fontSize: 10, fontWeight: 700,
+                        padding: '6px 8px', textAlign: 'center', fontSize: 10, fontWeight: 700,
                         textTransform: 'uppercase', letterSpacing: '0.7px', color: '#6b7280',
                         background: '#f9fafb', borderLeft: '2px solid #e5e7eb', whiteSpace: 'nowrap',
+                        borderBottom: '1px solid #e5e7eb',
                       }}>
                         {fmtMonthShort(m)}
                       </th>
                     ))}
-                    <th colSpan={2} rowSpan={1} style={{
-                      padding: '8px 8px 4px', textAlign: 'center', fontSize: 10, fontWeight: 700,
+                    <th rowSpan={2} style={{
+                      padding: '10px 10px', textAlign: 'right', fontSize: 10, fontWeight: 700,
                       textTransform: 'uppercase', letterSpacing: '0.7px', color: '#6b7280',
-                      background: '#f9fafb', borderLeft: '3px solid #d1d5db', whiteSpace: 'nowrap',
+                      background: '#f9fafb', borderLeft: '2px solid #d1d5db', borderBottom: '2px solid #e5e7eb',
+                      whiteSpace: 'nowrap', verticalAlign: 'bottom',
                     }}>
                       Total
                     </th>
                   </tr>
-                  {/* Plan / Forecast sub-header row */}
                   <tr style={{ borderBottom: '2px solid #e5e7eb', background: '#f9fafb' }}>
                     {months.map(m => (
                       <React.Fragment key={m}>
                         <th style={{
-                          padding: '4px 6px 8px', textAlign: 'right', fontSize: 9, fontWeight: 600,
+                          padding: '4px 6px', textAlign: 'right', fontSize: 9, fontWeight: 600,
                           color: '#9ca3af', background: '#f9fafb', borderLeft: '2px solid #e5e7eb',
-                          letterSpacing: '0.4px', textTransform: 'uppercase',
+                          whiteSpace: 'nowrap', letterSpacing: '0.3px',
                         }}>Plan</th>
                         <th style={{
-                          padding: '4px 6px 8px', textAlign: 'right', fontSize: 9, fontWeight: 600,
-                          color: '#16a34a', background: '#f9fafb', borderLeft: '1px solid #e5e7eb',
-                          letterSpacing: '0.4px', textTransform: 'uppercase',
-                        }}>Fcst</th>
+                          padding: '4px 6px', textAlign: 'right', fontSize: 9, fontWeight: 600,
+                          color: '#9ca3af', background: '#f9fafb', borderLeft: '1px solid #e5e7eb',
+                          whiteSpace: 'nowrap', letterSpacing: '0.3px',
+                        }}>Actual</th>
                       </React.Fragment>
                     ))}
-                    <th style={{
-                      padding: '4px 6px 8px', textAlign: 'right', fontSize: 9, fontWeight: 600,
-                      color: '#9ca3af', background: '#f9fafb', borderLeft: '3px solid #d1d5db',
-                      letterSpacing: '0.4px', textTransform: 'uppercase',
-                    }}>Plan</th>
-                    <th style={{
-                      padding: '4px 6px 8px', textAlign: 'right', fontSize: 9, fontWeight: 600,
-                      color: '#16a34a', background: '#f9fafb', borderLeft: '1px solid #e5e7eb',
-                      letterSpacing: '0.4px', textTransform: 'uppercase',
-                    }}>Fcst</th>
                   </tr>
                 </thead>
 
                 <tbody>
                   {activeProjects.map((project, rowIdx) => {
                     const rowBg = rowIdx % 2 === 0 ? '#fff' : '#fafafa'
-                    const rowPlanned = months.reduce((s, m) => s + (cellAmount(project, m) ?? 0), 0)
-                    const rowForecast = months.reduce((s, m) => {
-                      const amt = cellAmount(project, m) ?? 0
+                    const rowPlanned = months.reduce((s, m) => {
                       const row = rowMap.get(`${project.id}:${m}`)
-                      return s + (amt * (row?.probability ?? 100) / 100)
+                      return s + (row?.planned_amount ?? 0)
+                    }, 0)
+                    const rowActual = months.reduce((s, m) => {
+                      const row = rowMap.get(`${project.id}:${m}`)
+                      if (row?.status === 'issued' || row?.status === 'paid') return s + (row.actual_amount ?? row.planned_amount ?? 0)
+                      return s
                     }, 0)
 
                     return (
@@ -469,113 +486,79 @@ export function RevenuePlannerView() {
                             )}
                           </td>
 
-                          {/* Plan + Forecast cells per month */}
+                          {/* Plan + Actual cells per month */}
                           {months.map(month => {
                             const popKey = `${project.id}:${month}`
                             const row = rowMap.get(popKey)
-                            const amount = cellAmount(project, month)
-                            const isEmpty = amount === null || amount === 0
                             const prob = row?.probability ?? 100
-                            const forecast = isEmpty ? 0 : Math.round(amount! * prob / 100)
-                            const cellBg = isEmpty ? rowBg : getCellBg(row)
                             const { text: probText } = probColors(prob)
                             const isIssued = row?.status === 'issued' || row?.status === 'paid'
-                            const isOpen = probPopover === popKey
+                            const isDeferred = row?.status === 'deferred'
+                            const planned = row?.planned_amount ?? null
+                            const actual = isIssued ? (row?.actual_amount ?? null) : null
+                            const cellBg = row ? getCellBg(row) : rowBg
 
                             return (
                               <React.Fragment key={month}>
                                 {/* Plan cell */}
                                 <td style={{
-                                  padding: '6px 4px', borderLeft: '2px solid #e5e7eb',
-                                  background: isEmpty ? rowBg : cellBg, verticalAlign: 'middle',
+                                  padding: '6px 6px', borderLeft: '2px solid #e5e7eb',
+                                  background: row ? cellBg : rowBg, verticalAlign: 'middle', textAlign: 'right',
                                 }}>
-                                  {isEmpty ? (
-                                    <span style={{ color: '#d1d5db', fontSize: 11, display: 'block', textAlign: 'right', padding: '2px 4px' }}>—</span>
-                                  ) : (
-                                    <div>
-                                      <span style={{ fontWeight: 600, fontSize: 11, color: isIssued ? '#1d4ed8' : probText, fontVariantNumeric: 'tabular-nums', display: 'block', textAlign: 'right', padding: '2px 4px' }}>
-                                        {fmtAmt(amount!)}
+                                  {planned != null ? (
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 3 }}>
+                                      <span style={{
+                                        fontWeight: 600, fontSize: 11, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
+                                        color: isDeferred ? '#ef4444' : isIssued ? '#9ca3af' : probText,
+                                        textDecoration: isDeferred ? 'line-through' : undefined,
+                                      }}>
+                                        {fmtAmt(planned)}
                                       </span>
-                                      {/* Probability selector — only for planned rows */}
-                                      {!isIssued && row && (
-                                        <div style={{ position: 'relative', textAlign: 'right', paddingRight: 4 }}>
-                                          <span
-                                            onClick={() => setProbPopover(isOpen ? null : popKey)}
-                                            style={{
-                                              display: 'inline-block', fontSize: 9, fontWeight: 700,
-                                              padding: '1px 4px', borderRadius: 3, cursor: 'pointer',
-                                              background: probColors(prob).bg, color: probColors(prob).text,
-                                              border: `1px solid ${probColors(prob).border}`,
-                                              userSelect: 'none',
-                                            }}
-                                          >
-                                            {prob}%
-                                          </span>
-                                          {isOpen && (
-                                            <div style={{
-                                              position: 'absolute', right: 0, top: '100%', zIndex: 10,
-                                              background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8,
-                                              boxShadow: '0 4px 16px rgba(0,0,0,0.12)', padding: '6px',
-                                              display: 'flex', flexDirection: 'column', gap: 3, minWidth: 120,
-                                            }}>
-                                              {PROB_OPTIONS.map(p => (
-                                                <button
-                                                  key={p}
-                                                  onClick={() => {
-                                                    rpStore.updateProbability(row.id, p)
-                                                    setProbPopover(null)
-                                                  }}
-                                                  style={{
-                                                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                                    padding: '5px 8px', borderRadius: 5, border: 'none',
-                                                    background: p === prob ? probColors(p).bg : 'transparent',
-                                                    cursor: 'pointer', fontFamily: 'inherit', gap: 8,
-                                                    fontWeight: p === prob ? 700 : 500,
-                                                  }}
-                                                >
-                                                  <span style={{ fontSize: 11, color: probColors(p).text, fontWeight: 700 }}>{p}%</span>
-                                                  <span style={{ fontSize: 11, color: '#6b7280' }}>{probLabel(p)}</span>
-                                                </button>
-                                              ))}
-                                            </div>
-                                          )}
-                                        </div>
+                                      {isDeferred && (
+                                        <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: '#fef2f2', color: '#ef4444', border: '1px solid #fca5a5', whiteSpace: 'nowrap' }}>
+                                          defer
+                                        </span>
+                                      )}
+                                      {!isIssued && !isDeferred && row && (
+                                        <span style={{
+                                          display: 'inline-block', fontSize: 9, fontWeight: 700,
+                                          padding: '1px 3px', borderRadius: 3,
+                                          background: probColors(prob).bg, color: probColors(prob).text,
+                                          border: `1px solid ${probColors(prob).border}`,
+                                          whiteSpace: 'nowrap', flexShrink: 0,
+                                        }}>
+                                          {prob}%
+                                        </span>
                                       )}
                                     </div>
+                                  ) : (
+                                    <span style={{ color: '#d1d5db', fontSize: 11 }}>—</span>
                                   )}
                                 </td>
-                                {/* Forecast cell */}
+                                {/* Actual cell */}
                                 <td style={{
-                                  padding: '6px 4px', borderLeft: '1px solid #e5e7eb',
-                                  background: isEmpty ? rowBg : (isIssued ? '#eff6ff' : probColors(prob).bg),
-                                  verticalAlign: 'middle',
+                                  padding: '6px 6px', borderLeft: '1px solid #e5e7eb',
+                                  background: isIssued ? '#eff6ff' : isDeferred ? '#fef2f2' : rowBg, verticalAlign: 'middle', textAlign: 'right',
                                 }}>
-                                  {isEmpty ? (
-                                    <span style={{ color: '#d1d5db', fontSize: 11, display: 'block', textAlign: 'right', padding: '2px 4px' }}>—</span>
-                                  ) : (
-                                    <span style={{ fontWeight: 600, fontSize: 11, color: isIssued ? '#1d4ed8' : probColors(prob).text, fontVariantNumeric: 'tabular-nums', display: 'block', textAlign: 'right', padding: '2px 4px' }}>
-                                      {fmtAmt(forecast)}
+                                  {actual != null ? (
+                                    <span style={{ fontWeight: 700, fontSize: 11, color: '#1d4ed8', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                                      {fmtAmt(actual)}
                                     </span>
+                                  ) : (
+                                    <span style={{ color: '#d1d5db', fontSize: 11 }}>—</span>
                                   )}
                                 </td>
                               </React.Fragment>
                             )
                           })}
 
-                          {/* Row totals */}
+                          {/* Row total — shows actual if any issued/paid, else planned */}
                           <td style={{
-                            padding: '8px 8px', textAlign: 'right', borderLeft: '3px solid #d1d5db',
+                            padding: '8px 10px', textAlign: 'right', borderLeft: '2px solid #d1d5db',
                             fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 12,
-                            color: rowPlanned > 0 ? 'var(--navy)' : '#d1d5db', whiteSpace: 'nowrap', background: rowBg,
+                            color: rowActual > 0 ? 'var(--blue)' : rowPlanned > 0 ? 'var(--navy)' : '#d1d5db', whiteSpace: 'nowrap', background: rowBg,
                           }}>
-                            {rowPlanned > 0 ? fmtAmt(rowPlanned) : '—'}
-                          </td>
-                          <td style={{
-                            padding: '8px 8px', textAlign: 'right', borderLeft: '1px solid #e5e7eb',
-                            fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 12,
-                            color: rowForecast > 0 ? '#16a34a' : '#d1d5db', whiteSpace: 'nowrap', background: rowBg,
-                          }}>
-                            {rowForecast > 0 ? fmtAmt(rowForecast) : '—'}
+                            {rowActual > 0 ? fmtAmt(rowActual) : rowPlanned > 0 ? fmtAmt(rowPlanned) : '—'}
                           </td>
                         </tr>
 
@@ -595,21 +578,18 @@ export function RevenuePlannerView() {
                             )
                             const hasCost = costRow && (costRow.actual_amount ?? 0) > 0
                             return (
-                              <React.Fragment key={month}>
-                                <td style={{ padding: '4px 4px', borderLeft: '2px solid #e5e7eb', background: hasCost ? '#fef2f2' : '#fafafa', textAlign: 'right' }}>
-                                  {hasCost ? (
-                                    <span style={{ fontSize: 10, fontWeight: 600, color: '#dc2626', fontVariantNumeric: 'tabular-nums' }}>
-                                      {fmtAmt(costRow!.actual_amount!)}
-                                    </span>
-                                  ) : (
-                                    <span style={{ fontSize: 10, color: '#d1d5db' }}>—</span>
-                                  )}
-                                </td>
-                                <td style={{ borderLeft: '1px solid #e5e7eb', background: '#fafafa' }} />
-                              </React.Fragment>
+                              <td key={month} colSpan={2} style={{ padding: '4px 8px', borderLeft: '2px solid #e5e7eb', background: hasCost ? '#fef2f2' : '#fafafa', textAlign: 'right' }}>
+                                {hasCost ? (
+                                  <span style={{ fontSize: 10, fontWeight: 600, color: '#dc2626', fontVariantNumeric: 'tabular-nums' }}>
+                                    {fmtAmt(costRow!.actual_amount!)}
+                                  </span>
+                                ) : (
+                                  <span style={{ fontSize: 10, color: '#d1d5db' }}>—</span>
+                                )}
+                              </td>
                             )
                           })}
-                          <td colSpan={2} style={{ borderLeft: '3px solid #d1d5db', background: '#fafafa' }} />
+                          <td style={{ borderLeft: '2px solid #d1d5db', background: '#fafafa' }} />
                         </tr>
                       </React.Fragment>
                     )
@@ -620,7 +600,7 @@ export function RevenuePlannerView() {
                 <tfoot>
                   <tr style={{ borderTop: '2px solid #d1d5db', background: '#f0f4ff' }}>
                     <td style={{
-                      padding: '12px 16px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
+                      padding: '10px 16px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
                       letterSpacing: '0.7px', color: 'var(--navy)', position: 'sticky', left: 0,
                       background: '#f0f4ff', borderRight: '2px solid #e5e7eb', zIndex: 1,
                     }}>
@@ -628,7 +608,7 @@ export function RevenuePlannerView() {
                     </td>
                     {months.map(m => {
                       const planned = monthPlannedTotal(m)
-                      const forecast = monthForecastTotal(m)
+                      const actual = monthActualTotal(m)
                       return (
                         <React.Fragment key={m}>
                           <td style={{
@@ -641,26 +621,20 @@ export function RevenuePlannerView() {
                           <td style={{
                             padding: '10px 6px', textAlign: 'right', borderLeft: '1px solid #e5e7eb',
                             fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
-                            color: forecast > 0 ? '#16a34a' : '#d1d5db', whiteSpace: 'nowrap',
+                            color: actual > 0 ? '#1d4ed8' : '#d1d5db', whiteSpace: 'nowrap',
+                            background: actual > 0 ? '#eff6ff' : undefined,
                           }}>
-                            {forecast > 0 ? fmtAmt(forecast) : '—'}
+                            {actual > 0 ? fmtAmt(actual) : '—'}
                           </td>
                         </React.Fragment>
                       )
                     })}
                     <td style={{
-                      padding: '10px 8px', textAlign: 'right', borderLeft: '3px solid #d1d5db',
+                      padding: '10px 10px', textAlign: 'right', borderLeft: '2px solid #d1d5db',
                       fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 13,
                       color: totalPlanned > 0 ? 'var(--navy)' : '#d1d5db', whiteSpace: 'nowrap',
                     }}>
                       {totalPlanned > 0 ? fmtAmt(totalPlanned) : '—'}
-                    </td>
-                    <td style={{
-                      padding: '10px 8px', textAlign: 'right', borderLeft: '1px solid #e5e7eb',
-                      fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 13,
-                      color: totalForecast > 0 ? '#16a34a' : '#d1d5db', whiteSpace: 'nowrap',
-                    }}>
-                      {totalForecast > 0 ? fmtAmt(totalForecast) : '—'}
                     </td>
                   </tr>
                 </tfoot>
@@ -670,12 +644,11 @@ export function RevenuePlannerView() {
             {/* Legend */}
             <div style={{ display: 'flex', gap: 16, alignItems: 'center', padding: '10px 16px', borderTop: '1px solid #e5e7eb', background: '#f9fafb', flexWrap: 'wrap' }}>
               {[
-                { color: '#f0fdf4', border: '#86efac', label: '100% Confirmed' },
-                { color: '#eff6ff', border: '#bfdbfe', label: '75% Likely' },
-                { color: '#fffbeb', border: '#fde68a', label: '50% Maybe' },
-                { color: '#fef2f2', border: '#fecaca', label: '25% Unlikely' },
+                { color: '#f0fdf4', border: '#86efac', label: '100% — Confirmed' },
+                { color: '#fffbeb', border: '#fde68a', label: '50% — Likely' },
+                { color: '#fff7ed', border: '#fed7aa', label: '25% — Unlikely' },
                 { color: '#eff6ff', border: '#93c5fd', label: 'Issued/Paid' },
-                { color: '#fef2f2', border: '#fca5a5', label: 'Costs' },
+                { color: '#fef2f2', border: '#fca5a5', label: 'Costs / Deferred' },
               ].map(item => (
                 <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                   <div style={{ width: 12, height: 12, borderRadius: 3, background: item.color, border: `1px solid ${item.border}`, flexShrink: 0 }} />
@@ -966,7 +939,7 @@ export function RevenuePlannerView() {
 
                   <tbody>
                     {domainsInHalf.map((d, rowIdx) => {
-                      const expiryMonthKey = d.expiry_date.slice(0, 7) + '-01'
+                      const expiryMonthKey = domainInvoiceMonth(d)
                       const rowBg = rowIdx % 2 === 0 ? '#fff' : '#fafafa'
 
                       return (
@@ -1103,19 +1076,37 @@ export function RevenuePlannerView() {
               <tbody>
                 {[...retainerByMaint.values()].map(({ name, clientName, rows }) => {
                   const rowByMonth = new Map(rows.map(r => [r.month, r]))
+                  const hasExtra = rows.some(r => (r.actual_amount ?? 0) > (r.planned_amount ?? 0))
                   return (
-                    <tr key={name}>
-                      <td style={{ fontWeight: 700, fontSize: 14 }}>{name}</td>
-                      <td style={{ fontSize: 12, color: 'var(--c3)' }}>{clientName}</td>
-                      {months.map(m => {
-                        const r = rowByMonth.get(m)
-                        return (
-                          <td key={m} className="td-right text-mono" style={{ fontSize: 13 }}>
-                            {r ? <span style={{ color: 'var(--amber)', fontWeight: 600 }}>{r.planned_amount} €</span> : <span style={{ color: 'var(--c5)' }}>—</span>}
-                          </td>
-                        )
-                      })}
-                    </tr>
+                    <React.Fragment key={name}>
+                      <tr>
+                        <td style={{ fontWeight: 700, fontSize: 14 }}>{name}</td>
+                        <td style={{ fontSize: 12, color: 'var(--c3)' }}>{clientName}</td>
+                        {months.map(m => {
+                          const r = rowByMonth.get(m)
+                          return (
+                            <td key={m} className="td-right text-mono" style={{ fontSize: 13 }}>
+                              {r ? <span style={{ color: 'var(--amber)', fontWeight: 600 }}>{r.planned_amount} €</span> : <span style={{ color: 'var(--c5)' }}>—</span>}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                      {hasExtra && (
+                        <tr style={{ background: '#f0fdf4' }}>
+                          <td style={{ paddingLeft: 20, fontSize: 11, fontStyle: 'italic', color: 'var(--green)', fontWeight: 600 }}>↳ Extra</td>
+                          <td />
+                          {months.map(m => {
+                            const r = rowByMonth.get(m)
+                            const extra = r ? (r.actual_amount ?? 0) - (r.planned_amount ?? 0) : 0
+                            return (
+                              <td key={m} className="td-right text-mono" style={{ fontSize: 12 }}>
+                                {extra > 0 ? <span style={{ color: 'var(--green)', fontWeight: 700 }}>+{extra} €</span> : <span style={{ color: 'var(--c5)' }}>—</span>}
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      )}
+                    </React.Fragment>
                   )
                 })}
               </tbody>

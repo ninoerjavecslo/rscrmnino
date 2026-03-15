@@ -142,9 +142,10 @@ export function MaintenanceDetailView() {
     .filter(r => r.status === 'paid' || r.status === 'issued')
     .reduce((s, r) => s + (r.actual_amount ?? 0), 0)
   const totalPlanned  = invoiceRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0)
+  const hostingMonthlyAmt = hosting?.cycle === 'monthly' ? (hosting.amount ?? 0) : 0
   const extraBilled   = invoiceRows
-    .filter(r => (r.status === 'paid' || r.status === 'issued') && (r.actual_amount ?? 0) > (r.planned_amount ?? 0))
-    .reduce((s, r) => s + Math.max(0, (r.actual_amount ?? 0) - (r.planned_amount ?? 0)), 0)
+    .filter(r => (r.status === 'paid' || r.status === 'issued') && (r.actual_amount ?? 0) > (r.planned_amount ?? 0) + hostingMonthlyAmt)
+    .reduce((s, r) => s + Math.max(0, (r.actual_amount ?? 0) - (r.planned_amount ?? 0) - hostingMonthlyAmt), 0)
   const totalCosts    = costRows.reduce((s, r) => s + (r.actual_amount ?? 0), 0)
 
   // ── Status update ───────────────────────────────────────────────────────────
@@ -219,7 +220,8 @@ export function MaintenanceDetailView() {
 
   function openConfirm(row: RevenuePlanner) {
     setConfirmRow(row)
-    setConfirmActual(String(row.planned_amount ?? ''))
+    const hostingAdd = hosting?.cycle === 'monthly' ? hosting.amount : 0
+    setConfirmActual(String((row.planned_amount ?? 0) + hostingAdd))
     setConfirmNote(row.notes ?? '')
   }
 
@@ -274,7 +276,7 @@ export function MaintenanceDetailView() {
     if (!costForm.month || !costForm.amount) return
     setSaving(true)
     try {
-      await supabase.from('revenue_planner').insert({
+      const { error: insertErr } = await supabase.from('revenue_planner').insert({
         maintenance_id: id!,
         month:          costForm.month + '-01',
         planned_amount: null,
@@ -283,6 +285,7 @@ export function MaintenanceDetailView() {
         probability:    100,
         notes:          costForm.description || null,
       })
+      if (insertErr) throw insertErr
       await fetchRows()
       setCostForm({ month: '', description: '', amount: '' })
       setShowAddCost(false)
@@ -375,8 +378,11 @@ export function MaintenanceDetailView() {
           <div className="stat-card-sub">issued + paid</div>
         </div>
         <div className="stat-card" style={{ '--left-color': 'var(--navy)' } as React.CSSProperties}>
-          <div className="stat-card-label">RETAINER VALUE</div>
-          <div className="stat-card-value">{fmtEuro(maint.monthly_retainer)}<span style={{ fontSize: 13, fontWeight: 400, color: 'var(--c3)' }}>/mo</span></div>
+          <div className="stat-card-label">{hosting ? 'TOTAL / MO (INCL. HOSTING)' : 'RETAINER VALUE'}</div>
+          <div className="stat-card-value">
+            {fmtEuro(maint.monthly_retainer + (hosting?.cycle === 'monthly' ? hosting.amount : 0))}
+            <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--c3)' }}>/mo</span>
+          </div>
           <div className="stat-card-sub">{fmtDate(maint.contract_start)} → {maint.contract_end ? fmtDate(maint.contract_end) : 'open-ended'}</div>
         </div>
         <div className="stat-card" style={{ '--left-color': extraBilled > 0 ? 'var(--blue)' : 'var(--c5)' } as React.CSSProperties}>
@@ -401,8 +407,17 @@ export function MaintenanceDetailView() {
           <div className="card-body">
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px 32px', fontSize: 13 }}>
               <div>
-                <div style={{ color: 'var(--c4)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Monthly retainer</div>
-                <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--green)' }}>{fmtEuro(maint.monthly_retainer)}</div>
+                <div style={{ color: 'var(--c4)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>
+                  {hosting ? 'Monthly total' : 'Monthly retainer'}
+                </div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--green)' }}>
+                  {fmtEuro(maint.monthly_retainer + (hosting?.cycle === 'monthly' ? hosting.amount : 0))}
+                </div>
+                {hosting && (
+                  <div style={{ fontSize: 11, color: 'var(--c4)', marginTop: 2 }}>
+                    {fmtEuro(maint.monthly_retainer)} work + {fmtEuro(hosting.amount)} hosting
+                  </div>
+                )}
               </div>
               <div>
                 <div style={{ color: 'var(--c4)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Hours / mo</div>
@@ -529,11 +544,18 @@ export function MaintenanceDetailView() {
                   const isPending   = row.status === 'planned'
                   const isNotBilled = row.status === 'retainer'
                   const isSettled   = row.status === 'paid' || row.status === 'issued'
-                  const extra       = isSettled ? Math.max(0, (row.actual_amount ?? 0) - (row.planned_amount ?? 0)) : 0
+                  const extra       = isSettled ? Math.max(0, (row.actual_amount ?? 0) - (row.planned_amount ?? 0) - hostingMonthlyAmt) : 0
                   return (
                     <tr key={row.id} style={{ background: isPending ? 'var(--amber-bg, #fffbf0)' : undefined }}>
                       <td style={{ fontWeight: 600 }}>{fmtMonth(row.month)}</td>
-                      <td className="td-right text-mono">{fmtEuro(row.planned_amount ?? 0)}</td>
+                      <td className="td-right text-mono">
+                        {fmtEuro((row.planned_amount ?? 0) + (hosting?.cycle === 'monthly' ? hosting.amount : 0))}
+                        {hosting?.cycle === 'monthly' && (
+                          <div style={{ fontSize: 10, color: 'var(--c4)', fontWeight: 400 }}>
+                            {fmtEuro(row.planned_amount ?? 0)} + {fmtEuro(hosting.amount)}
+                          </div>
+                        )}
+                      </td>
                       <td className="td-right text-mono" style={{ fontWeight: isSettled ? 700 : 400, color: isSettled ? 'var(--green)' : 'var(--c3)' }}>
                         {isSettled ? fmtEuro(row.actual_amount ?? 0) : '—'}
                       </td>
@@ -565,7 +587,9 @@ export function MaintenanceDetailView() {
               <tfoot>
                 <tr style={{ background: 'var(--c7)', borderTop: '2px solid var(--c6)' }}>
                   <td style={{ fontSize: 10, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total</td>
-                  <td className="td-right text-mono" style={{ fontWeight: 700 }}>{fmtEuro(totalPlanned)}</td>
+                  <td className="td-right text-mono" style={{ fontWeight: 700 }}>
+                    {fmtEuro(totalPlanned + (hosting?.cycle === 'monthly' ? hosting.amount * invoiceRows.length : 0))}
+                  </td>
                   <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--green)' }}>{totalInvoiced > 0 ? fmtEuro(totalInvoiced) : '—'}</td>
                   <td className="td-right text-mono" style={{ color: 'var(--blue)', fontWeight: 700 }}>{extraBilled > 0 ? `+${fmtEuro(extraBilled)}` : '—'}</td>
                   <td colSpan={3}></td>
@@ -696,6 +720,9 @@ export function MaintenanceDetailView() {
           <div>
             <p style={{ margin: '0 0 16px', fontSize: 14, color: 'var(--c2)' }}>
               <strong>{fmtMonth(confirmRow.month)}</strong> — retainer {fmtEuro(confirmRow.planned_amount ?? 0)}
+              {hosting?.cycle === 'monthly' && (
+                <span style={{ color: 'var(--c4)', fontSize: 13 }}> + hosting {fmtEuro(hosting.amount)} = <strong>{fmtEuro((confirmRow.planned_amount ?? 0) + hosting.amount)}</strong></span>
+              )}
             </p>
             <div className="form-group" style={{ marginBottom: 12 }}>
               <label className="form-label">Actual amount (€)</label>

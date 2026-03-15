@@ -7,9 +7,30 @@ import { useInfraStore } from '../stores/infrastructure'
 import { useDomainsStore } from '../stores/domains'
 import { useMaintenancesStore } from '../stores/maintenances'
 import type { Client } from '../lib/types'
+import { hostingContractValue } from '../lib/types'
 
 const CURRENT_YEAR = new Date().getFullYear()
-const YEAR_MONTHS = Array.from({ length: 12 }, (_, i) => `${CURRENT_YEAR}-${String(i + 1).padStart(2, '0')}-01`)
+
+function maintMonthsThisYear(m: { contract_start?: string | null; contract_end?: string | null }): number {
+  const yearStart = `${CURRENT_YEAR}-01`
+  const yearEnd   = `${CURRENT_YEAR}-12`
+  const cStart = m.contract_start ? m.contract_start.slice(0, 7) : yearStart
+  const cEnd   = m.contract_end   ? m.contract_end.slice(0, 7)   : yearEnd
+  const effStart = cStart > yearStart ? cStart : yearStart
+  const effEnd   = cEnd   < yearEnd   ? cEnd   : yearEnd
+  if (effStart > effEnd) return 0
+  const [sy, sm] = effStart.split('-').map(Number)
+  const [ey, em] = effEnd.split('-').map(Number)
+  return (ey - sy) * 12 + (em - sm) + 1
+}
+
+// Wide range for total value calculation (same as ClientDetailView)
+const ALL_MONTHS: string[] = []
+for (let y = CURRENT_YEAR - 2; y <= CURRENT_YEAR + 1; y++) {
+  for (let m = 1; m <= 12; m++) {
+    ALL_MONTHS.push(`${y}-${String(m).padStart(2, '0')}-01`)
+  }
+}
 
 function YesNo({ yes }: { yes: boolean }) {
   return yes
@@ -48,20 +69,26 @@ export function ClientsView() {
   useEffect(() => {
     store.fetchAll()
     pStore.fetchAll()
-    rpStore.fetchByMonths(YEAR_MONTHS)
+    rpStore.fetchByMonths(ALL_MONTHS)
     infraStore.fetchAll()
     domainStore.fetchAll()
     maintStore.fetchAll()
   }, [])
 
-  // invoiced YTD per client — sum actual_amount from revenue_planner (covers projects + hosting rows)
+  // invoiced YTD per client — all issued/paid rows across projects, maintenance, hosting, domains
   const invoicedByClient = useMemo(() => {
     const map = new Map<string, number>()
     for (const r of rpStore.rows) {
-      if (!r.actual_amount) continue
+      if (r.status === 'cost') continue
+      if (r.status !== 'issued' && r.status !== 'paid') continue
+      const amount = r.actual_amount ?? r.planned_amount ?? 0
+      if (!amount) continue
       const clientId = r.project?.client_id
+        ?? r.maintenance?.client?.id
+        ?? r.hosting?.client?.id
+        ?? r.domain?.client?.id
       if (!clientId) continue
-      map.set(clientId, (map.get(clientId) ?? 0) + r.actual_amount)
+      map.set(clientId, (map.get(clientId) ?? 0) + amount)
     }
     return map
   }, [rpStore.rows])
@@ -111,7 +138,7 @@ export function ClientsView() {
                   <th style={{width:70}}>Hosting</th>
                   <th style={{width:70}}>Domains</th>
                   <th style={{width:100}}>Maintenance</th>
-                  <th className="th-right" style={{width:150}}>Active value</th>
+                  <th className="th-right" style={{width:150}}>Total value</th>
                   <th className="th-right" style={{width:140}}>Invoiced YTD</th>
                   <th style={{width:80}}>Actions</th>
                 </tr>
@@ -123,34 +150,35 @@ export function ClientsView() {
                   const clientProjects = pStore.projects.filter(p => p.client_id === c.id)
                   const activeProjects = clientProjects.filter(p => p.status === 'active')
 
-                  // Project value: fixed = total, recurring = monthly × 12
-                  const projectValue = activeProjects.reduce((sum, p) => {
-                    if (p.contract_value == null) return sum
-                    return sum + (p.type === 'fixed' ? p.contract_value : p.contract_value * 12)
-                  }, 0)
+                  const clientProjectIds = new Set(clientProjects.map(p => p.id))
                   const hasVariable = activeProjects.some(p => p.contract_value == null)
+
+                  // Project value from rpRows (same as ClientDetailView)
+                  const projectRpSum = rpStore.rows
+                    .filter(r => r.project_id != null && clientProjectIds.has(r.project_id))
+                    .reduce((sum, r) => sum + (r.planned_amount ?? 0), 0)
 
                   // Hosting annual equivalent
                   const hostingAnnual = infraStore.hostingClients
                     .filter(h => h.client_id === c.id && h.status === 'active')
-                    .reduce((sum, h) => sum + (h.cycle === 'monthly' ? h.amount * 12 : h.amount), 0)
+                    .reduce((sum, h) => sum + hostingContractValue(h), 0)
 
                   // Domains annual
                   const domainsAnnual = domainStore.domains
                     .filter(d => d.client_id === c.id && !d.archived)
                     .reduce((sum, d) => sum + (d.yearly_amount ?? 0), 0)
 
-                  // Maintenance retainers annual
+                  // Maintenance annual
                   const maintAnnual = maintStore.maintenances
                     .filter(m => m.client_id === c.id && m.status === 'active')
-                    .reduce((sum, m) => sum + m.monthly_retainer * 12, 0)
+                    .reduce((sum, m) => sum + m.monthly_retainer * maintMonthsThisYear(m), 0)
 
-                  const fixedValue = projectValue + hostingAnnual + domainsAnnual + maintAnnual
+                  const fixedValue = projectRpSum + hostingAnnual + domainsAnnual + maintAnnual
 
                   // Hosting: any active hosting entry for this client
                   const hasHosting = infraStore.hostingClients.some(h => h.client_id === c.id && h.status === 'active')
-                  // Domains: any domain entry for this client
-                  const hasDomains = domainStore.domains.some(d => d.client_id === c.id)
+                  // Domains: any non-archived domain entry for this client
+                  const hasDomains = domainStore.domains.some(d => d.client_id === c.id && !d.archived)
                   // Maintenance: any active maintenance contract for this client
                   const hasMaintenance = maintStore.maintenances.some(m => m.client_id === c.id && m.status === 'active')
 

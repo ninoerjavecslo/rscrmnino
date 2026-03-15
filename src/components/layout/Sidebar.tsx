@@ -23,8 +23,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
     <aside className={`sidebar${open ? ' sidebar-open' : ''}`}>
       <div className="sidebar-logo" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div>
-          <div className="sidebar-logo-name">Renderspace</div>
-          <div className="sidebar-logo-sub">Studio Intelligence</div>
+          <div className="sidebar-logo-name">Agency Intelligence OS</div>
         </div>
         <button className="mobile-close-btn" onClick={onClose} aria-label="Close menu">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>

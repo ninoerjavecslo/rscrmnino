@@ -228,50 +228,6 @@ export function DashboardView() {
         </div>
       </div>
 
-      {/* ── KPI strip ─────────────────────────────────────────────────────── */}
-      <div className="stats-strip">
-        <div
-          className="stat-card"
-          style={{ '--left-color': 'var(--navy)' } as React.CSSProperties}
-        >
-          <div className="stat-card-label">Active Clients</div>
-          <div className="stat-card-value">{activeClientsCount}</div>
-          <div className="stat-card-sub">{cStore.clients.length} total registered</div>
-        </div>
-
-        <div
-          className="stat-card"
-          style={{ '--left-color': 'var(--green)' } as React.CSSProperties}
-        >
-          <div className="stat-card-label">Active Projects</div>
-          <div className="stat-card-value">{activeProjects.length}</div>
-          <div className="stat-card-sub">{pStore.projects.length} total projects</div>
-        </div>
-
-        <div
-          className="stat-card"
-          style={{ '--left-color': 'var(--blue)' } as React.CSSProperties}
-        >
-          <div className="stat-card-label">Monthly Retainer</div>
-          <div className="stat-card-value" style={{ fontVariantNumeric: 'tabular-nums' }}>
-            {fmtEur(totalMonthlyRetainer)}
-          </div>
-          <div className="stat-card-sub">
-            maintenance + hosting MRR
-          </div>
-        </div>
-
-        <div
-          className="stat-card"
-          style={{ '--left-color': 'var(--amber)' } as React.CSSProperties}
-        >
-          <div className="stat-card-label">This Month Planned</div>
-          <div className="stat-card-value" style={{ fontVariantNumeric: 'tabular-nums' }}>
-            {fmtEur(thisMonthPlanned)}
-          </div>
-          <div className="stat-card-sub">{invoicesToIssue.length} invoices pending</div>
-        </div>
-      </div>
 
       {/* ── Page content ──────────────────────────────────────────────────── */}
       <div className="page-content" style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>

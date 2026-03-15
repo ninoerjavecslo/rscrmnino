@@ -8,6 +8,7 @@ import { useInfraStore } from '../stores/infrastructure'
 import { useRevenuePlannerStore } from '../stores/revenuePlanner'
 import { useMaintenancesStore } from '../stores/maintenances'
 import { usePipelineStore } from '../stores/pipeline'
+import { useChangeRequestsStore } from '../stores/changeRequests'
 import { useSettingsStore } from '../stores/settings'
 import { toast } from '../lib/toast'
 import type { Project, Domain, HostingClient, RevenuePlanner, Maintenance, PipelineItem } from '../lib/types'
@@ -287,6 +288,7 @@ export function ClientDetailView() {
   const rpStore = useRevenuePlannerStore()
   const mStore = useMaintenancesStore()
   const plStore = usePipelineStore()
+  const crStore = useChangeRequestsStore()
   const settingsStore = useSettingsStore()
   const pmOptions = settingsStore.projectManagers.map(m => ({ value: m, label: m }))
 
@@ -346,6 +348,7 @@ export function ClientDetailView() {
     rpStore.fetchByMonths(allMonths)
     mStore.fetchAll()
     if (id) plStore.fetchAll()
+    crStore.fetchAllApproved()
     settingsStore.fetch()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -378,10 +381,13 @@ export function ClientDetailView() {
   const hostingAnnual = hostingRows.reduce((s, h) => s + hostingContractValue(h), 0)
   const domainsAnnual = clientDomains.filter(d => !d.archived).reduce((s, d) => s + (d.yearly_amount ?? 0), 0)
   const maintAnnual = maintenances.filter(m => m.status === 'active').reduce((s, m) => s + m.monthly_retainer * maintMonthsThisYear(m), 0)
-  const projectRpSum = allClientRpRows
-    .filter(r => r.project_id != null && projectIds.has(r.project_id))
+  const projectRegularRpSum = allClientRpRows
+    .filter(r => r.project_id != null && projectIds.has(r.project_id) && r.status !== 'cost' && !r.notes?.startsWith('CR:'))
     .reduce((s, r) => s + (r.planned_amount ?? 0), 0)
-  const totalValue = projectRpSum + hostingAnnual + domainsAnnual + maintAnnual
+  const projectApprovedCRSum = crStore.approvedCRs
+    .filter(cr => projectIds.has(cr.project_id))
+    .reduce((s, cr) => s + (cr.amount ?? 0), 0)
+  const totalValue = projectRegularRpSum + projectApprovedCRSum + hostingAnnual + domainsAnnual + maintAnnual
 
   const invoicedYTD = allClientRpRows
     .filter(r => yearMonths.some(m => m === r.month) && (r.status === 'issued' || r.status === 'paid'))
@@ -908,9 +914,12 @@ export function ClientDetailView() {
                   const projInvoiced = invoicedByProject.get(p.id)
                   const isRecurring = p.type === 'maintenance' || p.type === 'variable'
                   const projRpRows = allClientRpRows.filter(r => r.project_id === p.id)
-                  const totalProjectValue = isRecurring
-                    ? projRpRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0)
-                    : p.contract_value ?? 0
+                  const projRegularRows = projRpRows.filter(r => !r.notes?.startsWith('CR:') && r.status !== 'cost')
+                  const projCRTotal = crStore.approvedCRs.filter(cr => cr.project_id === p.id).reduce((s, cr) => s + (cr.amount ?? 0), 0)
+                  const baseValue = isRecurring
+                    ? projRegularRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0)
+                    : (p.initial_contract_value ?? p.contract_value ?? 0)
+                  const totalProjectValue = baseValue + projCRTotal
                   return (
                     <tr key={p.id}>
                       <td>
@@ -940,10 +949,12 @@ export function ClientDetailView() {
                 {(() => {
                   const totalVal = projects.reduce((s, p) => {
                     const isRecurring = p.type === 'maintenance' || p.type === 'variable'
-                    const projRpRows = allClientRpRows.filter(r => r.project_id === p.id)
-                    return s + (isRecurring
-                      ? projRpRows.reduce((r, row) => r + (row.planned_amount ?? 0), 0)
-                      : p.contract_value ?? 0)
+                    const projRegularRows = allClientRpRows.filter(r => r.project_id === p.id && !r.notes?.startsWith('CR:') && r.status !== 'cost')
+                    const projCRTotal = crStore.approvedCRs.filter(cr => cr.project_id === p.id).reduce((a, cr) => a + (cr.amount ?? 0), 0)
+                    const base = isRecurring
+                      ? projRegularRows.reduce((r, row) => r + (row.planned_amount ?? 0), 0)
+                      : (p.initial_contract_value ?? p.contract_value ?? 0)
+                    return s + base + projCRTotal
                   }, 0)
                   const totalInvoiced = projects.reduce((s, p) => s + (invoicedByProject.get(p.id) ?? 0), 0)
                   return (

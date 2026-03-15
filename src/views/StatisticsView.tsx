@@ -384,9 +384,9 @@ export function StatisticsView() {
       {/* ── Section 1: Top KPI strip ── */}
       <div className="stats-strip" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
         <StatCard
-          label="Active Clients"
-          value={String(activeClientIds.size)}
-          sub={`of ${clients.length} total`}
+          label="Clients"
+          value={String(clients.length)}
+          sub={`${activeClientIds.size} with active projects`}
           color="var(--navy)"
         />
         <StatCard

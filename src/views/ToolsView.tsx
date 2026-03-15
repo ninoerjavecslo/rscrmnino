@@ -83,27 +83,6 @@ const TOOLS: ToolCard[] = [
     available: true,
     path: '/email-tool',
   },
-  {
-    id: 'invoice-generator',
-    name: 'Invoice Generator',
-    description: 'Generate PDF invoices from project data',
-    icon: <DocumentIcon />,
-    available: false,
-  },
-  {
-    id: 'contract-templates',
-    name: 'Contract Templates',
-    description: 'Standard contract templates for fixed, maintenance and retainer projects',
-    icon: <FileTextIcon />,
-    available: false,
-  },
-  {
-    id: 'offer-generator',
-    name: 'Offer Generator',
-    description: 'Create client offers with automatic pricing',
-    icon: <EditIcon />,
-    available: false,
-  },
 ]
 
 // ── Tool card component ───────────────────────────────────────────────────────

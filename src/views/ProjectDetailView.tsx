@@ -34,16 +34,6 @@ const CR_PROB_OPTS = [
   { value: '50', label: '50%' },
   { value: '100', label: '100%' },
 ]
-const CR_TYPE_OPTS = [
-  { value: 'one_time', label: 'One-time payment' },
-  { value: 'monthly',  label: 'Monthly recurring' },
-  { value: 'fixed',    label: 'Fixed — plan by month' },
-]
-function crMonthCount(start: string, end: string): number {
-  const s = new Date(start + 'T00:00:00'), e = new Date(end + 'T00:00:00')
-  return Math.max(1, (e.getFullYear() - s.getFullYear()) * 12 + e.getMonth() - s.getMonth() + 1)
-}
-
 function fmtMonth(m: string) {
   const d = new Date(m + 'T00:00:00')
   return d.toLocaleString('en', { month: 'short', year: 'numeric' })
@@ -169,13 +159,9 @@ interface MoveForm {
 
 // ── CRModalFields shared form body ────────────────────────────────────────────
 
-function CRModalFields({ form, setForm, addRow, updateRow, removeRow, fixedTotal, autoFocus }: {
+function CRModalFields({ form, setForm, autoFocus }: {
   form: CRForm
   setForm: React.Dispatch<React.SetStateAction<CRForm>>
-  addRow: () => void
-  updateRow: (i: number, key: 'month' | 'amount', val: string) => void
-  removeRow: (i: number) => void
-  fixedTotal: () => number
   autoFocus?: boolean
 }) {
   return (
@@ -208,53 +194,16 @@ function CRModalFields({ form, setForm, addRow, updateRow, removeRow, fixedTotal
           <Select value={form.probability} onChange={v => setForm(f => ({ ...f, probability: v }))} options={CR_PROB_OPTS} />
         </div>
       </div>
-      <div className="form-group" style={{ marginBottom: 14 }}>
-        <label className="form-label">Deal type</label>
-        <Select value={form.deal_type} onChange={v => setForm(f => ({ ...f, deal_type: v as CRForm['deal_type'] }))} options={CR_TYPE_OPTS} />
+      <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+        <div className="form-group">
+          <label className="form-label">Amount (€) <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
+          <input type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} placeholder="0" />
+        </div>
+        <div className="form-group">
+          <label className="form-label">Expected month</label>
+          <input type="month" value={form.expected_month} onChange={e => setForm(f => ({ ...f, expected_month: e.target.value }))} />
+        </div>
       </div>
-      {form.deal_type !== 'fixed' && (
-        <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-          <div className="form-group">
-            <label className="form-label">{form.deal_type === 'monthly' ? 'Amount / month (€)' : 'Amount (€)'} <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
-            <input type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} placeholder="0" />
-          </div>
-          <div className="form-group">
-            <label className="form-label">{form.deal_type === 'monthly' ? 'Start month' : 'Expected month'}</label>
-            <input type="month" value={form.expected_month} onChange={e => setForm(f => ({ ...f, expected_month: e.target.value }))} />
-          </div>
-        </div>
-      )}
-      {form.deal_type === 'monthly' && (
-        <div className="form-group" style={{ marginBottom: 14 }}>
-          <label className="form-label">End month</label>
-          <input type="month" value={form.expected_end_month} onChange={e => setForm(f => ({ ...f, expected_end_month: e.target.value }))} />
-          {form.expected_month && form.expected_end_month && (() => {
-            const count = crMonthCount(form.expected_month + '-01', form.expected_end_month + '-01')
-            const total = Number(form.amount || 0) * count
-            return <div className="form-hint">{count} month{count !== 1 ? 's' : ''} · total {fmt(total)}</div>
-          })()}
-        </div>
-      )}
-      {form.deal_type === 'fixed' && (
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <label className="form-label" style={{ margin: 0 }}>Payment schedule</label>
-            <button className="btn btn-secondary btn-xs" onClick={addRow} type="button">+ Add month</button>
-          </div>
-          {form.schedule.length === 0 && <div style={{ fontSize: 12, color: 'var(--c4)', padding: '10px 0' }}>No payments added yet.</div>}
-          {form.schedule.map((row, i) => (
-            <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-              <input type="month" value={row.month} onChange={e => updateRow(i, 'month', e.target.value)} style={{ flex: 1 }} />
-              <div style={{ position: 'relative', flex: 1 }}>
-                <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--c3)', fontSize: 13, pointerEvents: 'none' }}>€</span>
-                <input type="number" value={row.amount} onChange={e => updateRow(i, 'amount', e.target.value)} placeholder="0" style={{ paddingLeft: 22, width: '100%' }} />
-              </div>
-              <button type="button" onClick={() => removeRow(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c4)', fontSize: 16, padding: '0 4px', lineHeight: 1 }}>×</button>
-            </div>
-          ))}
-          {form.schedule.length > 0 && <div className="form-hint" style={{ textAlign: 'right' }}>Total: {fmt(fixedTotal())}</div>}
-        </div>
-      )}
       <div className="form-group" style={{ marginBottom: 20 }}>
         <label className="form-label">Description <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
         <textarea rows={2} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="What does this change involve?" style={{ width: '100%', resize: 'vertical' }} />
@@ -318,6 +267,7 @@ export function ProjectDetailView() {
   const [showConfirm, setShowConfirm] = useState(false)
   const [confirmRow, setConfirmRow] = useState<RevenuePlanner | null>(null)
   const [confirmActual, setConfirmActual] = useState('')
+  const [confirmNote, setConfirmNote] = useState('')
   const [confirmSaving, setConfirmSaving] = useState(false)
 
 
@@ -418,15 +368,13 @@ export function ProjectDetailView() {
     : project?.type === 'maintenance' && maintenancePlannedTotal != null
       ? maintenancePlannedTotal
       : contractVal
-  // Left to invoice = what's still planned but not yet issued (CRs already in plan)
-  const leftToInvoice = invoiceRows
-    .filter(r => r.status === 'planned' || r.status === 'retainer')
-    .reduce((s, r) => s + (r.planned_amount ?? 0), 0)
+  // Left to invoice = total value minus what's already been invoiced
+  const leftToInvoice = Math.max(0, (effectiveBudget ?? 0) + crApprovedTotal - totalInvoiced)
 
-  const totalPlannedValue = invoiceRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0)
+  const totalValue = (effectiveBudget ?? 0) + crApprovedTotal
 
-  const invoicedPct = effectiveBudget && totalInvoiced
-    ? Math.round((totalInvoiced / effectiveBudget) * 100)
+  const invoicedPct = totalValue > 0 && totalInvoiced
+    ? Math.round((totalInvoiced / totalValue) * 100)
     : null
 
   // ── handlers ──────────────────────────────────────────────────────────────
@@ -603,14 +551,19 @@ export function ProjectDetailView() {
   function openConfirm(r: RevenuePlanner) {
     setConfirmRow(r)
     setConfirmActual(r.planned_amount != null ? String(r.planned_amount) : r.actual_amount != null ? String(r.actual_amount) : '')
+    setConfirmNote('')
     setShowConfirm(true)
   }
 
   async function saveConfirm() {
-    if (!confirmRow) return
+    if (!confirmRow || !id) return
+    if (!confirmNote.trim()) {
+      toast('error', 'Note is required')
+      return
+    }
     setConfirmSaving(true)
     try {
-      const actual = confirmActual ? Number(confirmActual) : (confirmRow.planned_amount ?? confirmRow.actual_amount)
+      const actual = confirmActual ? Number(confirmActual) : (confirmRow.planned_amount ?? confirmRow.actual_amount ?? 0)
       const { data } = await supabase
         .from('revenue_planner')
         .update({ status: 'issued', actual_amount: actual })
@@ -627,6 +580,24 @@ export function ProjectDetailView() {
           await crStore.update(linkedCR.id, { status: 'billed' })
         }
       }
+      // Auto-create approved CR for overage
+      const extra = confirmRow.planned_amount != null ? actual - confirmRow.planned_amount : 0
+      if (extra > 0) {
+        await crStore.add({
+          project_id: id,
+          title: `Extra: ${fmtMonth(confirmRow.month)}`,
+          description: confirmNote.trim(),
+          status: 'approved',
+          amount: extra,
+          probability: 100,
+          deal_type: 'one_time',
+          notes: 'auto_extra',
+          expected_month: null,
+          expected_end_month: null,
+          monthly_schedule: null,
+        })
+      }
+      toast('success', 'Invoice confirmed')
       setShowConfirm(false)
       setConfirmRow(null)
     } finally {
@@ -635,18 +606,7 @@ export function ProjectDetailView() {
   }
 
 
-  async function deferRow(r: RevenuePlanner) {
-    const newStatus = r.status === 'deferred' ? 'planned' : 'deferred'
-    const { data } = await supabase
-      .from('revenue_planner')
-      .update({ status: newStatus })
-      .eq('id', r.id)
-      .select('*, project:projects(id, pn, name, type)')
-    if (data && data.length > 0) {
-      setRpRows(prev => prev.map(row => row.id === r.id ? (data[0] as RevenuePlanner) : row))
-    }
-    toast('success', newStatus === 'deferred' ? 'Invoice deferred' : 'Invoice restored to planned')
-  }
+
 
   function openProjectEdit() {
     if (!project) return
@@ -752,20 +712,6 @@ export function ProjectDetailView() {
     setShowAddCR(true)
   }
 
-  function addCRScheduleRow() { setCrForm(f => ({ ...f, schedule: [...f.schedule, { month: '', amount: '' }] })) }
-  function updateCRScheduleRow(i: number, key: 'month' | 'amount', val: string) {
-    setCrForm(f => { const s = [...f.schedule]; s[i] = { ...s[i], [key]: val }; return { ...f, schedule: s } })
-  }
-  function removeCRScheduleRow(i: number) { setCrForm(f => ({ ...f, schedule: f.schedule.filter((_, idx) => idx !== i) })) }
-  function crFixedTotal() { return crForm.schedule.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0) }
-
-  function crScheduleData() {
-    if (crForm.deal_type === 'fixed' && crForm.schedule.length > 0) {
-      return crForm.schedule.filter(r => r.month && r.amount).map(r => ({ month: r.month + '-01', amount: Number(r.amount) }))
-    }
-    return null
-  }
-
   async function saveAddCR() {
     if (!id || !crForm.title.trim()) return
     setCrSaving(true)
@@ -774,13 +720,13 @@ export function ProjectDetailView() {
         project_id: id,
         title: crForm.title.trim(),
         status: crForm.status,
-        amount: crForm.deal_type !== 'fixed' && crForm.amount ? parseFloat(crForm.amount) : null,
+        amount: crForm.amount ? parseFloat(crForm.amount) : null,
         description: crForm.description.trim() || null,
         probability: parseInt(crForm.probability),
-        deal_type: crForm.deal_type,
-        expected_month: crForm.deal_type !== 'fixed' && crForm.expected_month ? crForm.expected_month + '-01' : null,
-        expected_end_month: crForm.deal_type === 'monthly' && crForm.expected_end_month ? crForm.expected_end_month + '-01' : null,
-        monthly_schedule: crScheduleData(),
+        deal_type: 'one_time',
+        expected_month: crForm.expected_month ? crForm.expected_month + '-01' : null,
+        expected_end_month: null,
+        monthly_schedule: null,
       })
       setShowAddCR(false)
       toast('success', 'Change request added')
@@ -792,14 +738,14 @@ export function ProjectDetailView() {
     setEditCRTarget(cr)
     setCrForm({
       title: cr.title,
-      status: cr.status,
+      status: cr.status === 'billed' ? 'approved' : cr.status,
       amount: cr.amount != null ? String(cr.amount) : '',
       description: cr.description ?? '',
       probability: cr.probability != null ? String(cr.probability) : '75',
-      deal_type: cr.deal_type ?? 'one_time',
+      deal_type: 'one_time',
       expected_month: cr.expected_month ? cr.expected_month.slice(0, 7) : '',
-      expected_end_month: cr.expected_end_month ? cr.expected_end_month.slice(0, 7) : '',
-      schedule: cr.monthly_schedule?.map(r => ({ month: r.month.slice(0, 7), amount: String(r.amount) })) ?? [],
+      expected_end_month: '',
+      schedule: [],
     })
     setShowEditCR(true)
   }
@@ -811,13 +757,13 @@ export function ProjectDetailView() {
       await crStore.update(editCRTarget.id, {
         title: crForm.title.trim(),
         status: crForm.status,
-        amount: crForm.deal_type !== 'fixed' && crForm.amount ? parseFloat(crForm.amount) : null,
+        amount: crForm.amount ? parseFloat(crForm.amount) : null,
         description: crForm.description.trim() || null,
         probability: parseInt(crForm.probability),
-        deal_type: crForm.deal_type,
-        expected_month: crForm.deal_type !== 'fixed' && crForm.expected_month ? crForm.expected_month + '-01' : null,
-        expected_end_month: crForm.deal_type === 'monthly' && crForm.expected_end_month ? crForm.expected_end_month + '-01' : null,
-        monthly_schedule: crScheduleData(),
+        deal_type: 'one_time',
+        expected_month: crForm.expected_month ? crForm.expected_month + '-01' : null,
+        expected_end_month: null,
+        monthly_schedule: null,
       })
       setShowEditCR(false)
       setEditCRTarget(null)
@@ -835,23 +781,20 @@ export function ProjectDetailView() {
       await crStore.update(editCRTarget.id, {
         title,
         status: 'approved',
-        amount: crForm.deal_type !== 'fixed' && crForm.amount ? parseFloat(crForm.amount) : null,
+        amount: crForm.amount ? parseFloat(crForm.amount) : null,
         description: crForm.description.trim() || null,
         probability: parseInt(crForm.probability),
-        deal_type: crForm.deal_type,
-        expected_month: crForm.deal_type !== 'fixed' && crForm.expected_month ? crForm.expected_month + '-01' : null,
-        expected_end_month: crForm.deal_type === 'monthly' && crForm.expected_end_month ? crForm.expected_end_month + '-01' : null,
-        monthly_schedule: crScheduleData(),
+        deal_type: 'one_time',
+        expected_month: crForm.expected_month ? crForm.expected_month + '-01' : null,
+        expected_end_month: null,
+        monthly_schedule: null,
       })
 
       // Build rows to plan
-      const schedule = crScheduleData()
       type PlanRow = { month: string; amount: number | null }
-      const planRows: PlanRow[] = schedule && schedule.length > 0
-        ? schedule.map(s => ({ month: s.month, amount: s.amount }))
-        : crForm.expected_month
-          ? [{ month: crForm.expected_month + '-01', amount: crForm.amount ? parseFloat(crForm.amount) : null }]
-          : []
+      const planRows: PlanRow[] = crForm.expected_month
+        ? [{ month: crForm.expected_month + '-01', amount: crForm.amount ? parseFloat(crForm.amount) : null }]
+        : []
 
       for (const row of planRows) {
         const { data, error } = await supabase.from('revenue_planner')
@@ -878,8 +821,10 @@ export function ProjectDetailView() {
 
   function openPlanCR(cr: ChangeRequest) {
     setPlanCRTarget(cr)
-    const now = new Date()
-    setPlanCRMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
+    const defaultMonth = cr.expected_month
+      ? cr.expected_month.slice(0, 7)
+      : (() => { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}` })()
+    setPlanCRMonth(defaultMonth)
     setPlanCRAmount(cr.amount != null ? String(cr.amount) : '')
     setShowPlanCR(true)
   }
@@ -1043,7 +988,7 @@ export function ProjectDetailView() {
               </div>
             </div>
           </div>
-          <div className="form-group" style={{ marginBottom: 20 }}>
+          <div className="form-group" style={{ marginBottom: 16 }}>
             <label className="form-label">Actual amount invoiced (€)</label>
             <input
               className="form-input"
@@ -1052,10 +997,25 @@ export function ProjectDetailView() {
               onChange={e => setConfirmActual(e.target.value)}
               autoFocus
             />
+            {confirmRow.planned_amount != null && Number(confirmActual) > confirmRow.planned_amount && (
+              <div style={{ marginTop: 6, padding: '6px 10px', background: 'rgba(245,180,50,0.12)', border: '1px solid var(--amber)', borderRadius: 6, fontSize: 12, color: 'var(--c1)' }}>
+                +{fmt(Number(confirmActual) - confirmRow.planned_amount)} over planned — will auto-create an approved change request
+              </div>
+            )}
+          </div>
+          <div className="form-group" style={{ marginBottom: 20 }}>
+            <label className="form-label">Note <span style={{ color: 'var(--red)' }}>*</span></label>
+            <input
+              className="form-input"
+              type="text"
+              placeholder="e.g. Extra scope added, client approved verbally"
+              value={confirmNote}
+              onChange={e => setConfirmNote(e.target.value)}
+            />
           </div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button className="btn btn-secondary btn-sm" onClick={() => { setShowConfirm(false); setConfirmRow(null) }}>Cancel</button>
-            <button className="btn btn-primary btn-sm" onClick={saveConfirm} disabled={confirmSaving}>
+            <button className="btn btn-primary btn-sm" onClick={saveConfirm} disabled={confirmSaving || !confirmNote.trim()}>
               {confirmSaving ? 'Saving…' : '✓ Confirm Issued'}
             </button>
           </div>
@@ -1430,10 +1390,7 @@ export function ProjectDetailView() {
       {/* ── Add change request modal ── */}
       {showAddCR && (
         <Modal title="Add Change Request" onClose={() => setShowAddCR(false)}>
-          <CRModalFields form={crForm} setForm={setCrForm}
-            addRow={addCRScheduleRow} updateRow={updateCRScheduleRow}
-            removeRow={removeCRScheduleRow} fixedTotal={crFixedTotal}
-            autoFocus />
+          <CRModalFields form={crForm} setForm={setCrForm} autoFocus />
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button className="btn btn-secondary btn-sm" onClick={() => setShowAddCR(false)}>Cancel</button>
             <button className="btn btn-primary btn-sm" onClick={saveAddCR} disabled={crSaving || !crForm.title.trim()}>
@@ -1446,9 +1403,7 @@ export function ProjectDetailView() {
       {/* ── Edit change request modal ── */}
       {showEditCR && editCRTarget && (
         <Modal title="Edit Change Request" onClose={() => { setShowEditCR(false); setEditCRTarget(null) }}>
-          <CRModalFields form={crForm} setForm={setCrForm}
-            addRow={addCRScheduleRow} updateRow={updateCRScheduleRow}
-            removeRow={removeCRScheduleRow} fixedTotal={crFixedTotal} />
+          <CRModalFields form={crForm} setForm={setCrForm} />
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button className="btn btn-secondary btn-sm" onClick={() => { setShowEditCR(false); setEditCRTarget(null) }}>Cancel</button>
             <button className="btn btn-secondary btn-sm" onClick={saveEditCR} disabled={crSaving || !crForm.title.trim()}>
@@ -1578,9 +1533,11 @@ export function ProjectDetailView() {
           <div className="stat-card">
             <div className="stat-card-label">Total Value</div>
             <div className="stat-card-value" style={{ color: 'var(--navy)' }}>
-              {totalPlannedValue > 0 ? fmt(totalPlannedValue) : '—'}
+              {totalValue > 0 ? fmt(totalValue) : '—'}
             </div>
-            <div className="stat-card-sub">all planned invoices</div>
+            <div className="stat-card-sub">
+              {project.type === 'fixed' ? 'initial + approved CRs' : 'planned + approved CRs'}
+            </div>
           </div>
           <div className="stat-card">
             <div className="stat-card-label">Actual Invoiced</div>
@@ -1588,7 +1545,7 @@ export function ProjectDetailView() {
               {totalInvoiced > 0 ? fmt(totalInvoiced) : '—'}
             </div>
             {invoicedPct != null && (
-              <div className="stat-card-sub">{invoicedPct}% of initial</div>
+              <div className="stat-card-sub">{invoicedPct}% of total</div>
             )}
           </div>
           <div className="stat-card">
@@ -1715,6 +1672,11 @@ export function ProjectDetailView() {
                         <span style={{ color: actualColor, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
                           {r.actual_amount != null ? fmt(r.actual_amount) : <span className="text-muted">—</span>}
                         </span>
+                        {r.actual_amount != null && r.planned_amount != null && r.actual_amount > r.planned_amount && (
+                          <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, color: 'var(--amber)', background: 'rgba(245,180,50,0.15)', border: '1px solid var(--amber)', borderRadius: 4, padding: '1px 5px' }}>
+                            +{fmt(r.actual_amount - r.planned_amount)}
+                          </span>
+                        )}
                       </td>
                       <td style={{ fontSize: 12, color: 'var(--c3)', fontVariantNumeric: 'tabular-nums' }}>
                         {r.probability != null ? `${r.probability}%` : <span className="text-muted">—</span>}
@@ -1807,17 +1769,19 @@ export function ProjectDetailView() {
                   <th>STATUS</th>
                   <th>TITLE</th>
                   <th className="th-right">AMOUNT</th>
+                  <th>EXPECTED</th>
                   <th>DESCRIPTION</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {crStore.changeRequests.map(cr => {
+                  const isAuto = cr.notes === 'auto_extra'
                   const alreadyPlanned = rpRows.some(r => r.notes?.includes(`CR: ${cr.title}`) && r.status !== 'deferred')
                   const crDisplayAmount = cr.deal_type === 'fixed' && cr.monthly_schedule
                     ? cr.monthly_schedule.reduce((s, r) => s + r.amount, 0)
                     : cr.amount
-                  const canPlan = cr.status === 'approved' && crDisplayAmount != null && crDisplayAmount > 0 && !alreadyPlanned
+                  const canPlan = !isAuto && cr.status === 'approved' && crDisplayAmount != null && crDisplayAmount > 0 && !alreadyPlanned
                   const crStatusBadge = cr.status === 'billed'
                     ? <span className="badge badge-navy">Billed</span>
                     : cr.status === 'approved'
@@ -1825,10 +1789,16 @@ export function ProjectDetailView() {
                       : <span className="badge badge-amber">Pending</span>
                   return (
                     <tr key={cr.id}>
-                      <td>{crStatusBadge}</td>
+                      <td>
+                        {crStatusBadge}
+                        {isAuto && <span className="badge badge-gray" style={{ marginLeft: 4 }}>Auto</span>}
+                      </td>
                       <td style={{ fontSize: 13, fontWeight: 600, color: 'var(--c0)' }}>{cr.title}</td>
                       <td className="td-right text-mono" style={{ fontSize: 13, color: 'var(--c2)' }}>
                         {crDisplayAmount != null ? fmt(crDisplayAmount) : <span className="text-muted">—</span>}
+                      </td>
+                      <td className="text-mono" style={{ fontSize: 12, color: 'var(--c3)' }}>
+                        {cr.expected_month ? fmtMonth(cr.expected_month) : <span className="text-muted">—</span>}
                       </td>
                       <td style={{ fontSize: 12, color: 'var(--c3)', maxWidth: 300 }}>{cr.description ?? <span className="text-muted">—</span>}</td>
                       <td>
@@ -1838,10 +1808,14 @@ export function ProjectDetailView() {
                               + Plan Invoice
                             </button>
                           )}
-                          <button className="btn btn-secondary btn-xs" onClick={() => openEditCR(cr)}>Edit</button>
-                          <button className="btn btn-ghost btn-xs" onClick={() => setDeleteCRTarget(cr)} style={{ color: 'var(--red)' }}>
-                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                          </button>
+                          {!isAuto && (
+                            <>
+                              <button className="btn btn-secondary btn-xs" onClick={() => openEditCR(cr)}>Edit</button>
+                              <button className="btn btn-ghost btn-xs" onClick={() => setDeleteCRTarget(cr)} style={{ color: 'var(--red)' }}>
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>

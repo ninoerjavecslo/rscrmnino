@@ -4,6 +4,7 @@ import { useProjectsStore } from '../stores/projects'
 import { useClientsStore } from '../stores/clients'
 import { useInfraStore } from '../stores/infrastructure'
 import { useRevenuePlannerStore } from '../stores/revenuePlanner'
+import { useChangeRequestsStore } from '../stores/changeRequests'
 import { useSettingsStore } from '../stores/settings'
 import { supabase } from '../lib/supabase'
 import type { Project } from '../lib/types'
@@ -11,14 +12,7 @@ import { Select } from '../components/Select'
 
 const CURRENT_YEAR = new Date().getFullYear()
 
-function maintenanceMonths(p: { start_date?: string | null; end_date?: string | null }): number {
-  if (p.start_date && p.end_date) {
-    const s = new Date(p.start_date + 'T00:00:00')
-    const e = new Date(p.end_date + 'T00:00:00')
-    return Math.max(1, (e.getFullYear() - s.getFullYear()) * 12 + e.getMonth() - s.getMonth() + 1)
-  }
-  return 12
-}
+
 function currentYearMonths() {
   return Array.from({ length: 12 }, (_, i) => `${CURRENT_YEAR}-${String(i + 1).padStart(2, '0')}-01`)
 }
@@ -116,6 +110,7 @@ export function ProjectsView() {
   const cStore = useClientsStore()
   const iStore = useInfraStore()
   const rpStore = useRevenuePlannerStore()
+  const crStore = useChangeRequestsStore()
   const settingsStore = useSettingsStore()
   const navigate = useNavigate()
   const pmOptions = settingsStore.projectManagers.map(m => ({ value: m, label: m }))
@@ -129,7 +124,7 @@ export function ProjectsView() {
   const [deleting, setDeleting]       = useState(false)
 
   const months = useMemo(() => currentYearMonths(), [])
-  useEffect(() => { pStore.fetchAll(); cStore.fetchAll(); iStore.fetchAll(); rpStore.fetchByMonths(months); settingsStore.fetch() }, [])
+  useEffect(() => { pStore.fetchAll(); cStore.fetchAll(); iStore.fetchAll(); rpStore.fetchByMonths(months); crStore.fetchAllApproved(); settingsStore.fetch() }, [])
 
   function setF(k: string, v: string) {
     setForm(f => {
@@ -247,8 +242,13 @@ export function ProjectsView() {
   const portfolioValue = pStore.projects
     .filter(p => p.status === 'active')
     .reduce((sum, p) => {
-      if (p.contract_value == null) return sum
-      return sum + (p.type === 'maintenance' ? p.contract_value * maintenanceMonths(p) : p.contract_value)
+      const isRecurring = p.type === 'maintenance' || p.type === 'variable'
+      const regularRows = rpStore.rows.filter(r => r.project_id === p.id && !r.notes?.startsWith('CR:') && r.status !== 'cost')
+      const crTotal = crStore.approvedCRs.filter(cr => cr.project_id === p.id).reduce((s, cr) => s + (cr.amount ?? 0), 0)
+      const base = isRecurring
+        ? regularRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0)
+        : (p.initial_contract_value ?? p.contract_value ?? 0)
+      return sum + base + crTotal
     }, 0)
   const monthsElapsed  = new Date().getMonth() + 1
   const costsYTD       = iStore.totalMonthlyCost() * monthsElapsed
@@ -316,8 +316,13 @@ export function ProjectsView() {
                     <td><span className={`badge ${TYPE_BADGE[p.type] ?? 'badge-gray'}`}>{TYPE_LABEL[p.type] ?? p.type}</span></td>
                     <td className="td-right text-mono" style={{fontWeight:600}}>
                       {(() => {
-                        const val = p.initial_contract_value
-                          ?? (p.contract_value ? (p.type === 'maintenance' ? p.contract_value * maintenanceMonths(p) : p.contract_value) : null)
+                        const isRecurring = p.type === 'maintenance' || p.type === 'variable'
+                        const regularRows = rpStore.rows.filter(r => r.project_id === p.id && !r.notes?.startsWith('CR:') && r.status !== 'cost')
+                        const crTotal = crStore.approvedCRs.filter(cr => cr.project_id === p.id).reduce((s, cr) => s + (cr.amount ?? 0), 0)
+                        const base = isRecurring
+                          ? regularRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0)
+                          : (p.initial_contract_value ?? p.contract_value ?? null)
+                        const val = base != null ? base + crTotal : null
                         return val ? `${val.toLocaleString()} €` : <span className="text-muted">—</span>
                       })()}
                     </td>

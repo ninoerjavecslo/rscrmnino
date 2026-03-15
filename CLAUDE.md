@@ -1,7 +1,7 @@
-# Renderspace — Studio Intelligence App
+# Agency Intelligence OS
 
 ## Project overview
-React + TypeScript + Vite frontend for a studio management tool. Supabase backend. No Tailwind — custom CSS design system only.
+React + TypeScript + Vite frontend for an agency management tool ("Agency Intelligence OS"). Supabase backend. No Tailwind — custom CSS design system only.
 
 ## Tech stack
 - React 19, TypeScript (strict), Vite

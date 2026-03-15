@@ -58,7 +58,7 @@ function App() {
                   </svg>
                 </button>
                 <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--c0)' }}>
-                  Renderspace
+                  Agency Intelligence OS
                 </span>
               </div>
 

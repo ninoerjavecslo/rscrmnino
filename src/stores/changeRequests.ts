@@ -4,9 +4,11 @@ import type { ChangeRequest } from '../lib/types'
 
 interface ChangeRequestsState {
   changeRequests: ChangeRequest[]
+  approvedCRs: ChangeRequest[]
   loading: boolean
   error: string | null
   fetchByProject: (projectId: string) => Promise<void>
+  fetchAllApproved: () => Promise<void>
   add: (data: Omit<ChangeRequest, 'id' | 'created_at'>) => Promise<void>
   update: (id: string, data: Partial<Omit<ChangeRequest, 'id' | 'created_at'>>) => Promise<void>
   remove: (id: string) => Promise<void>
@@ -14,8 +16,20 @@ interface ChangeRequestsState {
 
 export const useChangeRequestsStore = create<ChangeRequestsState>((set, get) => ({
   changeRequests: [],
+  approvedCRs: [],
   loading: false,
   error: null,
+
+  fetchAllApproved: async () => {
+    try {
+      const { data, error } = await supabase
+        .from('change_requests')
+        .select('*')
+        .eq('status', 'approved')
+      if (error) throw error
+      set({ approvedCRs: (data ?? []) as ChangeRequest[] })
+    } catch (_err) { /* silent */ }
+  },
 
   fetchByProject: async (projectId: string) => {
     set({ loading: true, error: null })

@@ -6,6 +6,7 @@ import { useRevenuePlannerStore } from '../stores/revenuePlanner'
 import { useInfraStore } from '../stores/infrastructure'
 import { useDomainsStore } from '../stores/domains'
 import { useMaintenancesStore } from '../stores/maintenances'
+import { useChangeRequestsStore } from '../stores/changeRequests'
 import type { Client } from '../lib/types'
 import { hostingContractValue } from '../lib/types'
 
@@ -61,6 +62,7 @@ export function ClientsView() {
   const infraStore  = useInfraStore()
   const domainStore = useDomainsStore()
   const maintStore  = useMaintenancesStore()
+  const crStore     = useChangeRequestsStore()
   const navigate    = useNavigate()
   const [showAdd, setShowAdd] = useState(false)
   const [name, setName]       = useState('')
@@ -73,6 +75,7 @@ export function ClientsView() {
     infraStore.fetchAll()
     domainStore.fetchAll()
     maintStore.fetchAll()
+    crStore.fetchAllApproved()
   }, [])
 
   // invoiced YTD per client — all issued/paid rows across projects, maintenance, hosting, domains
@@ -150,13 +153,18 @@ export function ClientsView() {
                   const clientProjects = pStore.projects.filter(p => p.client_id === c.id)
                   const activeProjects = clientProjects.filter(p => p.status === 'active')
 
-                  const clientProjectIds = new Set(clientProjects.map(p => p.id))
                   const hasVariable = activeProjects.some(p => p.contract_value == null)
 
-                  // Project value from rpRows (same as ClientDetailView)
-                  const projectRpSum = rpStore.rows
-                    .filter(r => r.project_id != null && clientProjectIds.has(r.project_id))
-                    .reduce((sum, r) => sum + (r.planned_amount ?? 0), 0)
+                  // Project value: regular rows (non-CR, non-cost) + approved CRs
+                  const projectRpSum = activeProjects.reduce((sum, p) => {
+                    const isRecurring = p.type === 'maintenance' || p.type === 'variable'
+                    const regularRows = rpStore.rows.filter(r => r.project_id === p.id && !r.notes?.startsWith('CR:') && r.status !== 'cost')
+                    const crTotal = crStore.approvedCRs.filter(cr => cr.project_id === p.id).reduce((s, cr) => s + (cr.amount ?? 0), 0)
+                    const base = isRecurring
+                      ? regularRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0)
+                      : (p.initial_contract_value ?? p.contract_value ?? 0)
+                    return sum + base + crTotal
+                  }, 0)
 
                   // Hosting annual equivalent
                   const hostingAnnual = infraStore.hostingClients

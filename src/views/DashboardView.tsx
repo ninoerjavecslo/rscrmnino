@@ -141,36 +141,13 @@ export function DashboardView() {
 
   // ── Derived: KPIs ───────────────────────────────────────────────────────────
 
-  const activeProjects = pStore.projects.filter(p => p.status === 'active')
   const activeMaintenances = mStore.maintenances.filter(m => m.status === 'active')
-
-  // Active clients = clients with at least one active project or active maintenance
-  const clientsWithActiveProjects = new Set(
-    activeProjects.map(p => p.client_id).filter(Boolean)
-  )
-  const clientsWithActiveMaint = new Set(
-    activeMaintenances.map(m => m.client_id).filter(Boolean)
-  )
-  const activeClientIds = new Set([...clientsWithActiveProjects, ...clientsWithActiveMaint])
-  const activeClientsCount = activeClientIds.size
-
-  const hostingMrr = infraStore.monthlyRevenueEquiv()
-
-  // Monthly retainer = active maintenance monthly_retainer sum + hosting MRR
-  const maintainerRetainer = activeMaintenances.reduce(
-    (sum, m) => sum + (m.monthly_retainer ?? 0),
-    0
-  )
-  const totalMonthlyRetainer = maintainerRetainer + hostingMrr
 
   // ── Derived: Invoices to issue ──────────────────────────────────────────────
 
   const invoicesToIssue: RevenuePlanner[] = rStore.rows.filter(
     r => r.status === 'planned' || r.status === 'retainer'
   )
-
-  // This month planned = sum of pending invoices (matches the table below)
-  const thisMonthPlanned = invoicesToIssue.reduce((sum, r) => sum + (r.planned_amount ?? 0), 0)
 
   // ── Derived: Alerts ─────────────────────────────────────────────────────────
 

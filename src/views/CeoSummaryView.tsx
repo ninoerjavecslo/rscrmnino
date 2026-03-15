@@ -123,9 +123,9 @@ export function CeoSummaryView() {
     }
     if (r.domain_id) {
       const d = domainsStore.domains.find(d => d.id === r.domain_id)
-      if (d) return { name: d.name, client: '' }
+      if (d) return { name: d.domain_name, client: '' }
     }
-    return { name: r.description ?? '—', client: '' }
+    return { name: r.notes ?? '—', client: '' }
   }
 
   // ── Grouped rows ──────────────────────────────────────────────────────────

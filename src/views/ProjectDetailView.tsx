@@ -8,6 +8,11 @@ import { toast } from '../lib/toast'
 import type { RevenuePlanner, Project, ChangeRequest } from '../lib/types'
 import { Select } from '../components/Select'
 
+function safeUrl(url: string | null | undefined): string | undefined {
+  if (!url) return undefined
+  return /^https?:\/\//i.test(url) ? url : undefined
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 const TYPE_BADGE: Record<string, string> = {
@@ -176,11 +181,6 @@ export function ProjectDetailView() {
   // inline status change
   const [statusSaving, setStatusSaving] = useState(false)
 
-  // contract & notes modal
-  const [showContractEdit, setShowContractEdit] = useState(false)
-  const [contractForm, setContractForm] = useState({ contract_url: '', notes: '' })
-  const [contractSaving, setContractSaving] = useState(false)
-
   // confirm-issue popup
   const [showConfirm, setShowConfirm] = useState(false)
   const [confirmRow, setConfirmRow] = useState<RevenuePlanner | null>(null)
@@ -202,6 +202,13 @@ export function ProjectDetailView() {
   const [editCRTarget, setEditCRTarget] = useState<ChangeRequest | null>(null)
   const [crForm, setCrForm] = useState<CRForm>({ title: '', status: 'pending', amount: '', description: '' })
   const [crSaving, setCrSaving] = useState(false)
+
+  // plan CR invoice
+  const [showPlanCR, setShowPlanCR] = useState(false)
+  const [planCRTarget, setPlanCRTarget] = useState<ChangeRequest | null>(null)
+  const [planCRMonth, setPlanCRMonth] = useState('')
+  const [planCRAmount, setPlanCRAmount] = useState('')
+  const [planCRSaving, setPlanCRSaving] = useState(false)
 
   useEffect(() => {
     pStore.fetchAll()
@@ -466,25 +473,6 @@ export function ProjectDetailView() {
     finally { setStatusSaving(false) }
   }
 
-  function openContractEdit() {
-    if (!project) return
-    setContractForm({ contract_url: project.contract_url ?? '', notes: project.notes ?? '' })
-    setShowContractEdit(true)
-  }
-
-  async function saveContractEdit() {
-    if (!project) return
-    setContractSaving(true)
-    try {
-      await pStore.update(project.id, {
-        contract_url: contractForm.contract_url.trim() || null,
-        notes:        contractForm.notes.trim() || null,
-      })
-      setShowContractEdit(false)
-      toast('success', 'Saved')
-    } catch (e) { toast('error', (e as Error).message) }
-    finally { setContractSaving(false) }
-  }
 
   // ── move invoice month ────────────────────────────────────────────────────
   function openMove(r: RevenuePlanner) {
@@ -571,18 +559,25 @@ export function ProjectDetailView() {
     } catch (e) { toast('error', (e as Error).message) }
   }
 
-  async function addCRToInvoicePlan(cr: ChangeRequest) {
-    if (!id || !cr.amount) return
+  function openPlanCR(cr: ChangeRequest) {
+    setPlanCRTarget(cr)
     const now = new Date()
-    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+    setPlanCRMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
+    setPlanCRAmount(cr.amount != null ? String(cr.amount) : '')
+    setShowPlanCR(true)
+  }
+
+  async function savePlanCR() {
+    if (!id || !planCRTarget || !planCRMonth) return
+    setPlanCRSaving(true)
     try {
       const { data, error } = await supabase
         .from('revenue_planner')
         .insert({
           project_id: id,
-          month,
-          notes: `CR: ${cr.title}`,
-          planned_amount: cr.amount,
+          month: planCRMonth + '-01',
+          notes: `CR: ${planCRTarget.title}`,
+          planned_amount: planCRAmount ? Number(planCRAmount) : null,
           actual_amount: null,
           status: 'planned' as const,
           probability: 100,
@@ -591,7 +586,10 @@ export function ProjectDetailView() {
       if (error) throw error
       if (data) setRpRows(prev => [...prev, ...(data as RevenuePlanner[])].sort((a, b) => a.month.localeCompare(b.month)))
       toast('success', 'Added to Invoice Plan')
+      setShowPlanCR(false)
+      setPlanCRTarget(null)
     } catch (e) { toast('error', (e as Error).message) }
+    finally { setPlanCRSaving(false) }
   }
 
   // ── loading / not found ────────────────────────────────────────────────────
@@ -636,26 +634,6 @@ export function ProjectDetailView() {
 
   return (
     <div>
-      {/* ── Contract & notes modal ── */}
-      {showContractEdit && (
-        <Modal title="Contract & Notes" onClose={() => setShowContractEdit(false)}>
-          <div className="form-group" style={{ marginBottom: 14 }}>
-            <label className="form-label">Contract URL</label>
-            <input value={contractForm.contract_url} onChange={e => setContractForm(f => ({ ...f, contract_url: e.target.value }))} placeholder="https://…" autoFocus />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Notes</label>
-            <textarea rows={4} value={contractForm.notes} onChange={e => setContractForm(f => ({ ...f, notes: e.target.value }))} placeholder="Any internal notes about this project…" style={{ width: '100%', resize: 'vertical' }} />
-          </div>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowContractEdit(false)}>Cancel</button>
-            <button className="btn btn-primary btn-sm" onClick={saveContractEdit} disabled={contractSaving}>
-              {contractSaving ? 'Saving…' : 'Save'}
-            </button>
-          </div>
-        </Modal>
-      )}
-
       {/* ── Project edit modal ── */}
       {showProjectEdit && (
         <Modal title="Edit Project" onClose={() => setShowProjectEdit(false)}>
@@ -706,7 +684,6 @@ export function ProjectDetailView() {
                   { value: 'active', label: 'Active' },
                   { value: 'completed', label: 'Completed' },
                   { value: 'paused', label: 'Paused' },
-                  { value: 'cancelled', label: 'Cancelled' },
                 ]}
               />
             </div>
@@ -1026,11 +1003,21 @@ export function ProjectDetailView() {
           <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
             <div className="form-group">
               <label className="form-label">Status</label>
-              <Select value={crForm.status} onChange={val => setCrForm(f => ({ ...f, status: val as ChangeRequest['status'] }))} options={[
-                { value: 'pending', label: 'Pending' }, { value: 'approved', label: 'Approved' },
-                { value: 'in_progress', label: 'In Progress' }, { value: 'completed', label: 'Completed' },
-                { value: 'rejected', label: 'Rejected' },
-              ]} />
+              <div style={{ display: 'flex', gap: 2, background: 'var(--c7)', borderRadius: 8, padding: 3 }}>
+                {(['pending', 'approved'] as const).map(s => (
+                  <button key={s} type="button" onClick={() => setCrForm(f => ({ ...f, status: s }))}
+                    style={{
+                      flex: 1, padding: '6px 0', borderRadius: 6, border: 'none', fontFamily: 'inherit',
+                      background: crForm.status === s ? '#fff' : 'transparent',
+                      color: crForm.status === s ? (s === 'approved' ? 'var(--green)' : 'var(--amber)') : 'var(--c4)',
+                      fontWeight: crForm.status === s ? 700 : 500, fontSize: 13,
+                      cursor: 'pointer',
+                      boxShadow: crForm.status === s ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                    }}>
+                    {s === 'pending' ? 'Pending' : 'Approved'}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="form-group">
               <label className="form-label">Amount (€) <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
@@ -1060,11 +1047,21 @@ export function ProjectDetailView() {
           <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
             <div className="form-group">
               <label className="form-label">Status</label>
-              <Select value={crForm.status} onChange={val => setCrForm(f => ({ ...f, status: val as ChangeRequest['status'] }))} options={[
-                { value: 'pending', label: 'Pending' }, { value: 'approved', label: 'Approved' },
-                { value: 'in_progress', label: 'In Progress' }, { value: 'completed', label: 'Completed' },
-                { value: 'rejected', label: 'Rejected' },
-              ]} />
+              <div style={{ display: 'flex', gap: 2, background: 'var(--c7)', borderRadius: 8, padding: 3 }}>
+                {(['pending', 'approved'] as const).map(s => (
+                  <button key={s} type="button" onClick={() => setCrForm(f => ({ ...f, status: s }))}
+                    style={{
+                      flex: 1, padding: '6px 0', borderRadius: 6, border: 'none', fontFamily: 'inherit',
+                      background: crForm.status === s ? '#fff' : 'transparent',
+                      color: crForm.status === s ? (s === 'approved' ? 'var(--green)' : 'var(--amber)') : 'var(--c4)',
+                      fontWeight: crForm.status === s ? 700 : 500, fontSize: 13,
+                      cursor: 'pointer',
+                      boxShadow: crForm.status === s ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                    }}>
+                    {s === 'pending' ? 'Pending' : 'Approved'}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="form-group">
               <label className="form-label">Amount (€) <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
@@ -1079,6 +1076,36 @@ export function ProjectDetailView() {
             <button className="btn btn-secondary btn-sm" onClick={() => { setShowEditCR(false); setEditCRTarget(null) }}>Cancel</button>
             <button className="btn btn-primary btn-sm" onClick={saveEditCR} disabled={crSaving || !crForm.title.trim()}>
               {crSaving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Plan CR invoice modal ── */}
+      {showPlanCR && planCRTarget && (
+        <Modal title="Plan Invoice" onClose={() => { setShowPlanCR(false); setPlanCRTarget(null) }}>
+          <p style={{ fontSize: 13, color: 'var(--c2)', marginBottom: 16 }}>
+            Adding invoice plan for change request: <strong>{planCRTarget.title}</strong>
+          </p>
+          <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+            <div className="form-group">
+              <label className="form-label">Invoice month <span style={{ color: 'var(--red)' }}>*</span></label>
+              <input type="month" value={planCRMonth} onChange={e => setPlanCRMonth(e.target.value)} autoFocus />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Amount (€)</label>
+              <input type="number" value={planCRAmount} onChange={e => setPlanCRAmount(e.target.value)} placeholder="0" />
+            </div>
+          </div>
+          {planCRMonth && (
+            <div className="alert alert-amber" style={{ fontSize: 12, marginBottom: 4 }}>
+              Will add a planned invoice row for {fmtMonth(planCRMonth + '-01')} — {planCRAmount ? fmt(Number(planCRAmount)) : 'no amount set'}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => { setShowPlanCR(false); setPlanCRTarget(null) }}>Cancel</button>
+            <button className="btn btn-primary btn-sm" onClick={savePlanCR} disabled={planCRSaving || !planCRMonth}>
+              {planCRSaving ? 'Saving…' : '+ Add to Invoice Plan'}
             </button>
           </div>
         </Modal>
@@ -1113,24 +1140,32 @@ export function ProjectDetailView() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <select
-            value={project.status}
-            disabled={statusSaving}
-            onChange={e => saveStatus(e.target.value)}
-            style={{
-              fontSize: 12, fontWeight: 700, padding: '4px 8px', borderRadius: 6,
-              border: '1px solid var(--c5)', background: 'var(--c7)', cursor: 'pointer',
-              color: project.status === 'active' ? 'var(--green)' : project.status === 'paused' ? 'var(--amber)' : project.status === 'cancelled' ? 'var(--red)' : 'var(--c3)',
-            }}
-          >
-            <option value="active">Active</option>
-            <option value="paused">Paused</option>
-            <option value="completed">Completed</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-          <button className="btn btn-secondary btn-sm" onClick={openContractEdit}>
-            Contract & notes
-          </button>
+          <div style={{ display: 'flex', gap: 2, background: 'var(--c7)', borderRadius: 8, padding: 3 }}>
+            {(['active', 'paused', 'completed'] as const).map(s => {
+              const isSelected = project.status === s
+              const color = s === 'active' ? 'var(--green)' : s === 'paused' ? 'var(--amber)' : 'var(--c3)'
+              return (
+                <button
+                  key={s}
+                  disabled={statusSaving}
+                  onClick={() => { if (!isSelected) saveStatus(s) }}
+                  style={{
+                    padding: '5px 12px', borderRadius: 6, border: 'none',
+                    background: isSelected ? '#fff' : 'transparent',
+                    color: isSelected ? color : 'var(--c4)',
+                    fontWeight: isSelected ? 700 : 500,
+                    fontSize: 12,
+                    cursor: isSelected ? 'default' : 'pointer',
+                    boxShadow: isSelected ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                    fontFamily: 'inherit',
+                    transition: 'all 0.1s',
+                  }}
+                >
+                  {s.charAt(0).toUpperCase() + s.slice(1)}
+                </button>
+              )
+            })}
+          </div>
           <button className="btn btn-secondary btn-sm" onClick={openProjectEdit}>
             Edit
           </button>
@@ -1191,29 +1226,36 @@ export function ProjectDetailView() {
               </div>
             </div>
 
-            {/* Contract URL + Notes (only if set) */}
-            {project.contract_url && (
-              <div style={{ gridColumn: '1 / -1' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Contract</div>
-                <a
-                  href={project.contract_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ fontSize: 13, color: 'var(--navy)', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                >
-                  {project.contract_url.replace(/^https?:\/\//, '').slice(0, 60)}
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                </a>
-              </div>
-            )}
-            {project.notes && (
-              <div style={{ gridColumn: '1 / -1' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Notes</div>
-                <div style={{ fontSize: 13, color: 'var(--c2)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{project.notes}</div>
-              </div>
-            )}
           </div>
         </div>
+
+        {/* ── Contract & Notes section ── */}
+        {(project.contract_url || project.notes) && (
+          <div className="card" style={{ marginBottom: 24, padding: '20px 24px' }}>
+            <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+              {project.contract_url && (
+                <div style={{ flex: '0 0 auto' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Contract</div>
+                  <a
+                    href={safeUrl(project.contract_url)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontSize: 13, color: 'var(--navy)', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                  >
+                    {project.contract_url.replace(/^https?:\/\//, '').slice(0, 80)}
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  </a>
+                </div>
+              )}
+              {project.notes && (
+                <div style={{ flex: '1 1 300px' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Notes</div>
+                  <div style={{ fontSize: 13, color: 'var(--c2)', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{project.notes}</div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* ── Invoice Plans section ── */}
         <div className="section-bar" style={{ marginBottom: 10 }}>
@@ -1360,18 +1402,14 @@ export function ProjectDetailView() {
               </thead>
               <tbody>
                 {crStore.changeRequests.map(cr => {
-                  const CR_BADGE: Record<string, string> = {
-                    pending: 'badge-amber', approved: 'badge-blue',
-                    in_progress: 'badge-navy', completed: 'badge-green', rejected: 'badge-gray',
-                  }
-                  const CR_LABEL: Record<string, string> = {
-                    pending: 'Pending', approved: 'Approved',
-                    in_progress: 'In Progress', completed: 'Completed', rejected: 'Rejected',
-                  }
-                  const canPlan = (cr.status === 'approved' || cr.status === 'in_progress') && cr.amount != null
+                  const canPlan = cr.status === 'approved' && cr.amount != null
                   return (
                     <tr key={cr.id}>
-                      <td><span className={`badge ${CR_BADGE[cr.status] ?? 'badge-gray'}`}>{CR_LABEL[cr.status] ?? cr.status}</span></td>
+                      <td>
+                        <span className={`badge ${cr.status === 'approved' ? 'badge-green' : 'badge-amber'}`}>
+                          {cr.status === 'approved' ? 'Approved' : 'Pending'}
+                        </span>
+                      </td>
                       <td style={{ fontSize: 13, fontWeight: 600, color: 'var(--c0)' }}>{cr.title}</td>
                       <td className="td-right text-mono" style={{ fontSize: 13, color: 'var(--c2)' }}>
                         {cr.amount != null ? fmt(cr.amount) : <span className="text-muted">—</span>}
@@ -1380,8 +1418,8 @@ export function ProjectDetailView() {
                       <td>
                         <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                           {canPlan && (
-                            <button className="btn btn-ghost btn-xs" onClick={() => addCRToInvoicePlan(cr)} title="Add to invoice plan">
-                              + Plan
+                            <button className="btn btn-primary btn-xs" onClick={() => openPlanCR(cr)} title="Plan invoice for this CR">
+                              + Plan Invoice
                             </button>
                           )}
                           <button className="btn btn-secondary btn-xs" onClick={() => openEditCR(cr)}>Edit</button>

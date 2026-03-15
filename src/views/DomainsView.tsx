@@ -64,47 +64,30 @@ function DomainRowInputs({ rows, onChange }: { rows: DomainRow[]; onChange: (r: 
   function add()     { onChange([...rows, { domain_name: '', expiry_date: '', yearly_amount: '', isRenewal: false }]) }
   function remove(i: number) { onChange(rows.filter((_, idx) => idx !== i)) }
 
+  const cols = '2fr 155px 90px 105px 32px'
   return (
     <div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 130px 80px 110px 28px',gap:'4px 8px',marginBottom:4}}>
-        <span className="form-label">Domain</span>
-        <span className="form-label">Expiry date</span>
-        <span className="form-label">€ / year</span>
-        <span className="form-label">Type</span>
+      <div style={{display:'grid',gridTemplateColumns:cols,gap:'4px 10px',marginBottom:6,paddingBottom:4,borderBottom:'1px solid var(--c6)'}}>
+        <span className="form-label" style={{margin:0}}>Domain</span>
+        <span className="form-label" style={{margin:0}}>Expiry date</span>
+        <span className="form-label" style={{margin:0}}>€ / year</span>
+        <span className="form-label" style={{margin:0}}>Type</span>
         <span></span>
       </div>
       {rows.map((row, i) => (
-        <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 130px 80px 110px 28px',gap:'6px 8px',alignItems:'center',marginBottom:8}}>
-          <input value={row.domain_name}    onChange={e => update(i,'domain_name',e.target.value)}    placeholder="example.si" />
-          <input type="date" value={row.expiry_date}   onChange={e => update(i,'expiry_date',e.target.value)} />
-          <input type="number" value={row.yearly_amount} onChange={e => update(i,'yearly_amount',e.target.value)} placeholder="25" />
+        <div key={i} style={{display:'grid',gridTemplateColumns:cols,gap:'6px 10px',alignItems:'center',marginBottom:8}}>
+          <input value={row.domain_name} onChange={e => update(i,'domain_name',e.target.value)} placeholder="example.si" style={{height:36}} />
+          <input type="date" value={row.expiry_date} onChange={e => update(i,'expiry_date',e.target.value)} style={{height:36,width:'100%'}} />
+          <input type="number" value={row.yearly_amount} onChange={e => update(i,'yearly_amount',e.target.value)} placeholder="25" style={{height:36}} />
           <div style={{display:'flex',border:'1px solid var(--c6)',borderRadius:6,overflow:'hidden',height:36}}>
-            <button
-              type="button"
-              onClick={() => update(i,'isRenewal',false)}
-              style={{
-                flex:1,fontSize:11,fontWeight:700,border:'none',cursor:'pointer',
-                background: !row.isRenewal ? 'var(--navy)' : '#fff',
-                color: !row.isRenewal ? '#fff' : 'var(--c4)',
-              }}>
-              New
-            </button>
-            <button
-              type="button"
-              onClick={() => update(i,'isRenewal',true)}
-              style={{
-                flex:1,fontSize:11,fontWeight:700,border:'none',borderLeft:'1px solid var(--c6)',cursor:'pointer',
-                background: row.isRenewal ? 'var(--amber)' : '#fff',
-                color: row.isRenewal ? '#fff' : 'var(--c4)',
-              }}>
-              Renew
-            </button>
+            <button type="button" onClick={() => update(i,'isRenewal',false)} style={{flex:1,fontSize:11,fontWeight:700,border:'none',cursor:'pointer',background:!row.isRenewal?'var(--navy)':'#fff',color:!row.isRenewal?'#fff':'var(--c4)'}}>New</button>
+            <button type="button" onClick={() => update(i,'isRenewal',true)} style={{flex:1,fontSize:11,fontWeight:700,border:'none',borderLeft:'1px solid var(--c6)',cursor:'pointer',background:row.isRenewal?'var(--amber)':'#fff',color:row.isRenewal?'#fff':'var(--c4)'}}>Renew</button>
           </div>
           <button onClick={() => remove(i)} disabled={rows.length === 1}
-            style={{width:32,height:36,border:'1px solid var(--c6)',borderRadius:8,background:'#fff',cursor:'pointer',color:'var(--c4)',fontSize:20,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
+            style={{width:32,height:36,border:'1px solid var(--c6)',borderRadius:6,background:'#fff',cursor:'pointer',color:'var(--c4)',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>×</button>
         </div>
       ))}
-      <button className="btn btn-ghost btn-xs" onClick={add} style={{marginTop:2}}>
+      <button className="btn btn-ghost btn-xs" onClick={add} style={{marginTop:4}}>
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         Add domain
       </button>
@@ -298,21 +281,30 @@ export function DomainsView() {
   const [invoiceMonth, setInvoiceMonth]     = useState('')
   const [invoiceDesc, setInvoiceDesc]       = useState('')
   const [invoiceSaving, setInvoiceSaving]   = useState(false)
-  const [billedDomainIds, setBilledDomainIds] = useState<Set<string>>(new Set())
+  const [domainBillingStatus, setDomainBillingStatus] = useState<Map<string, 'planned' | 'billed'>>(new Map())
 
   useEffect(() => { store.fetchAll(); cStore.fetchAll() }, [])
 
   useEffect(() => {
-    async function fetchBilledDomains() {
+    async function fetchDomainBilling() {
       const { data } = await supabase
         .from('revenue_planner')
-        .select('domain_id')
+        .select('domain_id, status')
         .not('domain_id', 'is', null)
       if (data) {
-        setBilledDomainIds(new Set(data.map((r: { domain_id: string }) => r.domain_id)))
+        const map = new Map<string, 'planned' | 'billed'>()
+        for (const r of data as { domain_id: string; status: string }[]) {
+          const current = map.get(r.domain_id)
+          const isBilled = r.status === 'issued' || r.status === 'paid'
+          // Billed takes precedence over planned
+          if (isBilled || current == null) {
+            map.set(r.domain_id, isBilled ? 'billed' : 'planned')
+          }
+        }
+        setDomainBillingStatus(map)
       }
     }
-    fetchBilledDomains()
+    fetchDomainBilling()
   }, [])
   useEffect(() => { setActivePage(1) }, [search, clientFilter])
 
@@ -459,7 +451,8 @@ export function DomainsView() {
           }))
           const { error: pe } = await supabase.from('revenue_planner').insert(planRows)
           if (pe) throw pe
-          setBilledDomainIds(prev => new Set([...prev, ...inserted.map(d => d.id)]))
+          const billingVal: 'planned' | 'billed' = planStatus === 'issued' ? 'billed' : 'planned'
+          setDomainBillingStatus(prev => { const next = new Map(prev); inserted.forEach(d => next.set(d.id, billingVal)); return next })
           invoiceSuccess = true
         } catch (err) {
           toast('error', 'Domains saved but invoice planning failed: ' + (err as Error).message)
@@ -588,7 +581,7 @@ export function DomainsView() {
       })
       if (error) throw error
       toast('success', `Invoice planned for ${invoiceDomain.domain_name}`)
-      setBilledDomainIds(prev => new Set([...prev, invoiceDomain.id]))
+      setDomainBillingStatus(prev => { const next = new Map(prev); next.set(invoiceDomain.id, 'planned'); return next })
       setInvoiceDomain(null)
     } catch (err) {
       toast('error', (err as Error).message)
@@ -734,11 +727,13 @@ export function DomainsView() {
                     <td style={{fontSize:13,color:'var(--c2)'}}>{fmtDate(d.expiry_date)}</td>
                     <td><ExpiryBadge expiryDate={d.expiry_date} /></td>
                     <td>
-                      {billedDomainIds.has(d.id)
+                      {domainBillingStatus.get(d.id) === 'billed'
                         ? <span className="badge badge-green">Billed</span>
-                        : daysUntil(d.expiry_date) <= 60
-                          ? <button className="btn btn-ghost btn-xs" onClick={() => openInvoiceDomain(d)} style={{color:'var(--navy)',fontWeight:600}}>Invoice</button>
-                          : null}
+                        : domainBillingStatus.get(d.id) === 'planned'
+                          ? <span className="badge badge-amber">In plan</span>
+                          : daysUntil(d.expiry_date) <= 60
+                            ? <button className="btn btn-ghost btn-xs" onClick={() => openInvoiceDomain(d)} style={{color:'var(--navy)',fontWeight:600}}>Invoice</button>
+                            : null}
                     </td>
                     <td>
                       <div style={{display:'flex',gap:4,justifyContent:'flex-end'}}>
@@ -819,7 +814,7 @@ export function DomainsView() {
       </div>
 
       {/* ── Add domains modal ── */}
-      <Modal open={showAdd} title={wizardStep === 1 ? 'Add Client Domains' : 'Next steps'} onClose={closeWizard}
+      <Modal open={showAdd} title={wizardStep === 1 ? 'Add Client Domains' : 'Next steps'} maxWidth={720} onClose={closeWizard}
         footer={
           wizardStep === 1 ? (
             <>
@@ -880,44 +875,48 @@ export function DomainsView() {
               <DomainRowInputs rows={domainRows} onChange={setDomainRows} />
             </div>
 
-            {/* Invoice planning */}
+            {/* Billing */}
             <div style={{borderTop:'1px solid var(--c6)',paddingTop:14,marginTop:14}}>
-              <p style={{margin:'0 0 10px',fontWeight:700,fontSize:13,color:'var(--c0)'}}>
-                📅 Invoice planning <span style={{fontWeight:400,fontSize:11,color:'var(--c4)'}}>— optional</span>
+              <p style={{margin:'0 0 12px',fontWeight:700,fontSize:13,color:'var(--c0)'}}>
+                Billing <span style={{fontWeight:400,fontSize:11,color:'var(--c4)'}}>— optional</span>
               </p>
-              <div style={{display:'flex',alignItems:'flex-end',gap:12,flexWrap:'wrap'}}>
-                <div className="form-group" style={{marginBottom:0,minWidth:160}}>
-                  <label className="form-label">Invoice month</label>
-                  <input
-                    type="month"
-                    value={invoicePlanMonth}
-                    onChange={e => {
-                      setInvoicePlanMonth(e.target.value)
-                      if (!invoicePlanStatus) setInvoicePlanStatus('planned')
-                    }}
-                  />
+              <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',marginBottom:12,fontSize:13,fontWeight:500}}>
+                <input
+                  type="checkbox"
+                  checked={invoicePlanStatus === 'issued'}
+                  onChange={e => {
+                    setInvoicePlanStatus(e.target.checked ? 'issued' : 'planned')
+                    if (!invoicePlanMonth) {
+                      const now = new Date()
+                      setInvoicePlanMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
+                    }
+                  }}
+                  style={{width:15,height:15}}
+                />
+                Already billed
+              </label>
+              {invoicePlanStatus === 'issued' ? (
+                <div className="form-group" style={{marginBottom:0,maxWidth:200}}>
+                  <label className="form-label">Billed in which month?</label>
+                  <input type="month" value={invoicePlanMonth} onChange={e => setInvoicePlanMonth(e.target.value)} />
                 </div>
-                {invoicePlanMonth && (
-                  <div className="form-group" style={{marginBottom:0}}>
-                    <label className="form-label">Status</label>
-                    <div style={{display:'flex',gap:6}}>
-                      <button type="button" onClick={() => setInvoicePlanStatus('planned')}
-                        className={`btn btn-sm${invoicePlanStatus === 'planned' ? ' btn-primary' : ' btn-secondary'}`}>
-                        Plan
-                      </button>
-                      <button type="button" onClick={() => setInvoicePlanStatus('issued')}
-                        className={`btn btn-sm${invoicePlanStatus === 'issued' ? ' btn-primary' : ' btn-secondary'}`}
-                        style={invoicePlanStatus === 'issued' ? {background:'var(--green)',borderColor:'var(--green)'} : {}}>
-                        Already billed
-                      </button>
-                    </div>
+              ) : (
+                <div>
+                  <div className="form-group" style={{marginBottom:0,maxWidth:200}}>
+                    <label className="form-label">Add to invoice month</label>
+                    <input
+                      type="month"
+                      value={invoicePlanMonth}
+                      onChange={e => {
+                        setInvoicePlanMonth(e.target.value)
+                        if (!invoicePlanStatus) setInvoicePlanStatus('planned')
+                      }}
+                    />
                   </div>
-                )}
-              </div>
-              {!invoicePlanMonth && (
-                <p style={{margin:'8px 0 0',fontSize:11,color:'var(--c4)'}}>
-                  Leave empty to skip — you can invoice from the table later.
-                </p>
+                  {!invoicePlanMonth && (
+                    <p style={{margin:'6px 0 0',fontSize:11,color:'var(--c4)'}}>Leave empty to skip — you can invoice from the table later.</p>
+                  )}
+                </div>
               )}
             </div>
           </>

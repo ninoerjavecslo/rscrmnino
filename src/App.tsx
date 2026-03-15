@@ -9,6 +9,7 @@ import { ClientDetailView } from './views/ClientDetailView'
 import { ProjectsView } from './views/ProjectsView'
 import { ProjectDetailView } from './views/ProjectDetailView'
 import { MaintenancesView } from './views/MaintenancesView'
+import { MaintenanceDetailView } from './views/MaintenanceDetailView'
 import { RevenuePlannerView } from './views/RevenuePlannerView'
 import { ToolsView } from './views/ToolsView'
 import { InfrastructureView } from './views/InfrastructureView'
@@ -16,8 +17,9 @@ import { DomainsView } from './views/DomainsView'
 import { TimesheetView } from './views/TimesheetView'
 import { ThisMonthView } from './views/ThisMonthView'
 import { EmailToolView } from './views/EmailToolView'
-import { OutboxView } from './views/OutboxView'
 import { CeoSummaryView } from './views/CeoSummaryView'
+import { ForecastView } from './views/ForecastView'
+import { SalesView } from './views/SalesView'
 import { SettingsView } from './views/SettingsView'
 import { Toaster } from './components/Toaster'
 
@@ -66,18 +68,20 @@ function App() {
                 <Route path="/dashboard"       element={<DashboardView />} />
                 <Route path="/this-month"      element={<ThisMonthView />} />
                 <Route path="/planning"        element={<RevenuePlannerView />} />
+                <Route path="/forecast"        element={<ForecastView />} />
                 <Route path="/clients"         element={<ClientsView />} />
                 <Route path="/clients/:id"     element={<ClientDetailView />} />
                 <Route path="/projects"        element={<ProjectsView />} />
                 <Route path="/projects/:id"    element={<ProjectDetailView />} />
                 <Route path="/maintenances"    element={<MaintenancesView />} />
+                <Route path="/maintenances/:id" element={<MaintenanceDetailView />} />
+                <Route path="/sales"           element={<SalesView />} />
                 <Route path="/stats"           element={<StatisticsView />} />
                 <Route path="/infrastructure"  element={<InfrastructureView />} />
                 <Route path="/domains"         element={<DomainsView />} />
                 <Route path="/tools"           element={<ToolsView />} />
                 <Route path="/tools/timesheet" element={<TimesheetView />} />
                 <Route path="/email-tool"      element={<EmailToolView />} />
-                <Route path="/outbox"          element={<OutboxView />} />
                 <Route path="/settings"        element={<SettingsView />} />
               </Routes>
             </main>

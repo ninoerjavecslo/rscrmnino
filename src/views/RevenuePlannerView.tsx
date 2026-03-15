@@ -25,8 +25,8 @@ function fmtMonthShort(m: string): string {
 }
 
 function fmtAmt(n: number): string {
-  if (n === 0) return '€0'
-  return '€' + n.toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+  if (n === 0) return '0 €'
+  return n.toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' €'
 }
 
 // ── Type badge ────────────────────────────────────────────────────────────────
@@ -113,6 +113,22 @@ export function RevenuePlannerView() {
   const rowMap = new Map<string, RevenuePlanner>()
   for (const r of rpStore.rows) {
     rowMap.set(`${r.project_id}:${r.month}`, r)
+  }
+
+  // Maintenance retainer rows for this half
+  const retainerRows = rpStore.rows.filter(r => r.maintenance_id != null)
+  // Group by maintenance_id
+  const retainerByMaint = new Map<string, { name: string; clientName: string; rows: RevenuePlanner[] }>()
+  for (const r of retainerRows) {
+    const mid = r.maintenance_id!
+    if (!retainerByMaint.has(mid)) {
+      retainerByMaint.set(mid, {
+        name: r.maintenance?.name ?? 'Maintenance',
+        clientName: r.maintenance?.client?.name ?? '—',
+        rows: [],
+      })
+    }
+    retainerByMaint.get(mid)!.rows.push(r)
   }
 
   // Effective display amount for a cell
@@ -1067,6 +1083,63 @@ export function RevenuePlannerView() {
             </div>
           </div>
         )}
+      {/* ── Maintenance retainers ── */}
+      {retainerByMaint.size > 0 && (
+        <div style={{ marginTop: 32 }}>
+          <div className="section-bar"><h2>Maintenance Retainers</h2></div>
+          <div className="card" style={{ overflowX: 'auto' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Contract</th>
+                  <th style={{ fontSize: 11, color: 'var(--c4)' }}>Client</th>
+                  {months.map(m => (
+                    <th key={m} className="th-right" style={{ minWidth: 90 }}>
+                      {new Date(m + 'T00:00:00').toLocaleString('default', { month: 'short', year: '2-digit' })}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[...retainerByMaint.values()].map(({ name, clientName, rows }) => {
+                  const rowByMonth = new Map(rows.map(r => [r.month, r]))
+                  return (
+                    <tr key={name}>
+                      <td style={{ fontWeight: 700, fontSize: 14 }}>{name}</td>
+                      <td style={{ fontSize: 12, color: 'var(--c3)' }}>{clientName}</td>
+                      {months.map(m => {
+                        const r = rowByMonth.get(m)
+                        return (
+                          <td key={m} className="td-right text-mono" style={{ fontSize: 13 }}>
+                            {r ? <span style={{ color: 'var(--amber)', fontWeight: 600 }}>{r.planned_amount} €</span> : <span style={{ color: 'var(--c5)' }}>—</span>}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  )
+                })}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan={2} style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total retainers</td>
+                  {months.map(m => {
+                    const total = [...retainerByMaint.values()].reduce((s, { rows }) => {
+                      const r = rows.find(r => r.month === m)
+                      return s + (r?.planned_amount ?? 0)
+                    }, 0)
+                    return (
+                      <td key={m} className="td-right text-mono" style={{ fontWeight: 800, fontSize: 14, color: 'var(--navy)' }}>
+                        {total > 0 ? `${total} €` : '—'}
+                      </td>
+                    )
+                  })}
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
       </div>
     </div>
   )

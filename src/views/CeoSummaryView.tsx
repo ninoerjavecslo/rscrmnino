@@ -20,7 +20,7 @@ function fmtMonthLabel(monthStr: string): string {
 }
 
 function fmtEuro(n: number): string {
-  return '€' + n.toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+  return n.toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' €'
 }
 
 // ── Status badge ──────────────────────────────────────────────────────────────

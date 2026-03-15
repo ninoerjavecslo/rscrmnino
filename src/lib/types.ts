@@ -10,6 +10,9 @@ export interface Client {
   address?: string | null
   vat_id?: string | null
   notes?: string | null
+  contact_person?: string | null
+  contact_email?: string | null
+  contact_phone?: string | null
   created_at: string
   updated_at: string
 }
@@ -27,6 +30,7 @@ export interface Project {
   start_date?: string | null
   end_date?: string | null
   notes?: string | null
+  contract_url?: string | null
   // Joined from clients table
   client?: Pick<Client, 'id' | 'name'> | null
 }
@@ -64,6 +68,8 @@ export interface HostingClient {
   maintenance_id?: string | null
   accounting_email?: boolean
   notes?: string | null
+  contract_id?: string | null
+  cancelled_from?: string | null
   // Joined
   client?: Pick<Client, 'id' | 'name'> | null
 }
@@ -105,11 +111,13 @@ export interface Maintenance {
   hours_included: number
   contract_start: string   // YYYY-MM-DD
   contract_end?: string | null
+  contract_url?: string | null
   status: 'active' | 'paused' | 'cancelled'
   notes?: string | null
   created_at: string
   // Joined
   client?: Pick<Client, 'id' | 'name'> | null
+  hosting_clients?: { id: string }[] | null
 }
 
 export interface TimesheetEntry {
@@ -129,6 +137,9 @@ export interface TimesheetEntry {
 export interface RevenuePlanner {
   id: string
   project_id?: string | null
+  maintenance_id?: string | null
+  hosting_client_id?: string | null
+  domain_id?: string | null
   month: string
   planned_amount?: number | null
   actual_amount?: number | null
@@ -138,6 +149,39 @@ export interface RevenuePlanner {
   notes?: string | null
   // Joined
   project?: Pick<Project, 'id' | 'pn' | 'name' | 'type' | 'client_id'> | null
+  maintenance?: { id: string; name: string; client: Pick<Client, 'id' | 'name'> | null } | null
+  hosting?: { id: string; description?: string | null; client: Pick<Client, 'id' | 'name'> | null } | null
+  domain?: { id: string; domain_name: string; client: Pick<Client, 'id' | 'name'> | null } | null
+}
+
+export interface PipelineItem {
+  id: string
+  client_id?: string | null
+  company_name?: string | null  // free-text for prospects not in client list
+  title: string
+  description?: string | null
+  estimated_amount?: number | null
+  probability: number        // 10 | 25 | 50 | 75 | 90
+  deal_type: 'one_time' | 'monthly' | 'fixed'
+  expected_month?: string | null      // YYYY-MM-DD (start month)
+  expected_end_month?: string | null  // YYYY-MM-DD (end month, for monthly deals)
+  monthly_schedule?: Array<{ month: string; amount: number }> | null  // for fixed type
+  status: 'proposal' | 'won' | 'lost'
+  notes?: string | null
+  created_at: string
+  // Joined
+  client?: Pick<Client, 'id' | 'name'> | null
+}
+
+export interface ChangeRequest {
+  id: string
+  project_id: string
+  title: string
+  description?: string | null
+  status: 'pending' | 'approved'
+  amount?: number | null
+  notes?: string | null
+  created_at: string
 }
 
 // ── Supabase Database type for typed client ──────────────────────────────────

@@ -27,24 +27,37 @@ function monthsInRange(start: string, end: string | null | undefined): string[] 
 }
 
 async function upsertRetainerRows(maintenance: Maintenance) {
-  const { error: delError } = await supabase
+  // Only delete unactioned (planned) rows — preserve issued/paid/deferred months
+  await supabase
     .from('revenue_planner')
     .delete()
     .eq('maintenance_id', maintenance.id)
-  if (delError) throw delError
+    .eq('status', 'planned')
+
+  // Find months that already have a row (issued/paid/retainer) so we don't overwrite them
+  const { data: existing } = await supabase
+    .from('revenue_planner')
+    .select('month')
+    .eq('maintenance_id', maintenance.id)
+  const existingMonths = new Set((existing ?? []).map((r: { month: string }) => r.month))
 
   const months = monthsInRange(maintenance.contract_start, maintenance.contract_end)
-  const rows = months.map(month => ({
-    maintenance_id: maintenance.id,
-    project_id: null as string | null,
-    month,
-    planned_amount: maintenance.monthly_retainer,
-    actual_amount: null as number | null,
-    status: 'retainer' as const,
-    probability: 100,
-  }))
-  const { error } = await supabase.from('revenue_planner').insert(rows)
-  if (error) throw error
+  const newRows = months
+    .filter(m => !existingMonths.has(m))
+    .map(month => ({
+      maintenance_id: maintenance.id,
+      project_id: null as string | null,
+      month,
+      planned_amount: maintenance.monthly_retainer,
+      actual_amount: null as number | null,
+      status: 'planned' as const,
+      probability: 100,
+    }))
+
+  if (newRows.length > 0) {
+    const { error } = await supabase.from('revenue_planner').insert(newRows)
+    if (error) throw error
+  }
 }
 
 async function syncHosting(maintenanceId: string, clientId: string, hosting: HostingPayload | null) {
@@ -101,7 +114,7 @@ export const useMaintenancesStore = create<MaintenancesState>((set, get) => ({
     try {
       const { data, error } = await supabase
         .from('maintenances')
-        .select('*, client:clients(id, name)')
+        .select('*, client:clients(id, name), hosting_clients(id)')
         .order('created_at', { ascending: false })
       if (error) throw error
       set({ maintenances: (data ?? []) as Maintenance[] })

@@ -1,16 +1,35 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
 import { useClientsStore } from '../stores/clients'
 import { useProjectsStore } from '../stores/projects'
 import { useDomainsStore } from '../stores/domains'
 import { useInfraStore } from '../stores/infrastructure'
 import { useRevenuePlannerStore } from '../stores/revenuePlanner'
-import type { Project, Domain, HostingClient, RevenuePlanner } from '../lib/types'
+import { useMaintenancesStore } from '../stores/maintenances'
+import { usePipelineStore } from '../stores/pipeline'
+import { toast } from '../lib/toast'
+import type { Project, Domain, HostingClient, RevenuePlanner, Maintenance, PipelineItem } from '../lib/types'
 import { Select } from '../components/Select'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
+function safeUrl(url: string | null | undefined): string | undefined {
+  if (!url) return undefined
+  return /^https?:\/\//i.test(url) ? url : undefined
+}
+
 const CURRENT_YEAR = new Date().getFullYear()
+
+function clientMonths(): string[] {
+  const months: string[] = []
+  for (let y = CURRENT_YEAR - 2; y <= CURRENT_YEAR + 1; y++) {
+    for (let m = 1; m <= 12; m++) {
+      months.push(`${y}-${String(m).padStart(2, '0')}-01`)
+    }
+  }
+  return months
+}
 
 function currentYearMonths(): string[] {
   return Array.from({ length: 12 }, (_, i) => {
@@ -20,7 +39,7 @@ function currentYearMonths(): string[] {
 }
 
 function daysUntil(d: string) {
-  return Math.ceil((new Date(d).getTime() - Date.now()) / 86_400_000)
+  return Math.ceil((new Date(d + 'T00:00:00').getTime() - Date.now()) / 86_400_000)
 }
 
 function fmtDate(d?: string | null) {
@@ -34,6 +53,11 @@ function fmtMonth(m: string) {
   return dt.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
 }
 
+function fmtMonthShort(m: string) {
+  const dt = new Date(m + 'T00:00:00')
+  return dt.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' })
+}
+
 function nextMonthLabel() {
   const now = new Date()
   const d = new Date(now.getFullYear(), now.getMonth() + 1, 1)
@@ -42,7 +66,12 @@ function nextMonthLabel() {
 
 function fmtEuro(n?: number | null) {
   if (n == null) return '—'
-  return `€${n.toLocaleString('en-EU')}`
+  return n.toLocaleString('en-EU') + ' €'
+}
+
+function getCurrentMonth(): string {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
 // ── badge maps ───────────────────────────────────────────────────────────────
@@ -65,46 +94,33 @@ const RP_STATUS_BADGE: Record<string, string> = {
   retainer: 'badge-navy',
   cost: 'badge-red',
 }
+const PIPELINE_STATUS_BADGE: Record<string, string> = {
+  proposal: 'badge-amber',
+  won: 'badge-green',
+  lost: 'badge-red',
+}
+const PIPELINE_STATUS_LABELS: Record<string, string> = {
+  proposal: 'Proposal',
+  won: 'Won',
+  lost: 'Lost',
+}
 
-// ── local sub-components ─────────────────────────────────────────────────────
+// ── sub-components ────────────────────────────────────────────────────────────
 
 function Modal({
-  title,
-  onClose,
-  children,
+  title, onClose, children, maxWidth = 560,
 }: {
-  title: string
-  onClose: () => void
-  children: React.ReactNode
+  title: string; onClose: () => void; children: React.ReactNode; maxWidth?: number
 }) {
   return (
     <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 1000,
-        background: 'rgba(0,0,0,0.45)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}
+      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div
-        style={{
-          background: '#fff', borderRadius: 10, padding: '28px 32px',
-          maxWidth: 560, width: '100%',
-          boxShadow: '0 8px 40px rgba(0,0,0,0.18)',
-          maxHeight: '90vh', overflowY: 'auto',
-        }}
-      >
+      <div style={{ background: '#fff', borderRadius: 10, padding: '28px 32px', maxWidth, width: '100%', boxShadow: '0 8px 40px rgba(0,0,0,0.18)', maxHeight: '90vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>{title}</h2>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: 'var(--c3)', fontSize: 20, lineHeight: 1, padding: 0,
-            }}
-          >
-            ×
-          </button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c3)', fontSize: 20, lineHeight: 1, padding: 0 }}>×</button>
         </div>
         {children}
       </div>
@@ -140,95 +156,60 @@ function TypePills({ value, onChange }: { value: ProjectType; onChange: (v: Proj
   )
 }
 
-interface DomainRowData {
-  domain_name: string
-  expiry_date: string
-  yearly_amount: string
-}
+interface DomainRowData { domain_name: string; expiry_date: string; yearly_amount: string }
 
-function DomainRowInputs({
-  rows,
-  onChange,
-}: {
-  rows: DomainRowData[]
-  onChange: (rows: DomainRowData[]) => void
-}) {
+function DomainRowInputs({ rows, onChange }: { rows: DomainRowData[]; onChange: (rows: DomainRowData[]) => void }) {
   function update(i: number, field: keyof DomainRowData, val: string) {
-    const next = rows.map((r, idx) => idx === i ? { ...r, [field]: val } : r)
-    onChange(next)
+    onChange(rows.map((r, idx) => idx === i ? { ...r, [field]: val } : r))
   }
-  function addRow() {
-    onChange([...rows, { domain_name: '', expiry_date: '', yearly_amount: '' }])
-  }
-  function removeRow(i: number) {
-    onChange(rows.filter((_, idx) => idx !== i))
-  }
-
   return (
     <div>
       {rows.map((r, i) => (
         <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 140px 110px 32px', gap: 6, marginBottom: 8, alignItems: 'center' }}>
-          <input
-            className="form-input"
-            placeholder="domain.com"
-            value={r.domain_name}
-            onChange={e => update(i, 'domain_name', e.target.value)}
-          />
-          <input
-            className="form-input"
-            type="date"
-            value={r.expiry_date}
-            onChange={e => update(i, 'expiry_date', e.target.value)}
-          />
-          <input
-            className="form-input"
-            placeholder="€/yr"
-            type="number"
-            value={r.yearly_amount}
-            onChange={e => update(i, 'yearly_amount', e.target.value)}
-          />
-          <button
-            type="button"
-            onClick={() => removeRow(i)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--red)', fontSize: 18, lineHeight: 1 }}
-          >
-            ×
-          </button>
+          <input placeholder="domain.com" value={r.domain_name} onChange={e => update(i, 'domain_name', e.target.value)} />
+          <input type="date" value={r.expiry_date} onChange={e => update(i, 'expiry_date', e.target.value)} />
+          <input placeholder="€/yr" type="number" value={r.yearly_amount} onChange={e => update(i, 'yearly_amount', e.target.value)} />
+          <button type="button" onClick={() => onChange(rows.filter((_, idx) => idx !== i))}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--red)', fontSize: 18, lineHeight: 1 }}>×</button>
         </div>
       ))}
-      <button type="button" className="btn btn-secondary btn-sm" onClick={addRow} style={{ marginTop: 4 }}>
+      <button type="button" className="btn btn-secondary btn-sm" onClick={() => onChange([...rows, { domain_name: '', expiry_date: '', yearly_amount: '' }])} style={{ marginTop: 4 }}>
         + Add domain
       </button>
     </div>
   )
 }
 
-// ── component ─────────────────────────────────────────────────────────────────
+// ── form interfaces ───────────────────────────────────────────────────────────
 
 interface EditFormState {
-  name: string
-  email: string
-  phone: string
-  address: string
-  vat_id: string
+  name: string; email: string; phone: string; address: string; vat_id: string
+  contact_person: string; contact_email: string; contact_phone: string
 }
 
 interface ProjFormState {
-  name: string
-  pm: string
-  type: ProjectType
-  contract_value: string
-  start_month: string
-  end_month: string
-  starting_from: string
-  probability: string
+  name: string; pm: string; type: ProjectType; contract_value: string
+  start_month: string; end_month: string; starting_from: string; probability: string
 }
 
 const EMPTY_PROJ: ProjFormState = {
-  name: '', pm: 'Nino', type: 'fixed',
-  contract_value: '', start_month: '', end_month: '',
-  starting_from: '', probability: '70',
+  name: '', pm: 'Nino', type: 'fixed', contract_value: '',
+  start_month: '', end_month: '', starting_from: '', probability: '70',
 }
+
+interface PipelineFormState {
+  title: string; status: PipelineItem['status']; estimated_amount: string
+  probability: string; expected_month: string; description: string; notes: string
+}
+
+const EMPTY_PIPELINE: PipelineFormState = {
+  title: '', status: 'proposal', estimated_amount: '',
+  probability: '75', expected_month: '', description: '', notes: '',
+}
+
+type TabId = 'overview' | 'projects' | 'infra' | 'maintenances' | 'invoices' | 'pipeline'
+
+// ── component ─────────────────────────────────────────────────────────────────
 
 export function ClientDetailView() {
   const { id } = useParams<{ id: string }>()
@@ -239,89 +220,137 @@ export function ClientDetailView() {
   const dStore = useDomainsStore()
   const infraStore = useInfraStore()
   const rpStore = useRevenuePlannerStore()
+  const mStore = useMaintenancesStore()
+  const plStore = usePipelineStore()
 
-  const months = useMemo(() => currentYearMonths(), [])
+  const allMonths = useMemo(() => clientMonths(), [])
+  const yearMonths = useMemo(() => currentYearMonths(), [])
 
-  // ── modal state ──────────────────────────────────────────────────────────
+  // ── tab ──────────────────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<TabId>('overview')
+
+  // ── edit client modal ────────────────────────────────────────────────────
   const [showEdit, setShowEdit] = useState(false)
   const [editForm, setEditForm] = useState<EditFormState>({
     name: '', email: '', phone: '', address: '', vat_id: '',
+    contact_person: '', contact_email: '', contact_phone: '',
   })
   const [editSaving, setEditSaving] = useState(false)
 
+  // ── add project modal ────────────────────────────────────────────────────
   const [showAddProject, setShowAddProject] = useState(false)
   const [projForm, setProjForm] = useState<ProjFormState>({ ...EMPTY_PROJ })
   const [projSaving, setProjSaving] = useState(false)
 
+  // ── add domain modal ─────────────────────────────────────────────────────
   const [showAddDomain, setShowAddDomain] = useState(false)
-  const [domainRows, setDomainRows] = useState<DomainRowData[]>([
-    { domain_name: '', expiry_date: '', yearly_amount: '' },
-  ])
+  const [domainRows, setDomainRows] = useState<DomainRowData[]>([{ domain_name: '', expiry_date: '', yearly_amount: '' }])
   const [domainPn, setDomainPn] = useState('')
   const [domainSaving, setDomainSaving] = useState(false)
 
+  // ── add hosting modal ────────────────────────────────────────────────────
   const [showAddHosting, setShowAddHosting] = useState(false)
   const [hostingForm, setHostingForm] = useState({
-    project_pn: '', description: '', cycle: 'monthly' as 'monthly' | 'yearly', amount: '', billing_since: '', next_invoice_date: '',
+    project_pn: '', description: '', cycle: 'monthly' as 'monthly' | 'yearly',
+    amount: '', billing_since: '', next_invoice_date: '',
+    invoice_month: '', already_billed: false, contract_id: '',
   })
   const [hostingSaving, setHostingSaving] = useState(false)
+
+  // ── add domain extra fields ───────────────────────────────────────────────
+  const [domainContractId, setDomainContractId] = useState('')
+
+  // ── pipeline modal ───────────────────────────────────────────────────────
+  const [showPipeline, setShowPipeline] = useState(false)
+  const [editPipelineTarget, setEditPipelineTarget] = useState<PipelineItem | null>(null)
+  const [pipelineForm, setPipelineForm] = useState<PipelineFormState>({ ...EMPTY_PIPELINE })
+  const [pipelineSaving, setPipelineSaving] = useState(false)
+  const [deletePipelineTarget, setDeletePipelineTarget] = useState<PipelineItem | null>(null)
 
   useEffect(() => {
     cStore.fetchAll()
     pStore.fetchAll()
     dStore.fetchAll()
     infraStore.fetchAll()
-    rpStore.fetchByMonths(months)
+    rpStore.fetchByMonths(allMonths)
+    mStore.fetchAll()
+    if (id) plStore.fetchByClient(id)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const client = cStore.clients.find(c => c.id === id)
   const projects = pStore.projects.filter(p => p.client_id === id)
   const projectIds = new Set(projects.map(p => p.id))
+  const hostingRows = infraStore.hostingClients.filter(h => h.client_id === id)
+  const clientDomains = dStore.domains.filter(d => d.client_id === id && !d.archived)
+  const maintenances = mStore.maintenances.filter(m => m.client_id === id)
+  const pipelineItems = plStore.items.filter(i => i.client_id === id)
 
-  // ── revenue planner rows for this client ─────────────────────────────────
-  const rpRows = rpStore.rows.filter(r => r.project?.client_id === id || (r.project_id != null && projectIds.has(r.project_id)))
+  // ── revenue planner rows ─────────────────────────────────────────────────
+  const clientMaintIds = useMemo(() => new Set(maintenances.map(m => m.id)), [maintenances])
+  const clientHostingIds = useMemo(() => new Set(hostingRows.map(h => h.id)), [hostingRows])
+  const clientDomainIds = useMemo(() => new Set(clientDomains.map(d => d.id)), [clientDomains])
+
+  const allClientRpRows = useMemo(() => rpStore.rows.filter(r =>
+    (r.project_id != null && projectIds.has(r.project_id)) ||
+    (r.maintenance_id != null && clientMaintIds.has(r.maintenance_id)) ||
+    (r.hosting_client_id != null && clientHostingIds.has(r.hosting_client_id)) ||
+    (r.domain_id != null && clientDomainIds.has(r.domain_id))
+  ), [rpStore.rows, projectIds, clientMaintIds, clientHostingIds, clientDomainIds])
 
   // ── stats ────────────────────────────────────────────────────────────────
   const activeProjects = projects.filter(p => p.status === 'active')
-
-  // ── infra / domains ───────────────────────────────────────────────────────
-  const hostingRows = infraStore.hostingClients.filter(h => h.client_id === id)
-  const clientDomains = dStore.domains.filter(d => d.client_id === id && !d.archived)
-
   const contractsValue = activeProjects.reduce((s, p) => s + (p.contract_value ?? 0), 0)
   const hostingAnnual = hostingRows.reduce((s, h) => s + (h.cycle === 'monthly' ? h.amount * 12 : h.amount), 0)
   const domainsAnnual = clientDomains.reduce((s, d) => s + (d.yearly_amount ?? 0), 0)
   const totalValue = contractsValue + hostingAnnual + domainsAnnual
 
-  const invoicedYTD = rpRows
-    .filter(r => months.some(m => m === r.month))
+  const invoicedYTD = allClientRpRows
+    .filter(r => yearMonths.some(m => m === r.month))
     .reduce((s, r) => s + (r.actual_amount ?? 0), 0)
 
-  // ── per-project invoiced amounts ──────────────────────────────────────────
   const invoicedByProject = useMemo(() => {
     const map = new Map<string, number>()
-    for (const r of rpRows) {
+    for (const r of allClientRpRows) {
       if (r.actual_amount && r.project_id) {
         map.set(r.project_id, (map.get(r.project_id) ?? 0) + r.actual_amount)
       }
     }
     return map
-  }, [rpRows])
+  }, [allClientRpRows])
 
-  // ── invoice history: only rows that have been actually invoiced ────────────
-  const invoiceHistory: RevenuePlanner[] = useMemo(() => {
-    return [...rpRows]
+  const fullInvoiceHistory: RevenuePlanner[] = useMemo(() =>
+    [...allClientRpRows]
       .filter(r => r.actual_amount != null && r.actual_amount > 0)
-      .sort((a, b) => b.month.localeCompare(a.month))
-      .slice(0, 20)
-  }, [rpRows])
+      .sort((a, b) => b.month.localeCompare(a.month)),
+    [allClientRpRows])
 
+  // ── pipeline stats ───────────────────────────────────────────────────────
+  const activePipelineItems = pipelineItems.filter(i => i.status !== 'won' && i.status !== 'lost')
+  const pipelineWeighted = activePipelineItems.reduce((s, i) => s + ((i.estimated_amount ?? 0) * i.probability / 100), 0)
 
-  // ── derived subtitle ──────────────────────────────────────────────────────
+  // ── expiry alerts ────────────────────────────────────────────────────────
+  const expiringDomains = clientDomains.filter(d => daysUntil(d.expiry_date) <= 30 && daysUntil(d.expiry_date) >= 0)
+  const endingMaintenances = maintenances.filter(m => m.status === 'active' && m.contract_end && daysUntil(m.contract_end) <= 30 && daysUntil(m.contract_end) >= 0)
+
   const clientSince = client ? new Date(client.created_at).getFullYear() : null
   const activeCount = activeProjects.length
 
+  // ── pipeline forecast grouping ────────────────────────────────────────────
+  const pipelineForecast = useMemo(() => {
+    const groups = new Map<string, { items: PipelineItem[]; total: number; weighted: number }>()
+    for (const item of activePipelineItems) {
+      const key = item.expected_month ?? 'unscheduled'
+      if (!groups.has(key)) groups.set(key, { items: [], total: 0, weighted: 0 })
+      const g = groups.get(key)!
+      g.items.push(item)
+      g.total += item.estimated_amount ?? 0
+      g.weighted += (item.estimated_amount ?? 0) * item.probability / 100
+    }
+    return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+  }, [activePipelineItems])
+
   // ── handlers ─────────────────────────────────────────────────────────────
+
   function openEdit() {
     if (!client) return
     setEditForm({
@@ -330,6 +359,9 @@ export function ClientDetailView() {
       phone: client.phone ?? '',
       address: client.address ?? '',
       vat_id: client.vat_id ?? '',
+      contact_person: client.contact_person ?? '',
+      contact_email: client.contact_email ?? '',
+      contact_phone: client.contact_phone ?? '',
     })
     setShowEdit(true)
   }
@@ -344,8 +376,14 @@ export function ClientDetailView() {
         phone: editForm.phone || null,
         address: editForm.address || null,
         vat_id: editForm.vat_id || null,
+        contact_person: editForm.contact_person || null,
+        contact_email: editForm.contact_email || null,
+        contact_phone: editForm.contact_phone || null,
       })
+      toast('success', 'Client updated')
       setShowEdit(false)
+    } catch (err) {
+      toast('error', (err as Error).message)
     } finally {
       setEditSaving(false)
     }
@@ -368,8 +406,11 @@ export function ClientDetailView() {
         currency: 'EUR',
         notes: null,
       })
+      toast('success', 'Project created')
       setShowAddProject(false)
       setProjForm({ ...EMPTY_PROJ })
+    } catch (err) {
+      toast('error', (err as Error).message)
     } finally {
       setProjSaving(false)
     }
@@ -380,18 +421,19 @@ export function ClientDetailView() {
     setDomainSaving(true)
     try {
       const filled = domainRows.filter(r => r.domain_name.trim() && r.expiry_date)
-      await dStore.addDomains(
-        id,
-        domainPn,
-        filled.map(r => ({
-          domain_name: r.domain_name.trim(),
-          expiry_date: r.expiry_date,
-          yearly_amount: r.yearly_amount ? Number(r.yearly_amount) : undefined,
-        })),
-      )
+      await dStore.addDomains(id, domainPn, filled.map(r => ({
+        domain_name: r.domain_name.trim(),
+        expiry_date: r.expiry_date,
+        yearly_amount: r.yearly_amount ? Number(r.yearly_amount) : undefined,
+        contract_id: domainContractId.trim() || undefined,
+      })))
+      toast('success', 'Domains added')
       setShowAddDomain(false)
       setDomainRows([{ domain_name: '', expiry_date: '', yearly_amount: '' }])
       setDomainPn('')
+      setDomainContractId('')
+    } catch (err) {
+      toast('error', (err as Error).message)
     } finally {
       setDomainSaving(false)
     }
@@ -401,338 +443,306 @@ export function ClientDetailView() {
     if (!id || !hostingForm.amount) return
     setHostingSaving(true)
     try {
-      await infraStore.addHostingClient({
-        client_id: id,
-        project_pn: hostingForm.project_pn.trim() || '—',
-        description: hostingForm.description.trim() || null,
-        cycle: hostingForm.cycle,
-        amount: Number(hostingForm.amount),
-        billing_since: hostingForm.billing_since || null,
-        next_invoice_date: hostingForm.next_invoice_date || null,
-        status: 'active',
-        notes: null,
-      })
+      const { data: newHost, error: insertErr } = await supabase
+        .from('hosting_clients')
+        .insert({
+          client_id: id,
+          project_pn: hostingForm.project_pn.trim() || '—',
+          description: hostingForm.description.trim() || null,
+          cycle: hostingForm.cycle,
+          amount: Number(hostingForm.amount),
+          billing_since: hostingForm.billing_since || null,
+          next_invoice_date: hostingForm.cycle === 'yearly' ? (hostingForm.next_invoice_date || null) : null,
+          status: 'active',
+          notes: null,
+          contract_id: hostingForm.contract_id.trim() || null,
+        })
+        .select('id')
+        .single()
+      if (insertErr) throw insertErr
+      await infraStore.fetchAll()
+
+      // create revenue_planner rows
+      const amount = Number(hostingForm.amount)
+      const desc = hostingForm.description.trim() || `Hosting — ${hostingForm.project_pn || '—'}`
+      const invoiceMonth = hostingForm.cycle === 'yearly'
+        ? (hostingForm.next_invoice_date?.slice(0, 7) || hostingForm.billing_since?.slice(0, 7) || '')
+        : (hostingForm.invoice_month || hostingForm.billing_since?.slice(0, 7) || '')
+
+      if (invoiceMonth && newHost) {
+        if (hostingForm.cycle === 'monthly') {
+          const [y, m] = invoiceMonth.split('-').map(Number)
+          const rows = Array.from({ length: 12 }, (_, i) => {
+            const d = new Date(y, m - 1 + i, 1)
+            return {
+              hosting_client_id: newHost.id,
+              month: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`,
+              planned_amount: amount,
+              actual_amount: hostingForm.already_billed && i === 0 ? amount : null,
+              status: hostingForm.already_billed && i === 0 ? 'issued' : 'planned',
+              notes: desc,
+              probability: 100,
+            }
+          })
+          await supabase.from('revenue_planner').insert(rows)
+        } else {
+          const monthVal = (hostingForm.next_invoice_date || hostingForm.billing_since || invoiceMonth + '-01')
+          await supabase.from('revenue_planner').insert({
+            hosting_client_id: newHost.id,
+            month: monthVal.length === 7 ? monthVal + '-01' : monthVal,
+            planned_amount: amount,
+            actual_amount: hostingForm.already_billed ? amount : null,
+            status: hostingForm.already_billed ? 'issued' : 'planned',
+            notes: desc,
+            probability: 100,
+          })
+        }
+      }
+
+      toast('success', 'Hosting added')
       setShowAddHosting(false)
-      setHostingForm({ project_pn: '', description: '', cycle: 'monthly', amount: '', billing_since: '', next_invoice_date: '' })
-    } catch (e) { alert((e as Error).message) }
-    finally { setHostingSaving(false) }
+      setHostingForm({ project_pn: '', description: '', cycle: 'monthly', amount: '', billing_since: '', next_invoice_date: '', invoice_month: '', already_billed: false, contract_id: '' })
+    } catch (err) {
+      toast('error', (err as Error).message)
+    } finally {
+      setHostingSaving(false)
+    }
+  }
+
+  function openAddPipeline() {
+    setEditPipelineTarget(null)
+    setPipelineForm({ ...EMPTY_PIPELINE, expected_month: getCurrentMonth() + '-01' })
+    setShowPipeline(true)
+  }
+
+  function openEditPipeline(item: PipelineItem) {
+    setEditPipelineTarget(item)
+    setPipelineForm({
+      title: item.title,
+      status: item.status,
+      estimated_amount: item.estimated_amount != null ? String(item.estimated_amount) : '',
+      probability: String(item.probability),
+      expected_month: item.expected_month ? item.expected_month.slice(0, 7) : '',
+      description: item.description ?? '',
+      notes: item.notes ?? '',
+    })
+    setShowPipeline(true)
+  }
+
+  async function savePipeline() {
+    if (!id || !pipelineForm.title.trim()) return
+    setPipelineSaving(true)
+    try {
+      const data = {
+        client_id: id,
+        title: pipelineForm.title.trim(),
+        status: pipelineForm.status,
+        estimated_amount: pipelineForm.estimated_amount ? parseFloat(pipelineForm.estimated_amount) : null,
+        deal_type: (editPipelineTarget?.deal_type ?? 'one_time') as PipelineItem['deal_type'],
+        monthly_schedule: editPipelineTarget?.monthly_schedule ?? null,
+        probability: parseInt(pipelineForm.probability),
+        expected_month: pipelineForm.expected_month ? pipelineForm.expected_month + '-01' : null,
+        description: pipelineForm.description.trim() || null,
+        notes: pipelineForm.notes.trim() || null,
+      }
+      if (editPipelineTarget) {
+        await plStore.update(editPipelineTarget.id, data)
+        toast('success', 'Pipeline item updated')
+      } else {
+        await plStore.add(data)
+        toast('success', 'Pipeline item added')
+      }
+      setShowPipeline(false)
+    } catch (err) {
+      toast('error', (err as Error).message)
+    } finally {
+      setPipelineSaving(false)
+    }
+  }
+
+  async function deletePipeline(item: PipelineItem) {
+    try {
+      await plStore.remove(item.id)
+      toast('success', 'Pipeline item removed')
+    } catch (err) {
+      toast('error', (err as Error).message)
+    } finally {
+      setDeletePipelineTarget(null)
+    }
   }
 
   // ── loading / not found ───────────────────────────────────────────────────
   if (cStore.loading) {
-    return (
-      <div className="page-content" style={{ textAlign: 'center', paddingTop: 60, color: 'var(--c4)' }}>
-        Loading…
-      </div>
-    )
+    return <div className="page-content" style={{ textAlign: 'center', paddingTop: 60, color: 'var(--c4)' }}>Loading…</div>
   }
-
   if (!client) {
     return (
       <div className="page-content" style={{ paddingTop: 40 }}>
         <div className="alert alert-red">Client not found.</div>
-        <button className="btn btn-secondary btn-sm" style={{ marginTop: 12 }} onClick={() => navigate('/clients')}>
-          ← Back to Clients
-        </button>
+        <button className="btn btn-secondary btn-sm" style={{ marginTop: 12 }} onClick={() => navigate('/clients')}>← Back to Clients</button>
       </div>
     )
   }
 
-  return (
-    <div>
-      {/* ── Edit client modal ── */}
-      {showEdit && (
-        <Modal title="Edit client" onClose={() => setShowEdit(false)}>
-          <div className="form-group">
-            <label className="form-label">Name</label>
-            <input
-              className="form-input"
-              value={editForm.name}
-              onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
-              autoFocus
-            />
-          </div>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowEdit(false)}>Cancel</button>
-            <button className="btn btn-primary btn-sm" onClick={saveEdit} disabled={editSaving || !editForm.name.trim()}>
-              {editSaving ? 'Saving…' : 'Save'}
-            </button>
-          </div>
-        </Modal>
-      )}
+  // ── tab content ──────────────────────────────────────────────────────────
 
-      {/* ── New project modal ── */}
-      {showAddProject && (
-        <Modal title="New Project" onClose={() => { setShowAddProject(false); setProjForm(EMPTY_PROJ) }}>
-          <TypePills value={projForm.type} onChange={v => setProjForm(f => ({ ...f, type: v }))} />
+  function renderOverview() {
+    const companyFields = [
+      { label: 'Email', value: client!.email },
+      { label: 'Phone', value: client!.phone },
+      { label: 'Address', value: client!.address },
+      { label: 'VAT ID', value: client!.vat_id },
+      { label: 'Notes', value: client!.notes },
+    ].filter(f => f.value)
 
-          <div className="form-row" style={{ marginBottom: 14 }}>
-            <div className="form-group">
-              <label className="form-label">Project name</label>
-              <input
-                placeholder="e.g. Petrol — Prenova"
-                value={projForm.name}
-                onChange={e => setProjForm(f => ({ ...f, name: e.target.value }))}
-                autoFocus
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Project Manager</label>
-              <Select
-                value={projForm.pm}
-                onChange={val => setProjForm(f => ({ ...f, pm: val }))}
-                options={[
-                  { value: 'Nino', label: 'Nino' },
-                  { value: 'Ana', label: 'Ana' },
-                  { value: 'Maja', label: 'Maja' },
-                ]}
-              />
-            </div>
-          </div>
+    const contactFields = [
+      { label: 'Contact person', value: client!.contact_person },
+      { label: 'Contact email', value: client!.contact_email },
+      { label: 'Contact phone', value: client!.contact_phone },
+    ].filter(f => f.value)
 
-          <div className="form-row" style={{ marginBottom: 14 }}>
-            <div className="form-group">
-              <label className="form-label">
-                {projForm.type === 'maintenance' ? 'Monthly amount (€)' : projForm.type === 'variable' ? 'Est. monthly (€)' : 'Project value (€)'}
-              </label>
-              <input type="number" value={projForm.contract_value} onChange={e => setProjForm(f => ({ ...f, contract_value: e.target.value }))} placeholder={projForm.type === 'fixed' ? '45000' : '2000'} />
-            </div>
-          </div>
+    const fieldStyle = { fontSize: 13, color: 'var(--c1)' }
+    const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }
+    const sectionLabel: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid var(--c6)' }
 
-
-          {projForm.type === 'maintenance' && (
-            <>
-              <div className="form-row" style={{ marginBottom: 4 }}>
-                <div className="form-group">
-                  <label className="form-label">Starting from</label>
-                  <input type="month" value={projForm.starting_from} onChange={e => setProjForm(f => ({ ...f, starting_from: e.target.value }))} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">
-                    End month
-                    <span className="form-hint" style={{ display: 'inline', marginLeft: 6 }}>optional</span>
-                  </label>
-                  <input type="month" value={projForm.end_month} onChange={e => setProjForm(f => ({ ...f, end_month: e.target.value }))} />
-                </div>
+    return (
+      <div>
+        {/* Alerts */}
+        {(expiringDomains.length > 0 || endingMaintenances.length > 0) && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+            {expiringDomains.map(d => (
+              <div key={d.id} className="alert alert-amber" style={{ margin: 0 }}>
+                Domain <strong>{d.domain_name}</strong> expires in {daysUntil(d.expiry_date)} days ({fmtDate(d.expiry_date)})
               </div>
-              {projForm.starting_from && projForm.end_month && projForm.end_month >= projForm.starting_from && (() => {
-                const from = new Date(projForm.starting_from + '-01T00:00:00')
-                const to = new Date(projForm.end_month + '-01T00:00:00')
-                const months = (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth()) + 1
-                const total = projForm.contract_value ? months * Number(projForm.contract_value) : null
-                return (
-                  <div style={{ fontSize: 12, color: 'var(--navy)', background: 'var(--navy-light)', border: '1px solid var(--navy-muted, #c7d2fe)', borderRadius: 6, padding: '8px 12px', marginBottom: 8 }}>
-                    <strong>{months} months</strong>{total ? ` · Total value: €${total.toLocaleString()}` : ''}
+            ))}
+            {endingMaintenances.map(m => (
+              <div key={m.id} className="alert alert-amber" style={{ margin: 0 }}>
+                Maintenance contract <strong>{m.name}</strong> ends in {daysUntil(m.contract_end!)} days ({fmtDate(m.contract_end)})
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Client info card */}
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div className="card-body">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{client!.name}</h3>
+              <button className="btn btn-secondary btn-xs" onClick={openEdit}>Edit</button>
+            </div>
+
+            {companyFields.length === 0 && contactFields.length === 0 ? (
+              <div style={{ fontSize: 13, color: 'var(--c4)' }}>No contact info added. <button className="btn btn-ghost btn-xs" onClick={openEdit} style={{ padding: '0 4px' }}>Add info</button></div>
+            ) : (
+              <div style={{ display: 'flex', gap: 32 }}>
+                {companyFields.length > 0 && (
+                  <div style={{ flex: 1 }}>
+                    <div style={sectionLabel}>Company</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 24px' }}>
+                      {companyFields.map(f => (
+                        <div key={f.label}>
+                          <div style={labelStyle}>{f.label}</div>
+                          <div style={fieldStyle}>{f.value}</div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                )
-              })()}
-              <div className="info-box">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                Invoice plans will be auto-generated for every future month.
+                )}
+                {contactFields.length > 0 && (
+                  <div style={{ flex: 1 }}>
+                    <div style={sectionLabel}>Contact person</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 24px' }}>
+                      {contactFields.map(f => (
+                        <div key={f.label}>
+                          <div style={labelStyle}>{f.label}</div>
+                          <div style={fieldStyle}>{f.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            </>
-          )}
-
-          {projForm.type === 'variable' && (
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Probability (%)</label>
-                <input type="number" value={projForm.probability} onChange={e => setProjForm(f => ({ ...f, probability: e.target.value }))} placeholder="70" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Starting from</label>
-                <input type="month" value={projForm.starting_from} onChange={e => setProjForm(f => ({ ...f, starting_from: e.target.value }))} />
-              </div>
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => { setShowAddProject(false); setProjForm(EMPTY_PROJ) }}>Cancel</button>
-            <button className="btn btn-primary btn-sm" onClick={saveProject} disabled={projSaving || !projForm.name.trim()}>
-              {projSaving ? <span className="spinner" style={{ borderTopColor: '#fff' }} /> : null}
-              Create project
-            </button>
+            )}
           </div>
-        </Modal>
-      )}
-
-      {/* ── Add hosting modal ── */}
-      {showAddHosting && (
-        <Modal title="Add Hosting" onClose={() => setShowAddHosting(false)}>
-          <div className="form-row" style={{ marginBottom: 12 }}>
-            <div className="form-group">
-              <label className="form-label">Project #</label>
-              <input
-                placeholder="RS-2026-001"
-                value={hostingForm.project_pn}
-                onChange={e => setHostingForm(f => ({ ...f, project_pn: e.target.value }))}
-                autoFocus
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Billing cycle</label>
-              <Select
-                value={hostingForm.cycle}
-                onChange={val => setHostingForm(f => ({ ...f, cycle: val as 'monthly' | 'yearly' }))}
-                options={[
-                  { value: 'monthly', label: 'Monthly' },
-                  { value: 'yearly', label: 'Yearly' },
-                ]}
-              />
-            </div>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Description</label>
-            <input
-              placeholder="e.g. Website hosting + SSL"
-              value={hostingForm.description}
-              onChange={e => setHostingForm(f => ({ ...f, description: e.target.value }))}
-            />
-          </div>
-          <div className="form-row" style={{ marginBottom: 12 }}>
-            <div className="form-group">
-              <label className="form-label">Amount (€)</label>
-              <input type="number" placeholder={hostingForm.cycle === 'monthly' ? '120' : '1440'} value={hostingForm.amount} onChange={e => setHostingForm(f => ({ ...f, amount: e.target.value }))} />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Billing since <span className="form-hint" style={{ display: 'inline' }}>optional</span></label>
-              <input type="month" value={hostingForm.billing_since?.slice(0, 7) ?? ''} onChange={e => {
-                const val = e.target.value
-                const since = val ? val + '-01' : ''
-                let next = hostingForm.next_invoice_date
-                if (hostingForm.cycle === 'yearly' && val) {
-                  const d = new Date(val + '-01T00:00:00')
-                  d.setFullYear(d.getFullYear() + 1)
-                  next = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`
-                }
-                setHostingForm(f => ({ ...f, billing_since: since, next_invoice_date: next }))
-              }} />
-            </div>
-          </div>
-          {hostingForm.cycle === 'yearly' && (
-            <div className="form-group" style={{ marginBottom: 12 }}>
-              <label className="form-label">Next invoice month</label>
-              <input type="month" value={hostingForm.next_invoice_date?.slice(0, 7) ?? ''} onChange={e => setHostingForm(f => ({ ...f, next_invoice_date: e.target.value ? e.target.value + '-01' : '' }))} />
-            </div>
-          )}
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowAddHosting(false)}>Cancel</button>
-            <button className="btn btn-primary btn-sm" onClick={saveHosting} disabled={hostingSaving || !hostingForm.amount}>
-              {hostingSaving ? 'Saving…' : 'Add Hosting'}
-            </button>
-          </div>
-        </Modal>
-      )}
-
-      {/* ── Add domains modal ── */}
-      {showAddDomain && (
-        <Modal title="Add Domains" onClose={() => setShowAddDomain(false)}>
-          <div className="form-group">
-            <label className="form-label">Project #</label>
-            <input
-              placeholder="RS-2026-001"
-              value={domainPn}
-              onChange={e => setDomainPn(e.target.value)}
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label" style={{ marginBottom: 6, display: 'block' }}>
-              Domains
-              <span className="text-muted" style={{ fontWeight: 400, marginLeft: 8 }}>
-                domain name · expiry date · yearly amount
-              </span>
-            </label>
-            <DomainRowInputs rows={domainRows} onChange={setDomainRows} />
-          </div>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowAddDomain(false)}>Cancel</button>
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={saveDomains}
-              disabled={domainSaving || !domainPn}
-            >
-              {domainSaving ? 'Saving…' : 'Save Domains'}
-            </button>
-          </div>
-        </Modal>
-      )}
-
-      {/* ── Page header ── */}
-      <div className="page-header">
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-            <button
-              onClick={() => navigate('/clients')}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                color: 'var(--c3)', fontSize: 13, padding: 0,
-                display: 'flex', alignItems: 'center', gap: 4,
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="15 18 9 12 15 6" />
-              </svg>
-              Clients
-            </button>
-          </div>
-          <h1>{client.name}</h1>
-          <p style={{ color: 'var(--c3)', fontSize: 13, margin: 0 }}>
-            Client since {clientSince} · {activeCount} active project{activeCount !== 1 ? 's' : ''}
-          </p>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => openEdit()}>
-            Edit
-          </button>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowAddProject(true)}>
-            + New Project
-          </button>
+
+        {/* Quick stats row */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+          <div className="card">
+            <div className="card-body" style={{ textAlign: 'center', padding: '16px 12px' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Active Maintenances</div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--navy)' }}>{maintenances.filter(m => m.status === 'active').length}</div>
+              <div style={{ fontSize: 12, color: 'var(--c3)' }}>
+                {maintenances.filter(m => m.status === 'active').length > 0
+                  ? fmtEuro(maintenances.filter(m => m.status === 'active').reduce((s, m) => s + m.monthly_retainer, 0)) + '/mo'
+                  : 'none'}
+              </div>
+            </div>
+          </div>
+          <div className="card">
+            <div className="card-body" style={{ textAlign: 'center', padding: '16px 12px' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Pipeline Items</div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--amber, #d97706)' }}>{activePipelineItems.length}</div>
+              <div style={{ fontSize: 12, color: 'var(--c3)' }}>
+                {pipelineWeighted > 0 ? fmtEuro(Math.round(pipelineWeighted)) + ' weighted' : 'no active items'}
+              </div>
+            </div>
+          </div>
+          <div className="card">
+            <div className="card-body" style={{ textAlign: 'center', padding: '16px 12px' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Domains</div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: expiringDomains.length > 0 ? 'var(--amber, #d97706)' : 'var(--c1)' }}>{clientDomains.length}</div>
+              <div style={{ fontSize: 12, color: expiringDomains.length > 0 ? 'var(--amber, #d97706)' : 'var(--c3)' }}>
+                {expiringDomains.length > 0 ? `${expiringDomains.length} expiring soon` : 'all active'}
+              </div>
+            </div>
+          </div>
         </div>
+
+        {/* Recent invoices preview */}
+        {fullInvoiceHistory.length > 0 && (
+          <>
+            <div className="section-bar" style={{ marginBottom: 8 }}>
+              <h2>Recent Invoices</h2>
+              <button className="btn btn-ghost btn-xs" onClick={() => setActiveTab('invoices')}>View all →</button>
+            </div>
+            <div className="card">
+              <table>
+                <thead>
+                  <tr>
+                    <th>MONTH</th><th>DESCRIPTION</th><th className="th-right">AMOUNT</th><th>STATUS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fullInvoiceHistory.slice(0, 5).map(r => (
+                    <tr key={r.id}>
+                      <td className="text-mono" style={{ fontSize: 13, color: 'var(--c2)' }}>{fmtMonth(r.month)}</td>
+                      <td style={{ fontSize: 13, color: 'var(--c1)' }}>
+                        {r.project?.name ?? r.maintenance?.name ?? r.hosting?.description ?? r.domain?.domain_name ?? '—'}
+                      </td>
+                      <td className="td-right text-mono" style={{ fontWeight: 600, fontSize: 13 }}>{fmtEuro(r.actual_amount)}</td>
+                      <td><span className={`badge ${RP_STATUS_BADGE[r.status] ?? 'badge-gray'}`}>{r.status.charAt(0).toUpperCase() + r.status.slice(1)}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </div>
+    )
+  }
 
-      {/* ── Stats strip ── */}
-      <div className="stats-strip">
-        <div className="stat-card" style={{ '--left-color': 'var(--navy)' } as React.CSSProperties}>
-          <div className="stat-card-label">PROJECTS</div>
-          <div className="stat-card-value">{projects.length}</div>
-          <div className="stat-card-sub">
-            {activeCount === projects.length ? 'All active' : `${activeCount} active`}
-          </div>
-        </div>
-        <div className="stat-card" style={{ '--left-color': 'var(--navy)' } as React.CSSProperties}>
-          <div className="stat-card-label">TOTAL VALUE</div>
-          <div className="stat-card-value" style={{ color: 'var(--navy)' }}>
-            {totalValue ? fmtEuro(totalValue) : '—'}
-          </div>
-          <div className="stat-card-sub">active contracts</div>
-        </div>
-        <div className="stat-card" style={{ '--left-color': 'var(--green)' } as React.CSSProperties}>
-          <div className="stat-card-label">INVOICED YTD</div>
-          <div className="stat-card-value" style={{ color: 'var(--green)' }}>
-            {invoicedYTD ? fmtEuro(invoicedYTD) : '—'}
-          </div>
-          <div className="stat-card-sub">{CURRENT_YEAR} actual revenue</div>
-        </div>
-        <div className="stat-card" style={{ '--left-color': 'var(--red)' } as React.CSSProperties}>
-          <div className="stat-card-label">TOTAL COSTS</div>
-          <div className="stat-card-value" style={{ color: 'var(--red)' }}>—</div>
-          <div className="stat-card-sub">not tracked yet</div>
-        </div>
-      </div>
-
-      <div className="page-content">
-
-        {/* ── Projects section ── */}
+  function renderProjects() {
+    return (
+      <div>
         <div className="section-bar" style={{ marginBottom: 10 }}>
           <h2>Projects</h2>
           <button className="btn btn-primary btn-sm" onClick={() => setShowAddProject(true)}>+ New Project</button>
         </div>
-        <div className="card" style={{ marginBottom: 24 }}>
+        <div className="card">
           {projects.length === 0 ? (
-            <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>
-              No projects for this client yet.
-            </div>
+            <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>No projects for this client yet.</div>
           ) : (
             <table>
               <thead>
@@ -752,65 +762,35 @@ export function ClientDetailView() {
                 {projects.map((p: Project) => {
                   const projInvoiced = invoicedByProject.get(p.id)
                   const isRecurring = p.type === 'maintenance' || p.type === 'variable'
-                  // total value: for recurring sum planned_amount from rpRows; for fixed use contract_value
-                  const projRpRows = rpRows.filter(r => r.project_id === p.id)
+                  const projRpRows = allClientRpRows.filter(r => r.project_id === p.id)
                   const totalProjectValue = isRecurring
                     ? projRpRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0)
                     : p.contract_value ?? 0
                   return (
                     <tr key={p.id}>
                       <td>
-                        <span className="text-mono" style={{ fontSize: 11, color: 'var(--c3)', background: 'var(--c7)', border: '1px solid var(--c6)', borderRadius: 4, padding: '2px 6px', whiteSpace: 'nowrap' }}>
-                          {p.pn}
-                        </span>
+                        <span className="text-mono" style={{ fontSize: 11, color: 'var(--c3)', background: 'var(--c7)', border: '1px solid var(--c6)', borderRadius: 4, padding: '2px 6px', whiteSpace: 'nowrap' }}>{p.pn}</span>
                       </td>
                       <td style={{ fontWeight: 700 }}>
-                        <Link
-                          to={`/projects/${p.id}`}
-                          className="table-link"
-                          style={{ color: 'var(--c0)', textDecoration: 'none', fontWeight: 700 }}
+                        <Link to={`/projects/${p.id}`} className="table-link" style={{ color: 'var(--c0)', textDecoration: 'none', fontWeight: 700 }}
                           onMouseEnter={e => (e.currentTarget.style.color = 'var(--navy)')}
-                          onMouseLeave={e => (e.currentTarget.style.color = 'var(--c0)')}
-                        >
+                          onMouseLeave={e => (e.currentTarget.style.color = 'var(--c0)')}>
                           {p.name}
                         </Link>
                       </td>
-                      <td>
-                        <span className={`badge ${TYPE_BADGE[p.type] ?? 'badge-gray'}`}>
-                          {p.type.charAt(0).toUpperCase() + p.type.slice(1)}
-                        </span>
-                      </td>
+                      <td><span className={`badge ${TYPE_BADGE[p.type] ?? 'badge-gray'}`}>{p.type.charAt(0).toUpperCase() + p.type.slice(1)}</span></td>
                       <td className="td-right text-mono" style={{ fontWeight: 600 }}>
-                        {p.contract_value
-                          ? isRecurring
-                            ? `€${p.contract_value.toLocaleString()}/mo`
-                            : fmtEuro(p.contract_value)
-                          : <span className="text-muted">—</span>}
+                        {p.contract_value ? isRecurring ? `${p.contract_value.toLocaleString()} €/mo` : fmtEuro(p.contract_value) : <span className="text-muted">—</span>}
                       </td>
-                      <td style={{ fontSize: 12, color: 'var(--c3)' }}>
-                        {isRecurring ? 'Monthly' : 'One-time'}
-                      </td>
+                      <td style={{ fontSize: 12, color: 'var(--c3)' }}>{isRecurring ? 'Monthly' : 'One-time'}</td>
                       <td className="td-right text-mono" style={{ fontWeight: 600 }}>
-                        {totalProjectValue > 0
-                          ? fmtEuro(totalProjectValue)
-                          : <span className="text-muted">—</span>}
+                        {totalProjectValue > 0 ? fmtEuro(totalProjectValue) : <span className="text-muted">—</span>}
                       </td>
                       <td className="td-right text-mono" style={{ color: 'var(--green)', fontWeight: 600 }}>
                         {projInvoiced ? fmtEuro(projInvoiced) : <span className="text-muted">—</span>}
                       </td>
-                      <td>
-                        <span className={`badge ${STATUS_BADGE[p.status] ?? 'badge-gray'}`}>
-                          {p.status.charAt(0).toUpperCase() + p.status.slice(1)}
-                        </span>
-                      </td>
-                      <td>
-                        <button
-                          className="btn btn-secondary btn-xs"
-                          onClick={() => navigate(`/projects/${p.id}`)}
-                        >
-                          View
-                        </button>
-                      </td>
+                      <td><span className={`badge ${STATUS_BADGE[p.status] ?? 'badge-gray'}`}>{p.status.charAt(0).toUpperCase() + p.status.slice(1)}</span></td>
+                      <td><button className="btn btn-secondary btn-xs" onClick={() => navigate(`/projects/${p.id}`)}>View</button></td>
                     </tr>
                   )
                 })}
@@ -818,8 +798,13 @@ export function ClientDetailView() {
             </table>
           )}
         </div>
+      </div>
+    )
+  }
 
-        {/* ── Domains section ── */}
+  function renderInfra() {
+    return (
+      <div>
         <div className="section-bar" style={{ marginBottom: 10 }}>
           <h2>Domains &amp; Hosting</h2>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -827,23 +812,16 @@ export function ClientDetailView() {
             <button className="btn btn-secondary btn-sm" onClick={() => setShowAddDomain(true)}>+ Add domains</button>
           </div>
         </div>
-        <div className="card" style={{ marginBottom: 24 }}>
+        <div className="card">
           {hostingRows.length === 0 && clientDomains.length === 0 ? (
-            <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>
-              No hosting or domain entries for this client.
-            </div>
+            <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>No hosting or domain entries for this client.</div>
           ) : (
             <table>
               <thead>
                 <tr>
-                  <th>TYPE</th>
-                  <th>PROJECT #</th>
-                  <th>DESCRIPTION</th>
-                  <th className="th-right">AMOUNT</th>
-                  <th>OCCURRENCE</th>
-                  <th className="th-right">TOTAL VALUE</th>
-                  <th>NEXT BILLING</th>
-                  <th>STATUS</th>
+                  <th>TYPE</th><th>PROJECT #</th><th>DESCRIPTION</th>
+                  <th className="th-right">AMOUNT</th><th>OCCURRENCE</th>
+                  <th className="th-right">TOTAL VALUE</th><th>NEXT BILLING</th><th>STATUS</th>
                 </tr>
               </thead>
               <tbody>
@@ -851,78 +829,45 @@ export function ClientDetailView() {
                   const totalVal = h.cycle === 'monthly' ? h.amount * 12 : h.amount
                   return (
                     <tr key={h.id}>
-                      <td>
-                        <span className="badge badge-blue" style={{ cursor: 'default' }}>Hosting</span>
-                      </td>
-                      <td>
-                        <span className="badge badge-gray text-mono" style={{ fontSize: 11 }}>{h.project_pn}</span>
-                      </td>
-                      <td style={{ fontSize: 13, color: 'var(--c1)' }}>
-                        {h.description ?? <span className="text-muted">—</span>}
-                      </td>
-                      <td className="td-right text-mono" style={{ fontWeight: 600, fontSize: 13 }}>
-                        €{h.amount.toLocaleString()}
-                      </td>
-                      <td style={{ fontSize: 12, color: 'var(--c3)' }}>
-                        {h.cycle === 'monthly' ? 'Monthly' : 'Yearly'}
-                      </td>
-                      <td className="td-right text-mono" style={{ fontWeight: 600, fontSize: 13 }}>
-                        {fmtEuro(totalVal)}
-                      </td>
-                      <td style={{ fontSize: 13, color: 'var(--c2)' }}>
-                        {h.cycle === 'monthly' ? nextMonthLabel() : fmtDate(h.next_invoice_date)}
-                      </td>
-                      <td>
-                        <span className={`badge ${STATUS_BADGE[h.status] ?? 'badge-gray'}`}>
-                          {h.status.charAt(0).toUpperCase() + h.status.slice(1)}
-                        </span>
-                      </td>
+                      <td><span className="badge badge-blue">Hosting</span></td>
+                      <td><span className="badge badge-gray text-mono" style={{ fontSize: 11 }}>{h.project_pn}</span></td>
+                      <td style={{ fontSize: 13 }}>{h.description ?? <span className="text-muted">—</span>}</td>
+                      <td className="td-right text-mono" style={{ fontWeight: 600, fontSize: 13 }}>{h.amount.toLocaleString()} €</td>
+                      <td style={{ fontSize: 12, color: 'var(--c3)' }}>{h.cycle === 'monthly' ? 'Monthly' : 'Yearly'}</td>
+                      <td className="td-right text-mono" style={{ fontWeight: 600, fontSize: 13 }}>{fmtEuro(totalVal)}</td>
+                      <td style={{ fontSize: 13, color: 'var(--c2)' }}>{h.cycle === 'monthly' ? nextMonthLabel() : fmtDate(h.next_invoice_date)}</td>
+                      <td><span className={`badge ${STATUS_BADGE[h.status] ?? 'badge-gray'}`}>{h.status.charAt(0).toUpperCase() + h.status.slice(1)}</span></td>
                     </tr>
                   )
                 })}
-
                 {clientDomains.map((d: Domain) => {
                   const days = daysUntil(d.expiry_date)
                   const expiryColor = days <= 30 ? 'var(--red)' : undefined
                   const domainStatus = days < 0
                     ? <span className="badge badge-red">Expired</span>
-                    : days <= 30
-                      ? <span className="badge badge-red">Expires soon</span>
-                      : <span className="badge badge-green">Active</span>
+                    : days <= 30 ? <span className="badge badge-red">Expires soon</span>
+                    : <span className="badge badge-green">Active</span>
                   return (
                     <tr key={d.id}>
-                      <td>
-                        <span className="badge" style={{ background: 'var(--navy)', color: '#fff', fontSize: 11, padding: '2px 7px', borderRadius: 4 }}>
-                          Domain
-                        </span>
-                      </td>
-                      <td>
-                        <span className="badge badge-gray text-mono" style={{ fontSize: 11 }}>{d.project_pn}</span>
-                      </td>
-                      <td style={{ fontSize: 13, color: 'var(--c1)' }}>{d.domain_name}</td>
+                      <td><span className="badge" style={{ background: 'var(--navy)', color: '#fff', fontSize: 11, padding: '2px 7px', borderRadius: 4 }}>Domain</span></td>
+                      <td><span className="badge badge-gray text-mono" style={{ fontSize: 11 }}>{d.project_pn}</span></td>
+                      <td style={{ fontSize: 13 }}>{d.domain_name}</td>
                       <td className="td-right text-mono" style={{ fontWeight: 600, fontSize: 13 }}>
-                        {d.yearly_amount ? `€${d.yearly_amount.toLocaleString()}` : <span className="text-muted">—</span>}
+                        {d.yearly_amount ? `${d.yearly_amount.toLocaleString()} €` : <span className="text-muted">—</span>}
                       </td>
                       <td style={{ fontSize: 12, color: 'var(--c3)' }}>Yearly</td>
                       <td className="td-right text-mono" style={{ fontWeight: 600, fontSize: 13 }}>
                         {d.yearly_amount ? fmtEuro(d.yearly_amount) : <span className="text-muted">—</span>}
                       </td>
-                      <td style={{ fontSize: 13, color: expiryColor ?? 'var(--c2)', fontWeight: expiryColor ? 700 : 400 }}>
-                        {fmtDate(d.expiry_date)}
-                      </td>
+                      <td style={{ fontSize: 13, color: expiryColor ?? 'var(--c2)', fontWeight: expiryColor ? 700 : 400 }}>{fmtDate(d.expiry_date)}</td>
                       <td>{domainStatus}</td>
                     </tr>
                   )
                 })}
-
                 {(hostingRows.length > 0 || clientDomains.length > 0) && (
                   <tr style={{ background: 'var(--c7)', borderTop: '2px solid var(--c6)' }}>
-                    <td colSpan={5} style={{ fontWeight: 700, fontSize: 12, color: 'var(--c3)', letterSpacing: '0.05em' }}>
-                      TOTAL VALUE / YEAR
-                    </td>
-                    <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)', fontSize: 14 }}>
-                      {fmtEuro(hostingAnnual + domainsAnnual)}
-                    </td>
+                    <td colSpan={5} style={{ fontWeight: 700, fontSize: 12, color: 'var(--c3)', letterSpacing: '0.05em' }}>TOTAL VALUE / YEAR</td>
+                    <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)', fontSize: 14 }}>{fmtEuro(hostingAnnual + domainsAnnual)}</td>
                     <td colSpan={2} />
                   </tr>
                 )}
@@ -930,44 +875,73 @@ export function ClientDetailView() {
             </table>
           )}
         </div>
+      </div>
+    )
+  }
 
-        {/* ── Invoice History section ── */}
+  function renderMaintenances() {
+    const activeRetainer = maintenances.filter(m => m.status === 'active').reduce((s, m) => s + m.monthly_retainer, 0)
+    return (
+      <div>
         <div className="section-bar" style={{ marginBottom: 10 }}>
-          <h2>Invoice History</h2>
+          <h2>Maintenance Contracts</h2>
         </div>
-        <div className="card" style={{ marginBottom: 24 }}>
-          {invoiceHistory.length === 0 ? (
+        {activeRetainer > 0 && (
+          <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+            <div style={{ background: 'var(--navy-light)', border: '1px solid var(--navy)', borderRadius: 8, padding: '10px 18px', fontSize: 13 }}>
+              <span style={{ color: 'var(--c3)', marginRight: 8 }}>Active monthly retainer:</span>
+              <strong style={{ color: 'var(--navy)' }}>{fmtEuro(activeRetainer)}/mo</strong>
+            </div>
+          </div>
+        )}
+        <div className="card">
+          {maintenances.length === 0 ? (
             <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>
-              No invoiced entries for this client yet.
+              No maintenance contracts for this client.
+              <div style={{ marginTop: 8 }}>
+                <button className="btn btn-secondary btn-sm" onClick={() => navigate('/maintenances')}>Go to Maintenances</button>
+              </div>
             </div>
           ) : (
             <table>
               <thead>
                 <tr>
-                  <th>MONTH</th>
-                  <th>PROJECT</th>
-                  <th className="th-right">AMOUNT</th>
-                  <th>STATUS</th>
+                  <th>NAME</th>
+                  <th className="th-right" style={{ width: 120 }}>RETAINER/MO</th>
+                  <th className="th-right" style={{ width: 100 }}>HOURS/MO</th>
+                  <th className="th-right" style={{ width: 110 }}>REQUESTS/MO</th>
+                  <th style={{ width: 200 }}>CONTRACT</th>
+                  <th style={{ width: 100 }}>STATUS</th>
+                  <th style={{ width: 80 }}></th>
                 </tr>
               </thead>
               <tbody>
-                {invoiceHistory.map((r: RevenuePlanner) => {
-                  const amtColor = r.status === 'paid' ? 'var(--green)' : r.status === 'issued' ? 'var(--navy)' : 'var(--c2)'
+                {maintenances.map((m: Maintenance) => {
+                  const ending = m.contract_end && daysUntil(m.contract_end) <= 30 && daysUntil(m.contract_end) >= 0
                   return (
-                    <tr key={r.id}>
-                      <td className="text-mono" style={{ fontSize: 13, color: 'var(--c2)' }}>
-                        {fmtMonth(r.month)}
-                      </td>
-                      <td style={{ color: 'var(--c1)', fontSize: 13 }}>
-                        {r.project?.name ?? <span className="text-muted">—</span>}
-                      </td>
-                      <td className="td-right text-mono" style={{ color: amtColor, fontWeight: 600, fontSize: 13 }}>
-                        {fmtEuro(r.actual_amount)}
-                      </td>
+                    <tr key={m.id}>
                       <td>
-                        <span className={`badge ${RP_STATUS_BADGE[r.status] ?? 'badge-gray'}`}>
-                          {r.status.charAt(0).toUpperCase() + r.status.slice(1)}
-                        </span>
+                        <div style={{ fontWeight: 700, fontSize: 14 }}>{m.name}</div>
+                        {m.notes && <div style={{ fontSize: 12, color: 'var(--c3)', marginTop: 2 }}>{m.notes}</div>}
+                      </td>
+                      <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)' }}>{fmtEuro(m.monthly_retainer)}</td>
+                      <td className="td-right text-mono">{m.hours_included}h</td>
+                      <td className="td-right text-mono">{m.help_requests_included}</td>
+                      <td>
+                        <div style={{ fontSize: 13, color: ending ? 'var(--red)' : 'var(--c2)', fontWeight: ending ? 700 : 400 }}>
+                          {fmtDate(m.contract_start)} → {m.contract_end ? fmtDate(m.contract_end) : 'Open-ended'}
+                        </div>
+                        {m.contract_url && (
+                          <a href={safeUrl(m.contract_url)} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: 'var(--navy)', display: 'inline-flex', alignItems: 'center', gap: 3, marginTop: 2 }}>
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                            Contract
+                          </a>
+                        )}
+                        {ending && <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 2 }}>Ends in {daysUntil(m.contract_end!)}d</div>}
+                      </td>
+                      <td><span className={`badge ${STATUS_BADGE[m.status] ?? 'badge-gray'}`}>{m.status.charAt(0).toUpperCase() + m.status.slice(1)}</span></td>
+                      <td>
+                        <button className="btn btn-secondary btn-xs" onClick={() => navigate(`/maintenances?edit=${m.id}`)}>Edit</button>
                       </td>
                     </tr>
                   )
@@ -976,7 +950,519 @@ export function ClientDetailView() {
             </table>
           )}
         </div>
+      </div>
+    )
+  }
 
+  function renderInvoices() {
+    function getCategoryBadge(r: RevenuePlanner) {
+      if (r.maintenance_id) return <span className="badge badge-amber">Maintenance</span>
+      if (r.hosting_client_id) return <span className="badge badge-blue">Hosting</span>
+      if (r.domain_id) return <span className="badge" style={{ background: 'var(--navy)', color: '#fff' }}>Domain</span>
+      return <span className="badge badge-gray">Project</span>
+    }
+    function getDescription(r: RevenuePlanner) {
+      if (r.maintenance_id) return r.maintenance?.name ?? '—'
+      if (r.hosting_client_id) return r.hosting?.description ?? '—'
+      if (r.domain_id) return r.domain?.domain_name ?? '—'
+      return r.project?.name ?? '—'
+    }
+
+    return (
+      <div>
+        <div className="section-bar" style={{ marginBottom: 10 }}>
+          <h2>Invoice History <span style={{ fontWeight: 400, fontSize: 13, textTransform: 'none', letterSpacing: 0 }}>· {fullInvoiceHistory.length} entries</span></h2>
+        </div>
+        <div className="card">
+          {fullInvoiceHistory.length === 0 ? (
+            <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>No invoiced entries for this client yet.</div>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>MONTH</th><th>CATEGORY</th><th>DESCRIPTION</th>
+                  <th className="th-right">AMOUNT</th><th>STATUS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fullInvoiceHistory.map((r: RevenuePlanner) => {
+                  const amtColor = r.status === 'paid' ? 'var(--green)' : r.status === 'issued' ? 'var(--navy)' : 'var(--c2)'
+                  return (
+                    <tr key={r.id}>
+                      <td className="text-mono" style={{ fontSize: 13, color: 'var(--c2)' }}>{fmtMonth(r.month)}</td>
+                      <td>{getCategoryBadge(r)}</td>
+                      <td style={{ fontSize: 13, color: 'var(--c1)' }}>{getDescription(r)}</td>
+                      <td className="td-right text-mono" style={{ color: amtColor, fontWeight: 600, fontSize: 13 }}>{fmtEuro(r.actual_amount)}</td>
+                      <td><span className={`badge ${RP_STATUS_BADGE[r.status] ?? 'badge-gray'}`}>{r.status.charAt(0).toUpperCase() + r.status.slice(1)}</span></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  function renderPipeline() {
+    const totalWeighted = activePipelineItems.reduce((s, i) => s + ((i.estimated_amount ?? 0) * i.probability / 100), 0)
+    return (
+      <div>
+        <div className="section-bar" style={{ marginBottom: 10 }}>
+          <h2>Pipeline &amp; Offers</h2>
+          <button className="btn btn-primary btn-sm" onClick={openAddPipeline}>+ Add</button>
+        </div>
+        <div className="card" style={{ marginBottom: 24 }}>
+          {pipelineItems.length === 0 ? (
+            <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>
+              No pipeline items yet. Add prospects, proposals, and ongoing negotiations.
+            </div>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th style={{ width: 120 }}>STATUS</th>
+                  <th>TITLE</th>
+                  <th className="th-right" style={{ width: 120 }}>AMOUNT</th>
+                  <th style={{ width: 110 }}>PROBABILITY</th>
+                  <th style={{ width: 130 }}>EXPECTED MONTH</th>
+                  <th style={{ width: 90 }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {pipelineItems.map((item: PipelineItem) => (
+                  <tr key={item.id} style={{ opacity: item.status === 'won' || item.status === 'lost' ? 0.6 : 1 }}>
+                    <td><span className={`badge ${PIPELINE_STATUS_BADGE[item.status] ?? 'badge-gray'}`}>{PIPELINE_STATUS_LABELS[item.status]}</span></td>
+                    <td>
+                      <div style={{ fontWeight: 600 }}>{item.title}</div>
+                      {item.description && <div style={{ fontSize: 12, color: 'var(--c3)', marginTop: 2 }}>{item.description}</div>}
+                    </td>
+                    <td className="td-right text-mono" style={{ fontWeight: 600 }}>{fmtEuro(item.estimated_amount)}</td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ flex: 1, height: 4, background: 'var(--c6)', borderRadius: 2 }}>
+                          <div style={{ width: `${item.probability}%`, height: '100%', background: 'var(--navy)', borderRadius: 2 }} />
+                        </div>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--c2)', minWidth: 32 }}>{item.probability}%</span>
+                      </div>
+                    </td>
+                    <td style={{ fontSize: 13, color: 'var(--c2)' }}>
+                      {item.expected_month ? fmtMonthShort(item.expected_month) : <span className="text-muted">—</span>}
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                        <button className="btn btn-ghost btn-xs" onClick={() => openEditPipeline(item)}>Edit</button>
+                        <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red)' }} onClick={() => setDeletePipelineTarget(item)}>
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Pipeline Forecast */}
+        {pipelineForecast.length > 0 && (
+          <>
+            <div className="section-bar" style={{ marginBottom: 10 }}>
+              <h2>Pipeline Forecast</h2>
+            </div>
+            <div className="card">
+              <table>
+                <thead>
+                  <tr>
+                    <th>MONTH</th>
+                    <th>ITEMS</th>
+                    <th className="th-right">TOTAL AMOUNT</th>
+                    <th className="th-right">WEIGHTED</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pipelineForecast.map(([month, g]) => (
+                    <tr key={month}>
+                      <td style={{ fontWeight: 600 }}>
+                        {month === 'unscheduled' ? <span style={{ color: 'var(--c3)', fontStyle: 'italic' }}>Unscheduled</span> : fmtMonthShort(month)}
+                      </td>
+                      <td style={{ fontSize: 12, color: 'var(--c3)' }}>
+                        {g.items.map(i => i.title).join(', ')}
+                      </td>
+                      <td className="td-right text-mono" style={{ fontWeight: 600 }}>{fmtEuro(g.total)}</td>
+                      <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)' }}>{fmtEuro(Math.round(g.weighted))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ background: 'var(--c7)', borderTop: '2px solid var(--c6)' }}>
+                    <td colSpan={3} style={{ fontWeight: 700, fontSize: 12, color: 'var(--c3)', letterSpacing: '0.05em' }}>TOTAL WEIGHTED PIPELINE</td>
+                    <td className="td-right text-mono" style={{ fontWeight: 800, color: 'var(--navy)', fontSize: 14 }}>{fmtEuro(Math.round(totalWeighted))}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  const TABS: { id: TabId; label: string }[] = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'projects', label: `Projects${projects.length > 0 ? ` (${projects.length})` : ''}` },
+    { id: 'infra', label: 'Infrastructure' },
+    { id: 'maintenances', label: `Maintenances${maintenances.length > 0 ? ` (${maintenances.length})` : ''}` },
+    { id: 'invoices', label: 'Invoices' },
+    { id: 'pipeline', label: `Pipeline${activePipelineItems.length > 0 ? ` (${activePipelineItems.length})` : ''}` },
+  ]
+
+  return (
+    <div>
+      {/* ── Edit client modal ── */}
+      {showEdit && (
+        <Modal title="Edit client" onClose={() => setShowEdit(false)}>
+          <div className="form-row" style={{ marginBottom: 14 }}>
+            <div className="form-group">
+              <label className="form-label">Name</label>
+              <input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} autoFocus />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Email</label>
+              <input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} />
+            </div>
+          </div>
+          <div className="form-row" style={{ marginBottom: 14 }}>
+            <div className="form-group">
+              <label className="form-label">Phone</label>
+              <input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">VAT ID</label>
+              <input value={editForm.vat_id} onChange={e => setEditForm(f => ({ ...f, vat_id: e.target.value }))} />
+            </div>
+          </div>
+          <div className="form-group" style={{ marginBottom: 14 }}>
+            <label className="form-label">Address</label>
+            <input value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} />
+          </div>
+          <div style={{ borderTop: '1px solid var(--c6)', paddingTop: 14, marginBottom: 14 }}>
+            <p style={{ margin: '0 0 12px', fontSize: 12, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Contact Person</p>
+            <div className="form-row" style={{ marginBottom: 14 }}>
+              <div className="form-group">
+                <label className="form-label">Name</label>
+                <input value={editForm.contact_person} onChange={e => setEditForm(f => ({ ...f, contact_person: e.target.value }))} placeholder="e.g. Ana Novak" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Email</label>
+                <input type="email" value={editForm.contact_email} onChange={e => setEditForm(f => ({ ...f, contact_email: e.target.value }))} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Phone</label>
+              <input type="tel" value={editForm.contact_phone} onChange={e => setEditForm(f => ({ ...f, contact_phone: e.target.value }))} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowEdit(false)}>Cancel</button>
+            <button className="btn btn-primary btn-sm" onClick={saveEdit} disabled={editSaving || !editForm.name.trim()}>
+              {editSaving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── New project modal ── */}
+      {showAddProject && (
+        <Modal title="New Project" onClose={() => { setShowAddProject(false); setProjForm(EMPTY_PROJ) }}>
+          <TypePills value={projForm.type} onChange={v => setProjForm(f => ({ ...f, type: v }))} />
+          <div className="form-row" style={{ marginBottom: 14 }}>
+            <div className="form-group">
+              <label className="form-label">Project name</label>
+              <input placeholder="e.g. Petrol — Prenova" value={projForm.name} onChange={e => setProjForm(f => ({ ...f, name: e.target.value }))} autoFocus />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Project Manager</label>
+              <Select value={projForm.pm} onChange={val => setProjForm(f => ({ ...f, pm: val }))}
+                options={[{ value: 'Nino', label: 'Nino' }, { value: 'Ana', label: 'Ana' }, { value: 'Maja', label: 'Maja' }]} />
+            </div>
+          </div>
+          <div className="form-row" style={{ marginBottom: 14 }}>
+            <div className="form-group">
+              <label className="form-label">
+                {projForm.type === 'maintenance' ? 'Monthly amount (€)' : projForm.type === 'variable' ? 'Est. monthly (€)' : 'Project value (€)'}
+              </label>
+              <input type="number" value={projForm.contract_value} onChange={e => setProjForm(f => ({ ...f, contract_value: e.target.value }))} placeholder={projForm.type === 'fixed' ? '45000' : '2000'} />
+            </div>
+          </div>
+          {projForm.type === 'maintenance' && (
+            <div className="form-row" style={{ marginBottom: 4 }}>
+              <div className="form-group">
+                <label className="form-label">Starting from</label>
+                <input type="month" value={projForm.starting_from} onChange={e => setProjForm(f => ({ ...f, starting_from: e.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">End month <span className="form-hint" style={{ display: 'inline', marginLeft: 6 }}>optional</span></label>
+                <input type="month" value={projForm.end_month} onChange={e => setProjForm(f => ({ ...f, end_month: e.target.value }))} />
+              </div>
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => { setShowAddProject(false); setProjForm(EMPTY_PROJ) }}>Cancel</button>
+            <button className="btn btn-primary btn-sm" onClick={saveProject} disabled={projSaving || !projForm.name.trim()}>
+              {projSaving ? <span className="spinner" style={{ borderTopColor: '#fff' }} /> : null} Create project
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Add hosting modal ── */}
+      {showAddHosting && (
+        <Modal title="Add Hosting" onClose={() => setShowAddHosting(false)}>
+          <div className="form-row" style={{ marginBottom: 12 }}>
+            <div className="form-group">
+              <label className="form-label">Project #</label>
+              <input placeholder="RS-2026-001" value={hostingForm.project_pn} onChange={e => setHostingForm(f => ({ ...f, project_pn: e.target.value }))} autoFocus />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Billing cycle</label>
+              <Select value={hostingForm.cycle} onChange={val => {
+                setHostingForm(f => ({ ...f, cycle: val as 'monthly' | 'yearly', next_invoice_date: val === 'yearly' && f.billing_since ? f.billing_since : '' }))
+              }} options={[{ value: 'monthly', label: 'Monthly' }, { value: 'yearly', label: 'Yearly' }]} />
+            </div>
+          </div>
+          <div className="form-group" style={{ marginBottom: 12 }}>
+            <label className="form-label">Service description</label>
+            <input placeholder="VPS + cPanel hosting" value={hostingForm.description} onChange={e => setHostingForm(f => ({ ...f, description: e.target.value }))} />
+          </div>
+          <div className="form-row" style={{ marginBottom: 12 }}>
+            <div className="form-group">
+              <label className="form-label">Amount (€)</label>
+              <input type="number" value={hostingForm.amount} onChange={e => setHostingForm(f => ({ ...f, amount: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Billing since</label>
+              <input type="month" value={hostingForm.billing_since?.slice(0, 7) ?? ''} onChange={e => {
+                const val = e.target.value
+                const since = val ? val + '-01' : ''
+                setHostingForm(f => ({
+                  ...f,
+                  billing_since: since,
+                  invoice_month: f.invoice_month || val,
+                  next_invoice_date: f.cycle === 'yearly' && val ? val + '-01' : f.next_invoice_date,
+                }))
+              }} />
+            </div>
+          </div>
+          {hostingForm.cycle === 'yearly' && (
+            <div className="form-group" style={{ marginBottom: 12 }}>
+              <label className="form-label">Invoice month (yearly)</label>
+              <input type="month" value={hostingForm.next_invoice_date?.slice(0, 7) ?? ''} onChange={e => setHostingForm(f => ({ ...f, next_invoice_date: e.target.value ? e.target.value + '-01' : '' }))} />
+            </div>
+          )}
+          <div className="form-group" style={{ marginBottom: 12 }}>
+            <label className="form-label">Contract / Order ID <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
+            <input placeholder="e.g. PO-2026-042" value={hostingForm.contract_id} onChange={e => setHostingForm(f => ({ ...f, contract_id: e.target.value }))} />
+          </div>
+          <div style={{ borderTop: '1px solid var(--c6)', paddingTop: 12, marginBottom: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>Invoice planning</div>
+            {hostingForm.cycle === 'monthly' && (
+              <div className="form-group" style={{ marginBottom: 10 }}>
+                <label className="form-label">Start from month</label>
+                <input type="month" value={hostingForm.invoice_month} onChange={e => setHostingForm(f => ({ ...f, invoice_month: e.target.value }))} />
+              </div>
+            )}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+              <input type="checkbox" checked={hostingForm.already_billed} onChange={e => setHostingForm(f => ({ ...f, already_billed: e.target.checked }))} />
+              Already billed{hostingForm.cycle === 'monthly' ? ' for this month' : ' (mark as issued)'}
+            </label>
+            {(hostingForm.cycle === 'monthly' ? hostingForm.invoice_month : hostingForm.next_invoice_date) && (
+              <div className="form-hint" style={{ marginTop: 6 }}>
+                {hostingForm.cycle === 'monthly'
+                  ? `Will create 12 monthly rows from ${hostingForm.invoice_month}${hostingForm.already_billed ? ' (first marked as issued)' : ''}`
+                  : `Will create 1 invoice row for ${hostingForm.next_invoice_date?.slice(0, 7)}${hostingForm.already_billed ? ' (marked as issued)' : ''}`
+                }
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowAddHosting(false)}>Cancel</button>
+            <button className="btn btn-primary btn-sm" onClick={saveHosting} disabled={hostingSaving || !hostingForm.amount}>
+              {hostingSaving ? 'Saving…' : 'Add Hosting'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Add domains modal ── */}
+      {showAddDomain && (
+        <Modal title="Add Domains" onClose={() => setShowAddDomain(false)}>
+          <div className="form-row" style={{ marginBottom: 12 }}>
+            <div className="form-group">
+              <label className="form-label">Project #</label>
+              <input placeholder="e.g. 1159" value={domainPn} onChange={e => setDomainPn(e.target.value)} autoFocus />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Contract / Order ID <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
+              <input placeholder="e.g. PO-2026-042" value={domainContractId} onChange={e => setDomainContractId(e.target.value)} />
+            </div>
+          </div>
+          <div className="form-group">
+            <label className="form-label" style={{ marginBottom: 6, display: 'block' }}>Domains</label>
+            <DomainRowInputs rows={domainRows} onChange={setDomainRows} />
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowAddDomain(false)}>Cancel</button>
+            <button className="btn btn-primary btn-sm" onClick={saveDomains} disabled={domainSaving || !domainPn}>
+              {domainSaving ? 'Saving…' : 'Save Domains'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Pipeline add/edit modal ── */}
+      {showPipeline && (
+        <Modal title={editPipelineTarget ? 'Edit Pipeline Item' : 'Add Pipeline Item'} onClose={() => setShowPipeline(false)}>
+          <div className="form-group" style={{ marginBottom: 14 }}>
+            <label className="form-label">Title <span style={{ color: 'var(--red)' }}>*</span></label>
+            <input value={pipelineForm.title} onChange={e => setPipelineForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Website redesign proposal" autoFocus />
+          </div>
+          <div className="form-row" style={{ marginBottom: 14 }}>
+            <div className="form-group">
+              <label className="form-label">Status</label>
+              <Select value={pipelineForm.status} onChange={val => setPipelineForm(f => ({ ...f, status: val as PipelineItem['status'] }))}
+                options={[
+                  { value: 'proposal', label: 'Proposal' },
+                  { value: 'won', label: 'Won' },
+                  { value: 'lost', label: 'Lost' },
+                ]} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Probability</label>
+              <Select value={pipelineForm.probability} onChange={val => setPipelineForm(f => ({ ...f, probability: val }))}
+                options={[
+                  { value: '10', label: '10%' },
+                  { value: '25', label: '25%' },
+                  { value: '50', label: '50%' },
+                  { value: '75', label: '75%' },
+                  { value: '90', label: '90%' },
+                ]} />
+            </div>
+          </div>
+          <div className="form-row" style={{ marginBottom: 14 }}>
+            <div className="form-group">
+              <label className="form-label">Estimated Amount (€)</label>
+              <input type="number" value={pipelineForm.estimated_amount} onChange={e => setPipelineForm(f => ({ ...f, estimated_amount: e.target.value }))} placeholder="0" />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Expected Month</label>
+              <input type="month" value={pipelineForm.expected_month} onChange={e => setPipelineForm(f => ({ ...f, expected_month: e.target.value }))} />
+            </div>
+          </div>
+          <div className="form-group" style={{ marginBottom: 14 }}>
+            <label className="form-label">Description <span className="form-hint" style={{ display: 'inline' }}>optional</span></label>
+            <textarea value={pipelineForm.description} onChange={e => setPipelineForm(f => ({ ...f, description: e.target.value }))} rows={2} style={{ resize: 'vertical' }} />
+          </div>
+          <div className="form-group" style={{ marginBottom: 14 }}>
+            <label className="form-label">Notes <span className="form-hint" style={{ display: 'inline' }}>optional</span></label>
+            <textarea value={pipelineForm.notes} onChange={e => setPipelineForm(f => ({ ...f, notes: e.target.value }))} rows={2} style={{ resize: 'vertical' }} />
+          </div>
+          {pipelineForm.estimated_amount && (
+            <div style={{ background: 'var(--navy-light)', border: '1px solid var(--navy)', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: 'var(--navy)', marginBottom: 14 }}>
+              Weighted value: <strong>{fmtEuro(Math.round(parseFloat(pipelineForm.estimated_amount) * parseInt(pipelineForm.probability) / 100))}</strong>
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowPipeline(false)}>Cancel</button>
+            <button className="btn btn-primary btn-sm" onClick={savePipeline} disabled={pipelineSaving || !pipelineForm.title.trim()}>
+              {pipelineSaving ? 'Saving…' : editPipelineTarget ? 'Save changes' : 'Add to pipeline'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Delete pipeline confirm ── */}
+      {deletePipelineTarget && (
+        <Modal title="Remove pipeline item" onClose={() => setDeletePipelineTarget(null)}>
+          <p style={{ margin: '0 0 20px', fontSize: 14 }}>Remove <strong>{deletePipelineTarget.title}</strong> from the pipeline?</p>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => setDeletePipelineTarget(null)}>Cancel</button>
+            <button className="btn btn-primary btn-sm" style={{ background: 'var(--red)', borderColor: 'var(--red)' }} onClick={() => deletePipeline(deletePipelineTarget)}>Remove</button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Page header with tabs on right ── */}
+      <div className="page-header" style={{ alignItems: 'flex-end' }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+            <button onClick={() => navigate('/clients')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c3)', fontSize: 13, padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+              Clients
+            </button>
+          </div>
+          <h1>{client.name}</h1>
+          <p style={{ color: 'var(--c3)', fontSize: 13, margin: 0 }}>
+            Client since {clientSince} · {activeCount} active project{activeCount !== 1 ? 's' : ''}
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 0, alignSelf: 'flex-end' }}>
+          {TABS.map(tab => (
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                borderBottom: activeTab === tab.id ? '2px solid var(--navy)' : '2px solid transparent',
+                cursor: 'pointer',
+                padding: '8px 16px',
+                fontFamily: 'inherit',
+                fontWeight: 600,
+                fontSize: 13,
+                color: activeTab === tab.id ? 'var(--navy)' : 'var(--c3)',
+                transition: 'color .12s',
+                whiteSpace: 'nowrap',
+              }}>
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Stats strip (Overview only, outside page-content to avoid double padding) ── */}
+      {activeTab === 'overview' && (
+        <div className="stats-strip">
+          <div className="stat-card" style={{ '--left-color': 'var(--navy)' } as React.CSSProperties}>
+            <div className="stat-card-label">PROJECTS</div>
+            <div className="stat-card-value">{projects.length}</div>
+            <div className="stat-card-sub">{activeCount === projects.length ? 'All active' : `${activeCount} active`}</div>
+          </div>
+          <div className="stat-card" style={{ '--left-color': 'var(--navy)' } as React.CSSProperties}>
+            <div className="stat-card-label">TOTAL VALUE</div>
+            <div className="stat-card-value" style={{ color: 'var(--navy)' }}>{totalValue ? fmtEuro(totalValue) : '—'}</div>
+            <div className="stat-card-sub">active contracts</div>
+          </div>
+          <div className="stat-card" style={{ '--left-color': 'var(--green)' } as React.CSSProperties}>
+            <div className="stat-card-label">INVOICED YTD</div>
+            <div className="stat-card-value" style={{ color: 'var(--green)' }}>{invoicedYTD ? fmtEuro(invoicedYTD) : '—'}</div>
+            <div className="stat-card-sub">{CURRENT_YEAR} actual revenue</div>
+          </div>
+          <div className="stat-card" style={{ '--left-color': pipelineWeighted > 0 ? 'var(--amber, #d97706)' : 'var(--c5)' } as React.CSSProperties}>
+            <div className="stat-card-label">PIPELINE</div>
+            <div className="stat-card-value" style={{ color: pipelineWeighted > 0 ? 'var(--amber, #d97706)' : undefined }}>{pipelineWeighted > 0 ? fmtEuro(Math.round(pipelineWeighted)) : '—'}</div>
+            <div className="stat-card-sub">weighted forecast</div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Tab content ── */}
+      <div className="page-content">
+        {activeTab === 'overview'     && renderOverview()}
+        {activeTab === 'projects'     && renderProjects()}
+        {activeTab === 'infra'        && renderInfra()}
+        {activeTab === 'maintenances' && renderMaintenances()}
+        {activeTab === 'invoices'     && renderInvoices()}
+        {activeTab === 'pipeline'     && renderPipeline()}
       </div>
     </div>
   )

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useMaintenancesStore } from '../stores/maintenances'
 import type { HostingPayload } from '../stores/maintenances'
 import { useClientsStore } from '../stores/clients'
@@ -9,7 +10,7 @@ import type { Maintenance } from '../lib/types'
 import { Select } from '../components/Select'
 
 function fmtEuro(n: number) {
-  return '€' + n.toLocaleString('en-EU')
+  return n.toLocaleString('en-EU') + ' €'
 }
 function fmtDate(d?: string | null) {
   if (!d) return 'Open-ended'
@@ -52,7 +53,8 @@ interface FormState {
   help_requests_included: string
   hours_included: string
   contract_start: string
-  contract_end: string
+  contract_duration_months: string  // '' = open-ended
+  contract_url: string
   status: 'active' | 'paused' | 'cancelled'
   notes: string
   // Hosting
@@ -67,17 +69,32 @@ interface FormState {
 const EMPTY_FORM: FormState = {
   client_id: '', name: '', monthly_retainer: '',
   help_requests_included: '', hours_included: '',
-  contract_start: '', contract_end: '',
+  contract_start: '', contract_duration_months: '', contract_url: '',
   status: 'active', notes: '',
   hosting_enabled: false,
   hosting_project_pn: '', hosting_description: '',
   hosting_cycle: 'monthly', hosting_amount: '', hosting_billing_since: '',
 }
 
+function computeContractEnd(start: string, durationMonths: string): string | null {
+  if (!start || !durationMonths) return null
+  const n = parseInt(durationMonths)
+  if (!n || n <= 0) return null
+  const [y, m] = start.split('-').map(Number)
+  const d = new Date(y, m - 1 + n - 1, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+}
+
+function fmtYearMonth(isoDate: string) {
+  const d = new Date(isoDate + 'T00:00:00')
+  return d.toLocaleString('en', { month: 'short', year: 'numeric' })
+}
+
 export function MaintenancesView() {
   const store = useMaintenancesStore()
   const cStore = useClientsStore()
   const pStore = useProjectsStore()
+  const navigate = useNavigate()
 
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<Maintenance | null>(null)
@@ -85,9 +102,19 @@ export function MaintenancesView() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    store.fetchAll()
-    cStore.fetchAll()
-    pStore.fetchAll()
+    async function init() {
+      await store.fetchAll()
+      await cStore.fetchAll()
+      await pStore.fetchAll()
+      // Deep-link: ?edit=<id> from ClientDetailView
+      const params = new URLSearchParams(window.location.search)
+      const editId = params.get('edit')
+      if (editId) {
+        const m = store.maintenances.find(m => m.id === editId)
+        if (m) openEdit(m)
+      }
+    }
+    init()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const active = store.maintenances.filter(m => m.status === 'active')
@@ -119,7 +146,13 @@ export function MaintenancesView() {
       help_requests_included: String(m.help_requests_included),
       hours_included: String(m.hours_included),
       contract_start: m.contract_start.slice(0, 7),
-      contract_end: m.contract_end ? m.contract_end.slice(0, 7) : '',
+      contract_duration_months: (() => {
+        if (!m.contract_end) return ''
+        const from = new Date(m.contract_start + 'T00:00:00')
+        const to = new Date(m.contract_end + 'T00:00:00')
+        return String((to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth()) + 1)
+      })(),
+      contract_url: m.contract_url ?? '',
       status: m.status,
       notes: m.notes ?? '',
       hosting_enabled: !!hosting,
@@ -153,7 +186,8 @@ export function MaintenancesView() {
         help_requests_included: Number(form.help_requests_included) || 0,
         hours_included: Number(form.hours_included) || 0,
         contract_start: form.contract_start + '-01',
-        contract_end: form.contract_end ? form.contract_end + '-01' : null,
+        contract_end: computeContractEnd(form.contract_start, form.contract_duration_months),
+        contract_url: form.contract_url.trim() || null,
         status: form.status,
         notes: form.notes.trim() || null,
       }
@@ -183,14 +217,7 @@ export function MaintenancesView() {
     }
   }
 
-  // Duration preview
-  const durationMonths = (() => {
-    if (!form.contract_start || !form.contract_end) return null
-    const from = new Date(form.contract_start + '-01T00:00:00')
-    const to = new Date(form.contract_end + '-01T00:00:00')
-    if (to < from) return null
-    return (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth()) + 1
-  })()
+  const computedEnd = computeContractEnd(form.contract_start, form.contract_duration_months)
 
   return (
     <div>
@@ -258,26 +285,32 @@ export function MaintenancesView() {
           </div>
         </div>
 
-        {/* Row 3: Start + End */}
-        <div className="form-row" style={{ marginBottom: durationMonths ? 6 : 14 }}>
+        {/* Row 3: Start + Duration */}
+        <div className="form-row" style={{ marginBottom: 6 }}>
           <div className="form-group">
             <label className="form-label">Contract start</label>
-            <input type="month" value={form.contract_start} onChange={f('contract_start')} />
+            <input type="month" value={form.contract_start} onChange={f('contract_start')} placeholder="e.g. 2026-01" />
           </div>
           <div className="form-group">
-            <label className="form-label">Contract end <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
-            <input type="month" value={form.contract_end} onChange={f('contract_end')} />
+            <label className="form-label">Duration <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>months, optional</span></label>
+            <input type="number" min="1" value={form.contract_duration_months} onChange={f('contract_duration_months')} placeholder="e.g. 12" />
           </div>
         </div>
 
-        {durationMonths && (
+        {computedEnd && (
           <div style={{ fontSize: 12, color: 'var(--navy)', background: 'var(--navy-light)', border: '1px solid var(--navy-muted, #c7d2fe)', borderRadius: 6, padding: '7px 12px', marginBottom: 14 }}>
-            <strong>{durationMonths} months</strong>
-            {form.monthly_retainer ? ` · Total: ${fmtEuro(durationMonths * Number(form.monthly_retainer))}` : ''}
+            <strong>{form.contract_duration_months} months</strong>
+            {' · Ends: '}<strong>{fmtYearMonth(computedEnd)}</strong>
+            {form.monthly_retainer ? ` · Total: ${fmtEuro(parseInt(form.contract_duration_months) * Number(form.monthly_retainer))}` : ''}
           </div>
         )}
+        {!computedEnd && <div style={{ marginBottom: 14 }} />}
 
-        {/* Notes */}
+        {/* Contract URL + Notes */}
+        <div className="form-group" style={{ marginBottom: 14 }}>
+          <label className="form-label">Contract URL <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
+          <input value={form.contract_url} onChange={f('contract_url')} placeholder="https://..." type="url" />
+        </div>
         <div className="form-group" style={{ marginBottom: 20 }}>
           <label className="form-label">Notes <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
           <textarea value={form.notes} onChange={f('notes')} rows={2} placeholder="Any additional notes…" style={{ width: '100%', resize: 'vertical' }} />
@@ -301,12 +334,7 @@ export function MaintenancesView() {
               <div className="form-row" style={{ marginBottom: 12 }}>
                 <div className="form-group">
                   <label className="form-label">Project #</label>
-                  <Select
-                    value={form.hosting_project_pn}
-                    onChange={val => setForm(prev => ({ ...prev, hosting_project_pn: val }))}
-                    placeholder="— Select project —"
-                    options={pStore.projects.map(p => ({ value: p.pn, label: `${p.pn} — ${p.name}` }))}
-                  />
+                  <input value={form.hosting_project_pn} onChange={f('hosting_project_pn')} placeholder="e.g. RS-2026-00223" />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Billing cycle</label>
@@ -390,24 +418,25 @@ export function MaintenancesView() {
                 <tr>
                   <th>CLIENT</th>
                   <th>CONTRACT</th>
-                  <th className="th-right">RETAINER / MO</th>
                   <th className="th-right">REQUESTS</th>
                   <th className="th-right">HOURS</th>
                   <th>START</th>
                   <th>END</th>
+                  <th>HOSTING</th>
                   <th>STATUS</th>
+                  <th className="th-right">RETAINER / MO</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {store.maintenances.map((m: Maintenance) => {
                   const expiring = m.contract_end && m.status === 'active' && daysUntil(m.contract_end) <= 30
+                  const hasHosting = m.hosting_clients && m.hosting_clients.length > 0
                   return (
                     <tr key={m.id}>
                       <td style={{ fontSize: 13, color: 'var(--c1)', fontWeight: 600 }}>{m.client?.name ?? '—'}</td>
-                      <td style={{ fontWeight: 700 }}>{m.name}</td>
-                      <td className="td-right text-mono" style={{ fontWeight: 600, color: 'var(--green)' }}>
-                        {fmtEuro(m.monthly_retainer)}
+                      <td style={{ fontWeight: 700 }}>
+                        <span className="table-link" onClick={() => navigate(`/maintenances/${m.id}`)}>{m.name}</span>
                       </td>
                       <td className="td-right text-mono" style={{ color: 'var(--c2)' }}>{m.help_requests_included}</td>
                       <td className="td-right text-mono" style={{ color: 'var(--c2)' }}>{m.hours_included}h</td>
@@ -416,9 +445,18 @@ export function MaintenancesView() {
                         {fmtDate(m.contract_end)}
                       </td>
                       <td>
+                        {hasHosting
+                          ? <span className="badge badge-green">Yes</span>
+                          : <span className="badge badge-gray">No</span>
+                        }
+                      </td>
+                      <td>
                         <span className={`badge ${STATUS_BADGE[m.status] ?? 'badge-gray'}`}>
                           {m.status.charAt(0).toUpperCase() + m.status.slice(1)}
                         </span>
+                      </td>
+                      <td className="td-right text-mono" style={{ fontWeight: 600, color: 'var(--green)' }}>
+                        {fmtEuro(m.monthly_retainer)}
                       </td>
                       <td>
                         <button className="btn btn-secondary btn-xs" onClick={() => openEdit(m)}>Edit</button>

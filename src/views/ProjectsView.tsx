@@ -146,6 +146,7 @@ export function ProjectsView() {
       if ((form.type === 'maintenance' || form.type === 'variable') && form.starting_from && form.value) {
         const numMonths = Math.max(1, Math.min(60, parseInt(form.num_months) || 12))
         const [y, m] = form.starting_from.split('-').map(Number)
+        const defaultProb = form.type === 'variable' ? 75 : 100
         const rows = Array.from({ length: numMonths }, (_, i) => {
           const d = new Date(y, m - 1 + i, 1)
           return {
@@ -154,6 +155,7 @@ export function ProjectsView() {
             planned_amount: parseFloat(form.value),
             actual_amount:  null,
             status:         'planned',
+            probability:    defaultProb,
             notes:          null,
           }
         })
@@ -192,9 +194,9 @@ export function ProjectsView() {
       <div className="stats-strip">
         {[
           { label:'Total projects',  value:String(pStore.projects.length), sub:`${activeCount} active`, color:'var(--c5)' },
-          { label:'Portfolio value', value: portfolioValue ? `€${portfolioValue.toLocaleString()}` : '—', sub:'active contracts', color:'var(--navy)' },
-          { label:'Invoiced YTD',    value: invoicedYTD ? `€${invoicedYTD.toLocaleString(undefined,{maximumFractionDigits:0})}` : '—', sub:'from invoices', color:'var(--green)' },
-          { label:'Costs YTD',       value: costsYTD ? `€${costsYTD.toLocaleString(undefined,{maximumFractionDigits:0})}` : '—', sub:'infrastructure costs', color:'var(--red)' },
+          { label:'Portfolio value', value: portfolioValue ? `${portfolioValue.toLocaleString()} €` : '—', sub:'active contracts', color:'var(--navy)' },
+          { label:'Invoiced YTD',    value: invoicedYTD ? `${invoicedYTD.toLocaleString(undefined,{maximumFractionDigits:0})} €` : '—', sub:'from invoices', color:'var(--green)' },
+          { label:'Costs YTD',       value: costsYTD ? `${costsYTD.toLocaleString(undefined,{maximumFractionDigits:0})} €` : '—', sub:'infrastructure costs', color:'var(--red)' },
         ].map(s => (
           <div key={s.label} className="stat-card" style={{'--left-color':s.color} as React.CSSProperties}>
             <div className="stat-card-label">{s.label}</div>
@@ -237,7 +239,7 @@ export function ProjectsView() {
                     <td><span className={`badge ${TYPE_BADGE[p.type] ?? 'badge-gray'}`}>{TYPE_LABEL[p.type] ?? p.type}</span></td>
                     <td className="td-right text-mono" style={{fontWeight:600}}>
                       {p.contract_value
-                        ? `€${p.contract_value.toLocaleString()}${p.type === 'maintenance' || p.type === 'variable' ? '/mo' : ''}`
+                        ? `${p.contract_value.toLocaleString()} €${p.type === 'maintenance' || p.type === 'variable' ? '/mo' : ''}`
                         : <span className="text-muted">—</span>}
                     </td>
                     <td className="text-sm" style={{color:'var(--c2)'}}>{p.pm ?? <span className="text-muted">—</span>}</td>

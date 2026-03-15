@@ -5,6 +5,7 @@ import { useProjectsStore } from '../stores/projects'
 import { useRevenuePlannerStore } from '../stores/revenuePlanner'
 import { useInfraStore } from '../stores/infrastructure'
 import { useDomainsStore } from '../stores/domains'
+import { useMaintenancesStore } from '../stores/maintenances'
 import type { Client } from '../lib/types'
 
 const CURRENT_YEAR = new Date().getFullYear()
@@ -38,6 +39,7 @@ export function ClientsView() {
   const rpStore     = useRevenuePlannerStore()
   const infraStore  = useInfraStore()
   const domainStore = useDomainsStore()
+  const maintStore  = useMaintenancesStore()
   const navigate    = useNavigate()
   const [showAdd, setShowAdd] = useState(false)
   const [name, setName]       = useState('')
@@ -49,6 +51,7 @@ export function ClientsView() {
     rpStore.fetchByMonths(YEAR_MONTHS)
     infraStore.fetchAll()
     domainStore.fetchAll()
+    maintStore.fetchAll()
   }, [])
 
   // invoiced YTD per client — sum actual_amount from revenue_planner (covers projects + hosting rows)
@@ -104,30 +107,52 @@ export function ClientsView() {
               <thead>
                 <tr>
                   <th>Client name</th>
-                  <th className="th-right" style={{width:80}}>Projects</th>
-                  <th style={{width:80}}>Hosting</th>
-                  <th style={{width:80}}>Domains</th>
-                  <th className="th-right">Active value</th>
-                  <th className="th-right">Invoiced YTD</th>
-                  <th style={{width:80}}></th>
+                  <th className="th-right" style={{width:70}}>Projects</th>
+                  <th style={{width:70}}>Hosting</th>
+                  <th style={{width:70}}>Domains</th>
+                  <th style={{width:100}}>Maintenance</th>
+                  <th className="th-right" style={{width:150}}>Active value</th>
+                  <th className="th-right" style={{width:140}}>Invoiced YTD</th>
+                  <th style={{width:80}}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {store.loading ? (
-                  <tr><td colSpan={7} style={{textAlign:'center',padding:32,color:'var(--c4)'}}>Loading…</td></tr>
+                  <tr><td colSpan={8} style={{textAlign:'center',padding:32,color:'var(--c4)'}}>Loading…</td></tr>
                 ) : store.clients.map((c: Client) => {
                   const clientProjects = pStore.projects.filter(p => p.client_id === c.id)
                   const activeProjects = clientProjects.filter(p => p.status === 'active')
 
-                  // Fixed / recurring value — sum only projects with a contract_value
-                  const fixedValue = activeProjects.reduce((sum, p) => sum + (p.contract_value ?? 0), 0)
-                  // Variable = any active project has no contract_value set
+                  // Project value: fixed = total, recurring = monthly × 12
+                  const projectValue = activeProjects.reduce((sum, p) => {
+                    if (p.contract_value == null) return sum
+                    return sum + (p.type === 'fixed' ? p.contract_value : p.contract_value * 12)
+                  }, 0)
                   const hasVariable = activeProjects.some(p => p.contract_value == null)
+
+                  // Hosting annual equivalent
+                  const hostingAnnual = infraStore.hostingClients
+                    .filter(h => h.client_id === c.id && h.status === 'active')
+                    .reduce((sum, h) => sum + (h.cycle === 'monthly' ? h.amount * 12 : h.amount), 0)
+
+                  // Domains annual
+                  const domainsAnnual = domainStore.domains
+                    .filter(d => d.client_id === c.id && !d.archived)
+                    .reduce((sum, d) => sum + (d.yearly_amount ?? 0), 0)
+
+                  // Maintenance retainers annual
+                  const maintAnnual = maintStore.maintenances
+                    .filter(m => m.client_id === c.id && m.status === 'active')
+                    .reduce((sum, m) => sum + m.monthly_retainer * 12, 0)
+
+                  const fixedValue = projectValue + hostingAnnual + domainsAnnual + maintAnnual
 
                   // Hosting: any active hosting entry for this client
                   const hasHosting = infraStore.hostingClients.some(h => h.client_id === c.id && h.status === 'active')
                   // Domains: any domain entry for this client
                   const hasDomains = domainStore.domains.some(d => d.client_id === c.id)
+                  // Maintenance: any active maintenance contract for this client
+                  const hasMaintenance = maintStore.maintenances.some(m => m.client_id === c.id && m.status === 'active')
 
                   return (
                     <tr key={c.id}>
@@ -141,11 +166,12 @@ export function ClientsView() {
 
                       <td><YesNo yes={hasHosting} /></td>
                       <td><YesNo yes={hasDomains} /></td>
+                      <td><YesNo yes={hasMaintenance} /></td>
 
                       <td className="td-right">
                         {fixedValue > 0 || hasVariable ? (
                           <span className="text-mono" style={{fontWeight:600}}>
-                            {fixedValue > 0 && `€${fixedValue.toLocaleString()}`}
+                            {fixedValue > 0 && `${fixedValue.toLocaleString()} €`}
                             {fixedValue > 0 && hasVariable && ' '}
                             {hasVariable && (
                               <span style={{fontSize:11,color:'var(--c4)',fontWeight:500,fontFamily:'inherit'}}>
@@ -162,12 +188,12 @@ export function ClientsView() {
                         {(() => {
                           const inv = invoicedByClient.get(c.id)
                           return inv
-                            ? <span className="text-mono" style={{fontWeight:600,color:'var(--green)'}}>€{inv.toLocaleString()}</span>
+                            ? <span className="text-mono" style={{fontWeight:600,color:'var(--green)'}}>{inv.toLocaleString()} €</span>
                             : <span className="text-muted">—</span>
                         })()}
                       </td>
 
-                      <td><button className="btn btn-secondary btn-xs" onClick={() => navigate(`/clients/${c.id}`)}>View</button></td>
+                      <td><button className="btn btn-secondary btn-xs" onClick={() => navigate(`/clients/${c.id}`)}>View →</button></td>
                     </tr>
                   )
                 })}

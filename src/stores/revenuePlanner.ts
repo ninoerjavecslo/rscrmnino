@@ -23,7 +23,7 @@ export const useRevenuePlannerStore = create<RevenuePlannerState>((set, get) => 
     try {
       const { data, error } = await supabase
         .from('revenue_planner')
-        .select('*, project:projects(id, pn, name, type, client_id)')
+        .select('*, project:projects(id, pn, name, type, client_id), maintenance:maintenances(id, name, client:clients(id, name)), hosting:hosting_clients(id, description, client:clients(id, name)), domain:domains(id, domain_name, client:clients(id, name))')
         .in('month', months)
       if (error) throw error
       set({ rows: (data ?? []) as RevenuePlanner[] })

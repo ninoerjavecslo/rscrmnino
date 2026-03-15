@@ -107,7 +107,7 @@ export function DashboardView() {
         >
           <div className="stat-card-label">Hosting MRR</div>
           <div className="stat-card-value" style={{ fontVariantNumeric: 'tabular-nums' }}>
-            €{hostingMrr.toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}/mo
+            {hostingMrr.toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €/mo
           </div>
           <div className="stat-card-sub">from hosting clients</div>
         </div>
@@ -233,7 +233,7 @@ export function DashboardView() {
                           }}
                         >
                           {row.planned_amount != null
-                            ? `€${row.planned_amount.toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                            ? `${row.planned_amount.toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €`
                             : '—'}
                         </div>
                         <Link to="/this-month" className="btn btn-primary btn-xs">

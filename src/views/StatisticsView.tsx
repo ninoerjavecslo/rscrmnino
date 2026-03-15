@@ -8,7 +8,7 @@ import type { Project } from '../lib/types'
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtEur(n: number): string {
-  return '€' + n.toLocaleString(undefined, { maximumFractionDigits: 0 })
+  return n.toLocaleString(undefined, { maximumFractionDigits: 0 }) + ' €'
 }
 
 function pct(part: number, total: number): string {

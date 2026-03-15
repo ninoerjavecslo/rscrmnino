@@ -9,15 +9,7 @@ import { Select } from '../components/Select'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function fmt(n: number) { return '€' + n.toFixed(2).replace(/\.00$/, '') }
-function fmtDate(d?: string | null) {
-  if (!d) return '—'
-  const [y, m, day] = d.split('-')
-  return `${day}/${m}/${y}`
-}
-function daysUntil(d: string) {
-  return Math.ceil((new Date(d).getTime() - Date.now()) / 86_400_000)
-}
+function fmt(n: number) { return n.toFixed(2).replace(/\.00$/, '') + ' €' }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -43,9 +35,20 @@ function Modal({ open, title, maxWidth = 540, onClose, children, footer }: {
 // ── Add hosting form state ────────────────────────────────────────────────────
 
 function useHostingForm() {
-  const [form, setForm] = useState({ client_id: '', project_pn: '', description: '', cycle: 'monthly' as 'monthly' | 'yearly', amount: '', billing_since: '', next_invoice_date: '', accounting_email: false })
+  const [form, setForm] = useState({
+    client_id: '', project_pn: '', description: '',
+    cycle: 'monthly' as 'monthly' | 'yearly',
+    amount: '', billing_since: '', next_invoice_date: '',
+    invoice_month: '', already_billed: false, contract_id: '',
+  })
   function set(field: string, val: string | boolean) { setForm(f => ({ ...f, [field]: val })) }
-  function reset() { setForm({ client_id: '', project_pn: '', description: '', cycle: 'monthly', amount: '', billing_since: '', next_invoice_date: '', accounting_email: false }) }
+  function reset() {
+    setForm({
+      client_id: '', project_pn: '', description: '',
+      cycle: 'monthly', amount: '', billing_since: '', next_invoice_date: '',
+      invoice_month: '', already_billed: false, contract_id: '',
+    })
+  }
   return { form, set, reset }
 }
 
@@ -58,6 +61,10 @@ function useEditHostingForm() {
   function close() { setForm(null) }
   return { form, open, set, close }
 }
+
+// ── Billing status per hosting client ─────────────────────────────────────────
+
+interface BillingEntry { status: 'billed' | 'planned'; rowId?: string }
 
 // ── Main view ─────────────────────────────────────────────────────────────────
 
@@ -73,7 +80,72 @@ export function InfrastructureView() {
   const [newClientName, setNewClientName] = useState('')
   const [showNewClient, setShowNewClient] = useState(false)
   const [addingClient, setAddingClient] = useState(false)
+
+  const [billingStatus, setBillingStatus] = useState<Map<string, BillingEntry>>(new Map())
+  const [cancelTarget, setCancelTarget] = useState<HostingClient | null>(null)
+  const [cancelFromMonth, setCancelFromMonth] = useState('')
+  const [cancelling, setCancelling] = useState(false)
+
   useEffect(() => { store.fetchAll(); cStore.fetchAll(); pStore.fetchAll() }, [])
+
+  useEffect(() => {
+    if (!store.hostingClients.length) return
+    fetchBillingStatus()
+  }, [store.hostingClients, pStore.projects])
+
+  async function fetchBillingStatus() {
+    const today = new Date()
+    const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
+    const projectMap = new Map(pStore.projects.map(p => [p.pn, p.id]))
+
+    // Rows linked by hosting_client_id (new way)
+    const { data: byId } = await supabase
+      .from('revenue_planner')
+      .select('id, hosting_client_id, status')
+      .not('hosting_client_id', 'is', null)
+      .eq('month', currentMonth)
+
+    // Rows linked by project_id (old way fallback)
+    const hostingProjectIds = store.hostingClients
+      .filter(h => h.status === 'active')
+      .map(h => projectMap.get(h.project_pn))
+      .filter(Boolean) as string[]
+
+    const { data: byProject } = hostingProjectIds.length > 0
+      ? await supabase
+          .from('revenue_planner')
+          .select('id, project_id, status')
+          .in('project_id', hostingProjectIds)
+          .is('hosting_client_id', null)
+          .eq('month', currentMonth)
+      : { data: [] as { id: string; project_id: string | null; status: string }[] }
+
+    const map = new Map<string, BillingEntry>()
+
+    for (const r of byId ?? []) {
+      if (!r.hosting_client_id) continue
+      map.set(r.hosting_client_id, {
+        status: r.status === 'paid' || r.status === 'issued' ? 'billed' : 'planned',
+        rowId: r.id,
+      })
+    }
+
+    // Fallback for old rows linked only via project
+    for (const h of store.hostingClients) {
+      if (map.has(h.id)) continue
+      const projectId = projectMap.get(h.project_pn)
+      if (!projectId) continue
+      const row = (byProject ?? []).find(r => r.project_id === projectId)
+      if (row) {
+        map.set(h.id, {
+          status: row.status === 'paid' || row.status === 'issued' ? 'billed' : 'planned',
+          rowId: row.id,
+        })
+      }
+    }
+
+    setBillingStatus(map)
+  }
 
   async function handleQuickAddClient() {
     if (!newClientName.trim()) return
@@ -98,51 +170,69 @@ export function InfrastructureView() {
 
   const totalRevenue = store.monthlyRevenueEquiv()
   const yearlyDueSoon = store.yearlyDueSoon()
+  const cancelledMonthly = store.hostingClients
+    .filter(h => h.status === 'cancelled')
+    .reduce((s, h) => s + (h.cycle === 'monthly' ? h.amount : h.amount / 12), 0)
 
   async function handleAddHosting() {
     if (!hosting.form.client_id || !hosting.form.project_pn || !hosting.form.amount) return
     setSaving(true)
     try {
-      await store.addHostingClient({
-        client_id:         hosting.form.client_id,
-        project_pn:        hosting.form.project_pn,
-        description:       hosting.form.description || null,
-        cycle:             hosting.form.cycle,
-        amount:            parseFloat(hosting.form.amount),
-        billing_since:     hosting.form.billing_since || null,
-        next_invoice_date: hosting.form.cycle === 'yearly' ? (hosting.form.next_invoice_date || null) : null,
-        status:            'active',
-        accounting_email:  hosting.form.accounting_email,
-        notes:             null,
-      })
+      const { data: newHost, error: insertError } = await supabase
+        .from('hosting_clients')
+        .insert({
+          client_id:         hosting.form.client_id,
+          project_pn:        hosting.form.project_pn,
+          description:       hosting.form.description || null,
+          cycle:             hosting.form.cycle,
+          amount:            parseFloat(hosting.form.amount),
+          billing_since:     hosting.form.billing_since || null,
+          next_invoice_date: hosting.form.cycle === 'yearly' ? (hosting.form.next_invoice_date || null) : null,
+          status:            'active',
+          accounting_email:  false,
+          notes:             null,
+          contract_id:       hosting.form.contract_id || null,
+        })
+        .select('id')
+        .single()
+      if (insertError) throw insertError
+      await store.fetchAll()
 
-      const project = pStore.projects.find(p => p.pn === hosting.form.project_pn)
-      if (project && hosting.form.billing_since) {
-        const amount = parseFloat(hosting.form.amount)
-        const desc = hosting.form.description || `Hosting — ${hosting.form.project_pn}`
+      const hostingClientId = newHost.id
+      const amount = parseFloat(hosting.form.amount)
+      const desc = hosting.form.description || `Hosting — ${hosting.form.project_pn}`
+      const invoiceMonth = hosting.form.cycle === 'yearly'
+        ? (hosting.form.next_invoice_date?.slice(0, 7) || hosting.form.billing_since?.slice(0, 7) || '')
+        : (hosting.form.invoice_month || hosting.form.billing_since?.slice(0, 7) || '')
+      const alreadyBilled = hosting.form.already_billed
+
+      if (invoiceMonth) {
         if (hosting.form.cycle === 'monthly') {
-          const [y, m] = hosting.form.billing_since.slice(0, 7).split('-').map(Number)
+          const [y, m] = invoiceMonth.split('-').map(Number)
           const rows = Array.from({ length: 12 }, (_, i) => {
             const d = new Date(y, m - 1 + i, 1)
+            const monthStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
             return {
-              project_id:     project.id,
-              month:          `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`,
+              hosting_client_id: hostingClientId,
+              month:          monthStr,
               planned_amount: amount,
-              actual_amount:  null,
-              status:         'planned',
+              actual_amount:  alreadyBilled && i === 0 ? amount : null,
+              status:         alreadyBilled && i === 0 ? 'issued' : 'planned',
               notes:          desc,
+              probability:    100,
             }
           })
           await supabase.from('revenue_planner').insert(rows)
         } else {
-          const invoiceMonth = hosting.form.next_invoice_date || hosting.form.billing_since
+          const monthVal = hosting.form.next_invoice_date || hosting.form.billing_since || (invoiceMonth + '-01')
           await supabase.from('revenue_planner').insert({
-            project_id:     project.id,
-            month:          invoiceMonth,
+            hosting_client_id: hostingClientId,
+            month:          monthVal.length === 7 ? monthVal + '-01' : monthVal,
             planned_amount: amount,
-            actual_amount:  null,
-            status:         'planned',
+            actual_amount:  alreadyBilled ? amount : null,
+            status:         alreadyBilled ? 'issued' : 'planned',
             notes:          desc,
+            probability:    100,
           })
         }
       }
@@ -154,6 +244,29 @@ export function InfrastructureView() {
       toast('error', (err as Error).message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleCancelHosting() {
+    if (!cancelTarget || !cancelFromMonth) return
+    setCancelling(true)
+    try {
+      const fromDate = cancelFromMonth + '-01'
+      // Only delete rows explicitly linked to this hosting client
+      await supabase
+        .from('revenue_planner')
+        .delete()
+        .eq('hosting_client_id', cancelTarget.id)
+        .eq('status', 'planned')
+        .gte('month', fromDate)
+      await store.updateHostingClient(cancelTarget.id, { status: 'cancelled', cancelled_from: cancelFromMonth + '-01' })
+      toast('success', `Hosting cancelled from ${cancelFromMonth}. Past invoices preserved.`)
+      setCancelTarget(null)
+      setCancelFromMonth('')
+    } catch (err) {
+      toast('error', (err as Error).message)
+    } finally {
+      setCancelling(false)
     }
   }
 
@@ -172,6 +285,7 @@ export function InfrastructureView() {
         next_invoice_date: h.cycle === 'yearly' ? h.next_invoice_date : null,
         status:            h.status,
         accounting_email:  h.accounting_email,
+        contract_id:       h.contract_id || null,
       })
       toast('success', 'Hosting client updated')
       editHosting.close()
@@ -198,16 +312,23 @@ export function InfrastructureView() {
         </div>
       )}
 
-      <div className="stats-strip" style={{ gridTemplateColumns: 'repeat(2,1fr)' }}>
+      <div className="stats-strip" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
         <div className="stat-card" style={{ '--left-color': 'var(--green)' } as React.CSSProperties}>
           <div className="stat-card-label">MONTHLY REVENUE</div>
-          <div className="stat-card-value" style={{ color: 'var(--green)' }}>€{totalRevenue.toFixed(0)}</div>
-          <div className="stat-card-sub">from hosting clients</div>
+          <div className="stat-card-value" style={{ color: 'var(--green)' }}>{totalRevenue.toFixed(0)} €</div>
+          <div className="stat-card-sub">from active clients</div>
         </div>
         <div className="stat-card" style={{ '--left-color': 'var(--amber)' } as React.CSSProperties}>
           <div className="stat-card-label">YEARLY RENEWING SOON</div>
           <div className="stat-card-value" style={{ color: yearlyDueSoon.length > 0 ? 'var(--amber)' : undefined }}>{yearlyDueSoon.length}</div>
           <div className="stat-card-sub">within 60 days</div>
+        </div>
+        <div className="stat-card" style={{ '--left-color': cancelledMonthly > 0 ? 'var(--red)' : 'var(--c5)' } as React.CSSProperties}>
+          <div className="stat-card-label">LOST REVENUE</div>
+          <div className="stat-card-value" style={{ color: cancelledMonthly > 0 ? 'var(--red)' : 'var(--c4)' }}>
+            {cancelledMonthly > 0 ? `${cancelledMonthly.toFixed(0)} €` : '—'}
+          </div>
+          <div className="stat-card-sub">cancelled clients /mo</div>
         </div>
       </div>
 
@@ -240,42 +361,89 @@ export function InfrastructureView() {
             <table>
               <thead>
                 <tr>
-                  <th>Client</th><th>Project #</th><th>Description</th><th>Cycle</th>
-                  <th className="th-right">Amount</th><th>Billing since</th><th>Next invoice</th>
-                  <th>Status</th><th style={{width:60}}></th>
+                  <th>Client</th>
+                  <th>Project #</th>
+                  <th>Contract ID</th>
+                  <th>Description</th>
+                  <th>Type</th>
+                  <th className="th-right">Amount</th>
+                  <th>Occurrence</th>
+                  <th className="th-right">Total / yr</th>
+                  <th>Billing status</th>
+                  <th>Status</th>
+                  <th style={{width:110}}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {store.hostingClients.map((h: HostingClient) => (
-                  <tr key={h.id}>
-                    <td className="table-link" style={{fontWeight:700}}>
-                      {h.client?.name ?? h.client_id}
-                      {h.accounting_email && !h.maintenance_id && <span className="badge badge-amber" style={{marginLeft:6,fontSize:10}}>ACCT</span>}
-                    </td>
-                    <td><span className="badge badge-gray">{h.project_pn}</span></td>
-                    <td className="text-sm">{h.description ?? '—'}</td>
-                    <td><span className={`badge badge-${h.cycle === 'monthly' ? 'green' : 'amber'}`}>{h.cycle === 'monthly' ? 'Monthly' : 'Yearly'}</span></td>
-                    <td className="td-right text-mono" style={{fontWeight:700,color:'var(--green)'}}>
-                      {fmt(h.amount)}<span className="text-xs">/{h.cycle === 'monthly' ? 'mo' : 'yr'}</span>
-                    </td>
-                    <td className="text-xs">{fmtDate(h.billing_since)}</td>
-                    <td>
-                      {h.cycle === 'yearly' && h.next_invoice_date ? (
-                        <span style={{background:'var(--amber-bg)',color:'var(--amber-text)',padding:'3px 8px',borderRadius:100,fontSize:11,fontWeight:700}}>
-                          ⚠ {fmtDate(h.next_invoice_date)} · {daysUntil(h.next_invoice_date)}d
+                {store.hostingClients.map((h: HostingClient) => {
+                  const annualTotal = h.cycle === 'monthly' ? h.amount * 12 : h.amount
+                  const isStandalone = !h.maintenance_id
+                  const entry = h.status === 'active' ? billingStatus.get(h.id) : undefined
+                  return (
+                    <tr key={h.id}>
+                      <td style={{fontWeight:700}}>{h.client?.name ?? h.client_id}</td>
+                      <td><span className="badge badge-gray">{h.project_pn}</span></td>
+                      <td className="text-sm" style={{color:'var(--c3)'}}>{h.contract_id ?? '—'}</td>
+                      <td className="text-sm">{h.description ?? '—'}</td>
+                      <td style={{fontSize:12, fontWeight:600, color: isStandalone ? 'var(--c1)' : 'var(--blue)'}}>
+                        {isStandalone ? 'Standalone' : 'In contract'}
+                      </td>
+                      <td className="td-right text-mono" style={{fontWeight:700,color:'var(--green)'}}>
+                        {fmt(h.amount)}<span className="text-xs">/{h.cycle === 'monthly' ? 'mo' : 'yr'}</span>
+                      </td>
+                      <td>
+                        <span className={`badge badge-${h.cycle === 'monthly' ? 'green' : 'amber'}`}>
+                          {h.cycle === 'monthly' ? 'Monthly' : 'Yearly'}
                         </span>
-                      ) : <span className="text-xs">—</span>}
-                    </td>
-                    <td><span className={`badge badge-${h.status === 'active' ? 'green' : 'gray'}`}>{h.status}</span></td>
-                    <td><button className="btn btn-secondary btn-xs" onClick={() => editHosting.open(h)}>Edit</button></td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="td-right text-mono" style={{color:'var(--c2)'}}>
+                        {annualTotal.toFixed(0)} €
+                      </td>
+                      <td>
+                        {!isStandalone ? (
+                          <span style={{fontSize:12,color:'var(--c3)'}}>Via contract</span>
+                        ) : h.status !== 'active' ? (
+                          <span style={{color:'var(--c4)',fontSize:12}}>—</span>
+                        ) : entry?.status === 'billed' ? (
+                          <span className="badge badge-green">Billed</span>
+                        ) : entry?.status === 'planned' ? (
+                          <span className="badge badge-amber">Planned</span>
+                        ) : (
+                          <span className="badge badge-gray">Not planned</span>
+                        )}
+                      </td>
+                      <td>
+                        {h.status === 'cancelled' && h.cancelled_from ? (
+                          <div>
+                            <span className="badge badge-gray">Cancelled</span>
+                            <div style={{fontSize:11,color:'var(--c3)',marginTop:2}}>
+                              from {new Date(h.cancelled_from + 'T00:00:00').toLocaleString('en', {month:'short',year:'numeric'})}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className={`badge badge-${h.status === 'active' ? 'green' : 'gray'}`}>{h.status}</span>
+                        )}
+                      </td>
+                      <td>
+                        <div style={{display:'flex',gap:4}}>
+                          <button className="btn btn-secondary btn-xs" onClick={() => editHosting.open(h)}>Edit</button>
+                          {h.status === 'active' && (
+                            <button className="btn btn-xs" style={{background:'var(--red)',color:'#fff',border:'none'}}
+                              onClick={() => { setCancelTarget(h); setCancelFromMonth('') }}>
+                              Cancel
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
               <tfoot>
                 <tr>
-                  <td colSpan={4} style={{textAlign:'right',fontSize:10,fontWeight:700,color:'var(--c3)',textTransform:'uppercase',letterSpacing:'0.6px'}}>Monthly revenue</td>
-                  <td className="td-right text-mono" style={{fontSize:17,fontWeight:800,color:'var(--green)'}}>€{totalRevenue.toFixed(0)}<span className="text-xs">/mo</span></td>
-                  <td colSpan={4}></td>
+                  <td colSpan={9}></td>
+                  <td style={{textAlign:'right',fontSize:10,fontWeight:700,color:'var(--c3)',textTransform:'uppercase',letterSpacing:'0.6px',whiteSpace:'nowrap'}}>Monthly revenue</td>
+                  <td className="td-right text-mono" style={{fontSize:15,fontWeight:800,color:'var(--green)',whiteSpace:'nowrap'}}>{totalRevenue.toFixed(0)} €<span className="text-xs">/mo</span></td>
                 </tr>
               </tfoot>
             </table>
@@ -289,7 +457,7 @@ export function InfrastructureView() {
       </div>
 
       {/* Add Hosting Client modal */}
-      <Modal open={showAddHosting} title="Add Hosting Client" onClose={() => setShowAddHosting(false)}
+      <Modal open={showAddHosting} title="Add Hosting Client" maxWidth={580} onClose={() => setShowAddHosting(false)}
         footer={<>
           <button className="btn btn-secondary btn-sm" onClick={() => setShowAddHosting(false)}>Cancel</button>
           <button className="btn btn-primary btn-sm" onClick={handleAddHosting} disabled={saving}>{saving ? <span className="spinner"/> : null} Add client</button>
@@ -353,10 +521,11 @@ export function InfrastructureView() {
           </div>
           <div className="form-group"><label className="form-label">Amount (€)</label><input type="number" placeholder="120" value={hosting.form.amount} onChange={e => hosting.set('amount', e.target.value)} /></div>
         </div>
-        <div className="form-row">
+        <div className="form-row" style={{marginBottom:16}}>
           <div className="form-group"><label className="form-label">Billing since</label><input type="month" value={hosting.form.billing_since?.slice(0,7) ?? ''} onChange={e => {
             const val = e.target.value
             hosting.set('billing_since', val ? val + '-01' : '')
+            if (!hosting.form.invoice_month) hosting.set('invoice_month', val)
             if (hosting.form.cycle === 'yearly' && val) {
               hosting.set('next_invoice_date', val + '-01')
             }
@@ -368,16 +537,73 @@ export function InfrastructureView() {
             </div>
           )}
         </div>
-        {!hosting.form.client_id || true ? (
-          <div style={{marginTop:14,paddingTop:14,borderTop:'1px solid var(--c6)'}}>
-            <label className="toggle-label">
-              <input type="checkbox" checked={hosting.form.accounting_email} onChange={e => hosting.set('accounting_email', e.target.checked)} />
-              <span className="toggle-track"/>
-              <span style={{fontSize:14,fontWeight:600,color:'var(--c1)'}}>Send to accounting</span>
-              <span className="text-xs" style={{color:'var(--c4)'}}>invoice via email to accounting dept</span>
-            </label>
+
+        {/* Contract ID */}
+        <div className="form-group" style={{marginBottom:14}}>
+          <label className="form-label">Contract / Order ID <span className="form-hint" style={{display:'inline',marginLeft:4}}>optional</span></label>
+          <input placeholder="e.g. PO-2026-042" value={hosting.form.contract_id ?? ''} onChange={e => hosting.set('contract_id', e.target.value)} />
+        </div>
+
+        {/* Invoice planning */}
+        <div style={{borderTop:'1px solid var(--c6)',paddingTop:14}}>
+          <div style={{fontSize:12,fontWeight:700,color:'var(--c3)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:10}}>Invoice planning</div>
+          {hosting.form.cycle === 'monthly' && (
+            <div className="form-row" style={{marginBottom:8}}>
+              <div className="form-group">
+                <label className="form-label">Start from month</label>
+                <input type="month"
+                  value={hosting.form.invoice_month}
+                  onChange={e => hosting.set('invoice_month', e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+          <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:13}}>
+            <input type="checkbox" checked={hosting.form.already_billed} onChange={e => hosting.set('already_billed', e.target.checked)} />
+            Already billed{hosting.form.cycle === 'monthly' ? ' for this month' : ' (mark as issued)'}
+          </label>
+          {(hosting.form.cycle === 'monthly' ? hosting.form.invoice_month : hosting.form.next_invoice_date) && (
+            <div className="form-hint" style={{marginTop:6}}>
+              {hosting.form.cycle === 'monthly'
+                ? `Will create 12 monthly rows from ${hosting.form.invoice_month}${hosting.form.already_billed ? ' (first marked as issued)' : ''}`
+                : `Will create 1 invoice row for ${hosting.form.next_invoice_date?.slice(0,7)}${hosting.form.already_billed ? ' (marked as issued)' : ''}`
+              }
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* Cancel Hosting modal */}
+      <Modal
+        open={!!cancelTarget}
+        title="Cancel Hosting"
+        maxWidth={420}
+        onClose={() => { setCancelTarget(null); setCancelFromMonth('') }}
+        footer={<>
+          <button className="btn btn-secondary btn-sm" onClick={() => { setCancelTarget(null); setCancelFromMonth('') }}>Back</button>
+          <button className="btn btn-sm" style={{background:'var(--red)',color:'#fff',border:'none'}} onClick={handleCancelHosting} disabled={!cancelFromMonth || cancelling}>
+            {cancelling ? '…' : 'Confirm cancellation'}
+          </button>
+        </>}
+      >
+        {cancelTarget && (
+          <div>
+            <p style={{margin:'0 0 16px',fontSize:14,color:'var(--c2)'}}>
+              Cancelling <strong>{cancelTarget.client?.name}</strong> — {cancelTarget.description || cancelTarget.project_pn} ({fmt(cancelTarget.amount)}/{cancelTarget.cycle === 'monthly' ? 'mo' : 'yr'})
+            </p>
+            <div className="form-group" style={{marginBottom:12}}>
+              <label className="form-label">Cancel from month</label>
+              <input type="month" value={cancelFromMonth} onChange={e => setCancelFromMonth(e.target.value)} autoFocus />
+              <div className="form-hint">All planned invoice rows from this month onwards will be removed. Past billed rows are preserved. E.g. if you cancel from June, March–May rows stay in the invoice planner.</div>
+            </div>
+            {cancelFromMonth && (
+              <div className="alert alert-red" style={{fontSize:13}}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span>This will remove planned rows from <strong>{cancelFromMonth}</strong> onwards and mark this client as cancelled.</span>
+              </div>
+            )}
           </div>
-        ) : null}
+        )}
       </Modal>
 
       {/* Edit Hosting Client modal */}
@@ -441,28 +667,24 @@ export function InfrastructureView() {
                 </div>
               )}
             </div>
-            <div className="form-group">
-              <label className="form-label">Status</label>
-              <Select
-                value={editHosting.form.status}
-                onChange={val => editHosting.set('status', val)}
-                options={[
-                  { value: 'active', label: 'Active' },
-                  { value: 'paused', label: 'Paused' },
-                  { value: 'cancelled', label: 'Cancelled' },
-                ]}
-              />
-            </div>
-            {!editHosting.form.maintenance_id && (
-              <div style={{paddingTop:14,borderTop:'1px solid var(--c6)'}}>
-                <label className="toggle-label">
-                  <input type="checkbox" checked={!!editHosting.form.accounting_email} onChange={e => editHosting.set('accounting_email', e.target.checked)} />
-                  <span className="toggle-track"/>
-                  <span style={{fontSize:14,fontWeight:600,color:'var(--c1)'}}>Send to accounting</span>
-                  <span className="text-xs" style={{color:'var(--c4)'}}>invoice via email to accounting dept</span>
-                </label>
+            <div className="form-row" style={{marginBottom:14}}>
+              <div className="form-group">
+                <label className="form-label">Contract / Order ID <span className="form-hint" style={{display:'inline',marginLeft:4}}>optional</span></label>
+                <input placeholder="e.g. PO-2026-042" value={editHosting.form.contract_id ?? ''} onChange={e => editHosting.set('contract_id', e.target.value)} />
               </div>
-            )}
+              <div className="form-group">
+                <label className="form-label">Status</label>
+                <Select
+                  value={editHosting.form.status}
+                  onChange={val => editHosting.set('status', val)}
+                  options={[
+                    { value: 'active', label: 'Active' },
+                    { value: 'paused', label: 'Paused' },
+                    { value: 'cancelled', label: 'Cancelled' },
+                  ]}
+                />
+              </div>
+            </div>
           </>
         )}
       </Modal>

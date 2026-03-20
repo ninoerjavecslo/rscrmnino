@@ -715,7 +715,7 @@ export function MyWeekView() {
           }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--amber)', marginBottom: 4 }}>⚠ Team overload</div>
             <div style={{ fontSize: 11, color: 'var(--c2)' }}>
-              {teamOverloaded.map(tm => tm.name).join(', ')} {teamOverloaded.length === 1 ? 'is' : 'are'} at ≥95% capacity this week.
+              {teamOverloaded.map(tm => tm.name).join(', ')} {teamOverloaded.length === 1 ? 'is' : 'are'} at ≥90% capacity this week.
             </div>
           </div>
         )}
@@ -867,21 +867,7 @@ export function MyWeekView() {
               {/* Hours */}
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c2)', marginBottom: 6 }}>Hours</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {[0.5, 1, 1.5, 2, 3, 4, 5, 6, 7, 8].map(h => (
-                    <button
-                      key={h}
-                      onClick={() => setUnplannedHours(h)}
-                      style={{
-                        padding: '5px 12px', borderRadius: 100, fontSize: 12, fontWeight: 700,
-                        border: `1.5px solid ${unplannedHours === h ? 'var(--navy-muted)' : 'var(--c6)'}`,
-                        background: unplannedHours === h ? 'var(--navy-light)' : 'var(--c7)',
-                        color: unplannedHours === h ? 'var(--navy)' : 'var(--c2)',
-                        cursor: 'pointer', fontFamily: 'inherit',
-                      }}
-                    >{h}h</button>
-                  ))}
-                </div>
+                <HourChips planned={2} actual={unplannedHours} onChange={setUnplannedHours} />
               </div>
 
               {/* Note */}

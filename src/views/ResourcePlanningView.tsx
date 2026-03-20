@@ -338,9 +338,6 @@ export function ResourcePlanningView() {
 
   const handleAssign = async () => {
     if (!assignFor) return
-    const member = members.find(m => m.id === assignFor)
-    const cap = member?.hours_per_day ?? 8
-
     try {
       const allRows: Array<{ member_id: string; project_id?: string | null; category: AllocationCategory; date: string; hours: number; label?: string | null; notes?: string | null; recurring_group_id?: string | null }> = []
 
@@ -364,15 +361,9 @@ export function ResourcePlanningView() {
           if (entry.mode === 'day') {
             entry.dayHours.forEach((h, i) => { if (h > 0) allRows.push({ ...base, date: wkDays[i], hours: h }) })
           } else {
-            let rem = entry.totalHours
-            for (let i = 0; i < 5 && rem > 0; i++) {
-              const used = w === 0 ? mDayTotal(assignFor, wkDays[i]) : 0
-              const avail = Math.max(0, cap - used)
-              if (avail <= 0) continue
-              const a = Math.min(avail, rem)
-              allRows.push({ ...base, date: wkDays[i], hours: a })
-              rem -= a
-            }
+            const wkStart = shiftWeek(weekStart, w)
+            const daySlots = distributeWeekly(wkStart, assignFor, entry.totalHours, allActive, allocations)
+            daySlots.forEach(({ date, hours }) => { allRows.push({ ...base, date, hours }) })
           }
         }
       }
@@ -1640,7 +1631,12 @@ export function ResourcePlanningView() {
                     )
                   })}
                   {(() => {
-                    const totalBudget = [...wizardSelectedProjects].reduce((s, pid) => s + (wizardBudgets[pid] ?? 40), 0)
+                    const totalBudget = [...wizardSelectedProjects].reduce((s, pid) => {
+                      if (wizardBudgets[pid] !== undefined) return s + wizardBudgets[pid]
+                      const delivHours = deliverables.filter(d => d.project_id === pid && d.status === 'active')
+                        .reduce((dh, d) => dh + (d.estimated_hours ?? 0), 0)
+                      return s + (delivHours > 0 ? delivHours : 40)
+                    }, 0)
                     const allMemberIds = new Set([...wizardSelectedProjects].flatMap(pid => wizardProjectMembers[pid] ?? []))
                     const weekCount = 4
                     const totalCap = [...allMemberIds].reduce((s, mid) => {

@@ -37,7 +37,10 @@ export function useTemplates(): UseTemplatesReturn {
       .from('allocation_templates')
       .select('*')
       .order('created_at', { ascending: false })
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) {
+          toast('error', 'Failed to load templates')
+        }
         setTemplates((data ?? []) as AllocationTemplate[])
         setLoading(false)
       })

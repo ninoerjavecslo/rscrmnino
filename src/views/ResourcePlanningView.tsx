@@ -147,9 +147,7 @@ export function ResourcePlanningView() {
   const [showTemplatesDropdown, setShowTemplatesDropdown] = useState(false)
   const [showSaveTemplate, setShowSaveTemplate] = useState(false)
   const [saveTemplateName, setSaveTemplateName] = useState('')
-  const [lastWeekDismissed, setLastWeekDismissed] = useState(
-    () => sessionStorage.getItem('rp_lastweek_dismissed_' + getMonday(new Date())) === '1'
-  )
+  const [lastWeekDismissed, setLastWeekDismissed] = useState(false)
   const [lastWeekAllocations, setLastWeekAllocations] = useState<ResourceAllocation[]>([])
 
   // smart plan modal

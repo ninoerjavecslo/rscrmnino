@@ -38,7 +38,7 @@ export function distributeWeekly(
   let remaining = weeklyHours
   for (const { date, avail: cap } of avail) {
     if (remaining <= 0) break
-    const h = Math.min(Math.round(Math.min(perDay, cap) * 2) / 2, remaining)
+    const h = Math.min(Math.round(Math.min(perDay, cap) * 2) / 2, Math.round(remaining * 2) / 2)
     if (h > 0) { result.push({ date, hours: h }); remaining -= h }
   }
   return result

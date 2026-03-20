@@ -34,7 +34,11 @@ interface DayAdvisorResponse {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', {
-      headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*' }
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      }
     })
   }
 
@@ -50,7 +54,7 @@ Deno.serve(async (req) => {
     const deltaLines = today_tasks
       .filter(t => t.actual_hours !== null && t.actual_hours !== t.planned_hours)
       .map(t => {
-        const diff = (t.actual_hours ?? 0) - t.planned_hours
+        const diff = parseFloat(((t.actual_hours ?? 0) - t.planned_hours).toFixed(1))
         const sign = diff > 0 ? '+' : ''
         return `- ${t.project_name || t.category}: planned ${t.planned_hours}h, actual ${t.actual_hours}h (${sign}${diff}h)${t.note ? ` — "${t.note}"` : ''}`
       })
@@ -107,9 +111,13 @@ Return ONLY valid JSON:
 
     const text = response.content[0].type === 'text' ? response.content[0].text : '{}'
     const clean = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
-    const parsed: DayAdvisorResponse = JSON.parse(clean)
+    const parsed = JSON.parse(clean)
+    const result: DayAdvisorResponse = {
+      reschedule_options: Array.isArray(parsed.reschedule_options) ? parsed.reschedule_options : [],
+      insights: Array.isArray(parsed.insights) ? parsed.insights : [],
+    }
 
-    return new Response(JSON.stringify(parsed), {
+    return new Response(JSON.stringify(result), {
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
     })
   } catch (err) {

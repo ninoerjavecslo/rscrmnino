@@ -6,9 +6,6 @@ import { toast } from '../lib/toast'
 import type { AllocationCategory, Project } from '../lib/types'
 import { analyzeMemberBuffer } from '../lib/bufferAnalysis'
 import type { MemberBufferStats } from '../lib/bufferAnalysis'
-import { AdvisorPanel } from '../components/AdvisorPanel'
-import { generateAdvisories } from '../lib/planningAdvisor'
-import type { Advisory } from '../lib/planningAdvisor'
 import { distributeWeekly } from '../lib/distributeWeekly'
 
 /* ── helpers ──────────────────────────────────────────────────── */
@@ -122,11 +119,6 @@ export function ResourcePlanningView() {
   const [search, setSearch] = useState('')
   const [filterTeam, setFilterTeam] = useState('')
 
-  // advisor
-  const [advisories, setAdvisories] = useState<Advisory[]>([])
-  const [aiSummary, setAiSummary] = useState<string | undefined>(undefined)
-  const [advisorLoading, setAdvisorLoading] = useState(false)
-
   // assign modal
   const [assignFor, setAssignFor] = useState<string | null>(null)
   const [assignEntries, setAssignEntries] = useState<AssignEntry[]>([])
@@ -163,42 +155,8 @@ export function ResourcePlanningView() {
     return true
   })
 
-  async function fetchAIAdvisories() {
-    setAdvisorLoading(true)
-    try {
-      const EDGE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/planning-advisor`
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-      const res = await fetch(EDGE_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': anonKey,
-          'Authorization': `Bearer ${anonKey}`,
-        },
-        body: JSON.stringify({ allocations, members, deliverables, weekStart, weekEnd }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        if (data.advisories) setAdvisories(data.advisories)
-        if (data.summary) setAiSummary(data.summary)
-      }
-    } catch {
-      // silently fall back to rule-based advisories
-    } finally {
-      setAdvisorLoading(false)
-    }
-  }
-
   useEffect(() => { fetchMembers(); fetchProjects(); fetchTeams(); fetchDeliverables() }, [])
   useEffect(() => { fetchAllocations(weekStart, weekEnd) }, [weekStart])
-  useEffect(() => {
-    setAdvisories(generateAdvisories(allocations, members, deliverables, weekStart, weekEnd))
-  }, [allocations, members, deliverables, weekStart, weekEnd])
-  useEffect(() => {
-    if (allocations.length > 0 || members.length > 0) {
-      fetchAIAdvisories()
-    }
-  }, [weekStart])
   useEffect(() => {
     if (!assignFor) return
     analyzeMemberBuffer(assignFor).then(stats => {
@@ -459,13 +417,6 @@ export function ResourcePlanningView() {
       </div>
 
       <div className="page-content">
-        <AdvisorPanel
-          advisories={advisories}
-          summary={aiSummary}
-          loading={advisorLoading}
-          onRefresh={fetchAIAdvisories}
-        />
-
         {/* ── Week nav ─── */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
           <button className="btn btn-secondary" onClick={() => setWeekStart(shiftWeek(weekStart, -1))} style={{ height: 42, padding: '0 18px', fontSize: 14 }}>&larr; Prev</button>

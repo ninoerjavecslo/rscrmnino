@@ -63,21 +63,20 @@ function ExpiryBadge({ expiryDate }: { expiryDate: string }) {
 
 // ── Domain row input (in add modal) ──────────────────────────────────────────
 
-interface DomainRow { domain_name: string; registered_date: string; expiry_date: string; yearly_amount: string }
+interface DomainRow { domain_name: string; expiry_date: string; yearly_amount: string }
 
 function DomainRowInputs({ rows, onChange }: { rows: DomainRow[]; onChange: (r: DomainRow[]) => void }) {
   function update<K extends keyof DomainRow>(i: number, f: K, v: DomainRow[K]) {
     onChange(rows.map((r, idx) => idx === i ? { ...r, [f]: v } : r))
   }
-  function add()     { onChange([...rows, { domain_name: '', registered_date: '', expiry_date: '', yearly_amount: '' }]) }
+  function add()     { onChange([...rows, { domain_name: '', expiry_date: '', yearly_amount: '' }]) }
   function remove(i: number) { onChange(rows.filter((_, idx) => idx !== i)) }
 
-  const cols = '2fr 140px 140px 90px 32px'
+  const cols = '2fr 140px 90px 32px'
   return (
     <div>
       <div style={{display:'grid',gridTemplateColumns:cols,gap:'4px 10px',marginBottom:6,paddingBottom:4,borderBottom:'1px solid var(--c6)'}}>
         <span className="form-label" style={{margin:0}}>Domain</span>
-        <span className="form-label" style={{margin:0}}>Purchased</span>
         <span className="form-label" style={{margin:0}}>Expiry date</span>
         <span className="form-label" style={{margin:0}}>€ / year</span>
         <span></span>
@@ -85,7 +84,6 @@ function DomainRowInputs({ rows, onChange }: { rows: DomainRow[]; onChange: (r: 
       {rows.map((row, i) => (
         <div key={i} style={{display:'grid',gridTemplateColumns:cols,gap:'6px 10px',alignItems:'center',marginBottom:8}}>
           <input value={row.domain_name} onChange={e => update(i,'domain_name',e.target.value)} placeholder="example.si" style={{height:36}} />
-          <input type="date" lang="en-GB" value={row.registered_date} onChange={e => update(i,'registered_date',e.target.value)} style={{height:36,width:'100%'}} />
           <input type="date" lang="en-GB" value={row.expiry_date} onChange={e => update(i,'expiry_date',e.target.value)} style={{height:36,width:'100%'}} />
           <input type="number" value={row.yearly_amount} onChange={e => update(i,'yearly_amount',e.target.value)} placeholder="25" style={{height:36}} />
           <button onClick={() => remove(i)} disabled={rows.length === 1}
@@ -252,7 +250,7 @@ export function DomainsView() {
   const [showNewClient, setShowNewClient]     = useState(false)
   const [projectPn, setProjectPn]             = useState('')
   const [contractId, setContractId]           = useState('')
-  const [domainRows, setDomainRows]           = useState<DomainRow[]>([{ domain_name: '', registered_date: '', expiry_date: '', yearly_amount: '' }])
+  const [domainRows, setDomainRows]           = useState<DomainRow[]>([{ domain_name: '', expiry_date: '', yearly_amount: '' }])
   const [domainError, setDomainError]         = useState<string | null>(null)
 
   // Invoice planning (add form)
@@ -415,7 +413,7 @@ export function DomainsView() {
   function resetAddForm() {
     setClientId(''); setProjectPn(''); setContractId('')
     setNewClientName(''); setShowNewClient(false); setIsOwn(false)
-    setDomainRows([{ domain_name: '', registered_date: '', expiry_date: '', yearly_amount: '' }])
+    setDomainRows([{ domain_name: '', expiry_date: '', yearly_amount: '' }])
     setDomainError(null)
     setInvoicePlanMonth('')
     setInvoicePlanStatus(null)
@@ -449,7 +447,6 @@ export function DomainsView() {
 
       const inserted = await store.addDomains(isOwn ? null : (resolvedClientId ?? null), projectPn, valid.map(r => ({
         domain_name:     r.domain_name,
-        registered_date: r.registered_date || undefined,
         expiry_date:     r.expiry_date,
         yearly_amount:   r.yearly_amount ? parseFloat(r.yearly_amount) : undefined,
         contract_id:     contractId || undefined,

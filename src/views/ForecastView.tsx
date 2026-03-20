@@ -620,20 +620,25 @@ export function ForecastView() {
               )}
 
               {/* Grand total (revenue - costs) */}
-              <tr style={{ background: 'var(--navy)', borderTop: '2px solid var(--navy)' }}>
-                <td style={{ ...sectionHeaderStyle, color: '#fff', fontSize: 12 }}>Grand Total</td>
-                {months.map(m => {
-                  const net = (confirmedByMonth.get(m) ?? 0) + (pipelineFaceByMonth.get(m) ?? 0) - (costsByMonth.get(m) ?? 0)
-                  return (
-                    <td key={m} className="td-right text-mono" style={{ fontWeight: 700, color: net < 0 ? '#fca5a5' : '#fff', fontSize: 13 }}>
-                      {net !== 0 ? fmtEuro(net) : '—'}
+              {(() => {
+                const monthlyNets = months.map(m =>
+                  Math.round((confirmedByMonth.get(m) ?? 0) + (pipelineFaceByMonth.get(m) ?? 0) - (costsByMonth.get(m) ?? 0))
+                )
+                const grandTotal = monthlyNets.reduce((s, v) => s + v, 0)
+                return (
+                  <tr style={{ background: 'var(--navy)', borderTop: '2px solid var(--navy)' }}>
+                    <td style={{ ...sectionHeaderStyle, color: '#fff', fontSize: 12 }}>Grand Total</td>
+                    {monthlyNets.map((net, i) => (
+                      <td key={months[i]} className="td-right text-mono" style={{ fontWeight: 700, color: net < 0 ? '#fca5a5' : '#fff', fontSize: 13 }}>
+                        {net !== 0 ? fmtEuro(net) : '—'}
+                      </td>
+                    ))}
+                    <td className="td-right text-mono" style={{ fontWeight: 800, color: grandTotal < 0 ? '#fca5a5' : '#fff', fontSize: 14 }}>
+                      {fmtEuro(grandTotal)}
                     </td>
-                  )
-                })}
-                <td className="td-right text-mono" style={{ fontWeight: 800, color: (totalBestCase - totalCosts) < 0 ? '#fca5a5' : '#fff', fontSize: 14 }}>
-                  {fmtEuro(totalBestCase - totalCosts)}
-                </td>
-              </tr>
+                  </tr>
+                )
+              })()}
 
             </tbody>
           </table>

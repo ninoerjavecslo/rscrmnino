@@ -364,11 +364,16 @@ export function ProjectDetailView() {
   const maintenancePlannedTotal = project?.type === 'maintenance' && regularInvoiceRows.length > 0
     ? regularInvoiceRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0)
     : null
+  const fixedPlannedTotal = project?.type === 'fixed' && regularInvoiceRows.length > 0
+    ? regularInvoiceRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0)
+    : null
   const effectiveBudget = project?.type === 'variable'
     ? variablePlannedTotal
     : project?.type === 'maintenance' && maintenancePlannedTotal != null
       ? maintenancePlannedTotal
-      : contractVal
+      : project?.type === 'fixed' && fixedPlannedTotal != null
+        ? fixedPlannedTotal
+        : contractVal
   // Left to invoice = total value minus what's already been invoiced
   const leftToInvoice = Math.max(0, (effectiveBudget ?? 0) + crApprovedTotal - totalInvoiced)
 
@@ -398,9 +403,17 @@ export function ProjectDetailView() {
         })))
         .select('*, project:projects(id, pn, name, type)')
       if (error) throw error
-      if (data) setRpRows(prev => [...prev, ...(data as RevenuePlanner[])].sort((a, b) => a.month.localeCompare(b.month)))
+      if (data) {
+        setRpRows(prev => [...prev, ...(data as RevenuePlanner[])].sort((a, b) => a.month.localeCompare(b.month)))
+        // Switch to the year of the first saved row so the user sees it
+        const savedYear = parseInt((data as RevenuePlanner[])[0].month.slice(0, 4))
+        if (!isNaN(savedYear)) setPlanYear(savedYear)
+      }
       setShowAddPlan(false)
       setPlanRows([{ month: '', description: defaultPlanDescription(), planned_amount: '', probability: '100' }])
+      toast('success', `${valid.length} invoice plan${valid.length !== 1 ? 's' : ''} added`)
+    } catch (err) {
+      toast('error', (err as Error).message)
     } finally {
       setPlanSaving(false)
     }

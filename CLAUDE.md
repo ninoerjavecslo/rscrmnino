@@ -38,6 +38,13 @@ All stores in `src/stores/`. Pattern: `useXxxStore()`. Key stores:
 - `useDomainsStore` — domain tracking; has `addDomains`, `byClient()`, `critical()`, `warningSoon()`
 - `useRevenuePlannerStore` — monthly invoice planning; has `fetchByMonths`, `upsert`
 - `useToastStore` — toast notifications (use `toast()` helper from `src/lib/toast.ts`)
+- `usePipelineStore` — sales pipeline; has `fetchByClient`, `fetchAll`, `add`, `update`, `remove`
+- `useChangeRequestsStore` — change requests; has `fetchByProject`, `fetchByMaintenance`, `fetchAllApproved`, `fetchAllPending`
+- `useMaintenancesStore` — maintenance contracts CRUD
+- `useResourceStore` — team members + resource plans
+- `useAutomationsStore` — automated email reporting CRUD
+- `useSettingsStore` — agency-wide settings
+- `useRemindersStore` — reminder rules CRUD
 
 ### Toast notifications
 ```ts
@@ -49,9 +56,15 @@ toast('info', 'Info message')
 Always add toast feedback to user-initiated async actions (save, delete, etc.).
 
 ### Types
-Defined in `src/lib/types.ts`. Key interfaces: `Client`, `Project`, `Invoice`, `HostingClient`, `InfrastructureCost`, `Domain`, `RevenuePlanner`, `TimesheetEntry`.
+Defined in `src/lib/types.ts`. Key interfaces: `Client`, `Project`, `Invoice`, `HostingClient`, `InfrastructureCost`, `Domain`, `RevenuePlanner`, `TimesheetEntry`, `PipelineItem`, `ChangeRequest`, `Maintenance`, `TeamMember`, `ResourcePlan`, `Automation`, `ReminderRule`.
 
 `RevenuePlanner.status` values: `'planned' | 'paid' | 'issued' | 'retainer' | 'cost'`
+
+### Change request workflow
+Three-stage status: `pending → approved → confirmed`. Confirmed CRs are excluded from pipeline/forecast views — only pending and approved appear there.
+
+### Project types
+Projects have a `type` field: `'fixed' | 'maintenance' | 'variable'`. Matters for revenue calculations and the SalesView won-deal flow (each type creates a different project structure).
 
 ### Date conventions
 - Dates stored as `YYYY-MM-DD` strings in Supabase
@@ -66,13 +79,20 @@ Defined in `src/lib/types.ts`. Key interfaces: `Client`, `Project`, `Invoice`, `
 - `/` → redirects to `/dashboard`
 - `/dashboard` — DashboardView (entry point)
 - `/this-month` — ThisMonthView (invoice actions for current month)
+- `/automations` — AutomationsView; `/automations/new`, `/automations/:id/edit` — AutomationFormView
 - `/planning` — RevenuePlannerView (multi-month invoice planning)
+- `/forecast` — ForecastView
 - `/clients`, `/clients/:id` — ClientsView, ClientDetailView
 - `/projects`, `/projects/:id` — ProjectsView, ProjectDetailView
+- `/maintenances` — MaintenancesView; `/maintenances/:id` — MaintenanceDetailView
+- `/sales` — SalesView (pipeline + won-deal workflow)
 - `/stats` — StatisticsView
 - `/infrastructure` — InfrastructureView (hosting revenue + provider costs)
 - `/domains` — DomainsView
 - `/tools`, `/tools/timesheet`
+- `/email-tool` — EmailToolView
+- `/settings` — SettingsView
+- `/pixel` — PixelView
 
 ## Build
 ```bash

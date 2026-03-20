@@ -455,7 +455,7 @@ export function ClientDetailView() {
 
   // ── pipeline stats ───────────────────────────────────────────────────────
   const activePipelineItems = pipelineItems.filter(i => i.status !== 'won' && i.status !== 'lost')
-  const pipelineWeighted = activePipelineItems.reduce((s, i) => s + dealTotal(i) * i.probability / 100, 0)
+  const pipelineTotal = activePipelineItems.reduce((s, i) => s + dealTotal(i), 0)
 
   // ── expiry alerts ────────────────────────────────────────────────────────
   const expiringDomains = clientDomains.filter(d => daysUntil(d.expiry_date) <= 30 && daysUntil(d.expiry_date) >= 0)
@@ -1450,7 +1450,7 @@ export function ClientDetailView() {
   }
 
   function renderPipeline() {
-    const totalWeighted = activePipelineItems.reduce((s, i) => s + dealTotal(i) * i.probability / 100, 0)
+    const totalAmount = activePipelineItems.reduce((s, i) => s + dealTotal(i), 0)
     return (
       <div>
         <div className="section-bar" style={{ marginBottom: 10 }}>
@@ -1524,8 +1524,7 @@ export function ClientDetailView() {
                   <tr>
                     <th>MONTH</th>
                     <th>ITEMS</th>
-                    <th className="th-right">TOTAL AMOUNT</th>
-                    <th className="th-right">WEIGHTED</th>
+                    <th className="th-right">AMOUNT</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1538,14 +1537,13 @@ export function ClientDetailView() {
                         {g.items.map(i => i.title).join(', ')}
                       </td>
                       <td className="td-right text-mono" style={{ fontWeight: 600 }}>{fmtEuro(g.total)}</td>
-                      <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)' }}>{fmtEuro(Math.round(g.weighted))}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr style={{ background: 'var(--c7)', borderTop: '2px solid var(--c6)' }}>
-                    <td colSpan={3} style={{ fontWeight: 700, fontSize: 12, color: 'var(--c3)', letterSpacing: '0.05em' }}>TOTAL WEIGHTED PIPELINE</td>
-                    <td className="td-right text-mono" style={{ fontWeight: 800, color: 'var(--navy)', fontSize: 14 }}>{fmtEuro(Math.round(totalWeighted))}</td>
+                    <td colSpan={2} style={{ fontWeight: 700, fontSize: 12, color: 'var(--c3)', letterSpacing: '0.05em' }}>TOTAL PIPELINE</td>
+                    <td className="td-right text-mono" style={{ fontWeight: 800, color: 'var(--navy)', fontSize: 14 }}>{fmtEuro(totalAmount)}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -2022,10 +2020,10 @@ export function ClientDetailView() {
             <div className="stat-card-value" style={{ color: 'var(--green)' }}>{invoicedYTD ? fmtEuro(invoicedYTD) : '—'}</div>
             <div className="stat-card-sub">{CURRENT_YEAR} actual revenue</div>
           </div>
-          <div className="stat-card" style={{ '--left-color': pipelineWeighted > 0 ? 'var(--amber, #d97706)' : 'var(--c5)' } as React.CSSProperties}>
+          <div className="stat-card" style={{ '--left-color': pipelineTotal > 0 ? 'var(--amber, #d97706)' : 'var(--c5)' } as React.CSSProperties}>
             <div className="stat-card-label">PIPELINE</div>
-            <div className="stat-card-value" style={{ color: pipelineWeighted > 0 ? 'var(--amber, #d97706)' : undefined }}>{pipelineWeighted > 0 ? fmtEuro(Math.round(pipelineWeighted)) : '—'}</div>
-            <div className="stat-card-sub">weighted forecast</div>
+            <div className="stat-card-value" style={{ color: pipelineTotal > 0 ? 'var(--amber, #d97706)' : undefined }}>{pipelineTotal > 0 ? fmtEuro(pipelineTotal) : '—'}</div>
+            <div className="stat-card-sub">open proposals</div>
           </div>
         </div>
       )}

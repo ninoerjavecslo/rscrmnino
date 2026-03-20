@@ -20,7 +20,6 @@ import { EmailToolView } from './views/EmailToolView'
 import { ForecastView } from './views/ForecastView'
 import { SalesView } from './views/SalesView'
 import { SettingsView } from './views/SettingsView'
-import { ResourcePlanningView } from './views/ResourcePlanningView'
 import { AutomationsView } from './views/AutomationsView'
 import { AutomationFormView } from './views/AutomationFormView'
 import { PixelView } from './views/PixelView'
@@ -83,7 +82,6 @@ function App() {
                 <Route path="/stats"           element={<StatisticsView />} />
                 <Route path="/infrastructure"  element={<InfrastructureView />} />
                 <Route path="/domains"         element={<DomainsView />} />
-                <Route path="/resources"       element={<ResourcePlanningView />} />
                 <Route path="/tools"           element={<ToolsView />} />
                 <Route path="/tools/timesheet" element={<TimesheetView />} />
                 <Route path="/email-tool"      element={<EmailToolView />} />

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useRevenuePlannerStore } from '../stores/revenuePlanner'
 import { useProjectsStore } from '../stores/projects'
 import { useClientsStore } from '../stores/clients'
@@ -7,8 +7,9 @@ import { useDomainsStore } from '../stores/domains'
 import { useChangeRequestsStore } from '../stores/changeRequests'
 import { supabase } from '../lib/supabase'
 import { toast } from '../lib/toast'
-import type { RevenuePlanner, Project, HostingClient } from '../lib/types'
+import type { RevenuePlanner, HostingClient } from '../lib/types'
 import { hostingActiveInMonth } from '../lib/types'
+import { Select } from '../components/Select'
 
 // ── Probability helpers ───────────────────────────────────────────────────────
 
@@ -44,11 +45,6 @@ function fmtEuro(n: number): string {
   return n.toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' €'
 }
 
-function fmtDate(dateStr: string | null | undefined): string {
-  if (!dateStr) return '—'
-  const d = new Date(dateStr + 'T00:00:00')
-  return d.toLocaleString('en', { month: 'short', year: 'numeric' })
-}
 
 // ── Status helpers ─────────────────────────────────────────────────────────────
 
@@ -59,89 +55,6 @@ function statusBadge(status: PlannerStatus): React.ReactElement {
   if (status === 'issued') return <span className="badge badge-blue">Issued</span>
   if (status === 'deferred' || status === 'retainer') return <span className="badge badge-red">Not issued</span>
   return <span className="badge badge-amber">Not issued</span>
-}
-
-// ── Plan invoice inline form ───────────────────────────────────────────────────
-
-interface PlanFormProps {
-  project: Project
-  month: string
-  onSave: (amount: number) => Promise<void>
-  onCancel: () => void
-  saving: boolean
-}
-
-function PlanForm({ project, month, onSave, onCancel, saving }: PlanFormProps) {
-  const [amount, setAmount] = useState<string>(
-    project.contract_value ? String(project.contract_value) : ''
-  )
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    inputRef.current?.focus()
-    inputRef.current?.select()
-  }, [])
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    const parsed = parseFloat(amount)
-    if (!isNaN(parsed) && parsed > 0) {
-      await onSave(parsed)
-    }
-  }
-
-  return (
-    <form
-      onSubmit={handleSubmit}
-      style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}
-    >
-      <span style={{ fontSize: 12, color: 'var(--c3)', fontWeight: 600, flexShrink: 0 }}>
-        Plan {fmtMonthLabel(month)} for {project.name}:
-      </span>
-      <div style={{ position: 'relative', flexShrink: 0 }}>
-        <span style={{
-          position: 'absolute',
-          left: 8,
-          top: '50%',
-          transform: 'translateY(-50%)',
-          color: 'var(--c3)',
-          fontSize: 13,
-          pointerEvents: 'none',
-        }}>€</span>
-        <input
-          ref={inputRef}
-          type="number"
-          value={amount}
-          onChange={e => setAmount(e.target.value)}
-          placeholder="0"
-          min="0"
-          step="any"
-          style={{
-            width: 110,
-            padding: '6px 8px 6px 20px',
-            border: '1.5px solid var(--navy)',
-            borderRadius: 6,
-            fontSize: 13,
-            fontWeight: 700,
-            fontVariantNumeric: 'tabular-nums',
-            outline: 'none',
-          }}
-          onKeyDown={e => { if (e.key === 'Escape') onCancel() }}
-        />
-      </div>
-      <button
-        type="submit"
-        className="btn btn-primary btn-xs"
-        disabled={saving || !amount}
-      >
-        {saving ? <span className="spinner" style={{ width: 11, height: 11, borderWidth: 1.5 }} /> : null}
-        Save
-      </button>
-      <button type="button" className="btn btn-secondary btn-xs" onClick={onCancel}>
-        Cancel
-      </button>
-    </form>
-  )
 }
 
 // ── Actual amount cell (static display only) ────────────────────────────────
@@ -181,7 +94,7 @@ export function ThisMonthView() {
   >({})
 
   // Plan form state: projectId → open or closed
-  const [planFormOpen, setPlanFormOpen] = useState<string | null>(null)
+  const [_planFormOpen, setPlanFormOpen] = useState<string | null>(null)
 
   // Status update loading
   const [statusUpdating, setStatusUpdating] = useState<string | null>(null)
@@ -352,11 +265,7 @@ export function ThisMonthView() {
 
   const delta = issuedTotal - plannedTotal
 
-  // ── Active projects without a planner row this month ────────────────────────
-
   const activeProjects = pStore.projects.filter(p => p.status === 'active')
-  const plannedProjectIds = new Set(rows.map(r => r.project_id))
-  const unplannedProjects = activeProjects.filter(p => !plannedProjectIds.has(p.id))
 
   // ── Hosting revenue this month ───────────────────────────────────────────────
 
@@ -579,14 +488,6 @@ export function ThisMonthView() {
     } finally {
       setDeferDomainSaving(false)
     }
-  }
-
-  // ── Plan invoice handler ────────────────────────────────────────────────────
-
-  async function handlePlanInvoice(project: Project, amount: number) {
-    const defaultProb = project.type === 'fixed' ? 100 : 75
-    await rStore.upsert(project.id, currentMonth, amount, defaultProb)
-    setPlanFormOpen(null)
   }
 
   // ── Hosting confirmation ─────────────────────────────────────────────────────
@@ -877,11 +778,15 @@ export function ThisMonthView() {
             <div className="modal-body">
               <div className="form-group">
                 <label className="form-label">Client</label>
-                <select value={addInvClient} onChange={e => setAddInvClient(e.target.value)} autoFocus>
-                  <option value="">— select client —</option>
-                  <option value="__new__">+ New client…</option>
-                  {cStore.clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                <Select
+                  value={addInvClient}
+                  onChange={v => setAddInvClient(v)}
+                  placeholder="— select client —"
+                  options={[
+                    ...cStore.clients.map(c => ({ value: c.id, label: c.name })),
+                    { value: '__new__', label: '+ New client…' },
+                  ]}
+                />
               </div>
               {addInvClient === '__new__' && (
                 <div className="form-group">

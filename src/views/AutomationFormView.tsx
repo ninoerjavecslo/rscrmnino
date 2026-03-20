@@ -159,7 +159,7 @@ export function AutomationFormView() {
 
     setSaving(true)
     try {
-      const autData = { name: name.trim(), recipient_email: email.trim(), send_day: sendDay, active: true, subject: subject.trim() || null, message: message.trim() || null, notes: notes.trim() || null }
+      const autData = { name: name.trim(), recipient_email: email.trim(), send_day: sendDay, active: true, subject: subject.trim() || null, message: message.trim() || null, notes: notes.trim() || null, sent_count: 0 }
 
       let autId = id
       if (isEdit && id) {

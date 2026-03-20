@@ -10,7 +10,6 @@ function IconGlobe()     { return <svg width="16" height="16" viewBox="0 0 24 24
 function IconCalendar()  { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> }
 function IconTool()      { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg> }
 function IconTarget()    { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg> }
-function IconGrid()      { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> }
 function IconZap()       { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> }
 function IconSparkle()   { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5z"/><path d="M19 3l.75 2.25L22 6l-2.25.75L19 9l-.75-2.25L16 6l2.25-.75z"/></svg> }
 
@@ -35,6 +34,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
 
       <nav className="sidebar-nav" onClick={onClose}>
         <NavLink to="/dashboard" className={nav}><IconHome /> Dashboard</NavLink>
+        <NavLink to="/pixel" className={nav}><IconSparkle /> Pixel AI</NavLink>
 
         <div className="sidebar-divider" />
 
@@ -49,7 +49,6 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         <NavLink to="/projects"      className={nav}><IconBriefcase /> Projects</NavLink>
         <NavLink to="/maintenances"  className={nav}><IconTool /> Maintenances</NavLink>
         <NavLink to="/sales"         className={nav}><IconTarget /> Sales</NavLink>
-        <NavLink to="/resources"     className={nav}><IconGrid /> Resources</NavLink>
 
         <div className="sidebar-divider" />
 
@@ -69,11 +68,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         <div className="sidebar-divider" />
 
         <NavLink to="/tools" className={nav}><IconTool /> Tools</NavLink>
-        <NavLink to="/tools/timesheet" className={nav}><IconCalendar /> Timesheet</NavLink>
         <NavLink to="/automations" className={nav}><IconZap /> Automations</NavLink>
-
-        <div className="sidebar-divider" />
-        <NavLink to="/pixel" className={nav}><IconSparkle /> Pixel AI</NavLink>
 
         <div className="sidebar-divider" />
 

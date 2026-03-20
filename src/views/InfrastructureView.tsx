@@ -82,7 +82,7 @@ export function InfrastructureView() {
   const [showNewClient, setShowNewClient] = useState(false)
   const [addingClient, setAddingClient] = useState(false)
 
-  const [billingStatus, setBillingStatus] = useState<Map<string, BillingEntry>>(new Map())
+  const [_billingStatus, setBillingStatus] = useState<Map<string, BillingEntry>>(new Map())
   const [showAddCost, setShowAddCost] = useState(false)
   const [costForm, setCostForm] = useState({ provider: '', description: '', amount: '', cycle: 'monthly' as 'monthly' | 'yearly' })
   const [cancelTarget, setCancelTarget] = useState<HostingClient | null>(null)
@@ -151,7 +151,6 @@ export function InfrastructureView() {
     }
   }
 
-  const totalRevenue = store.monthlyRevenueEquiv()
   const totalRevenuePerYear = store.hostingClients.reduce((s, h) => s + hostingAnnualValue(h), 0)
   const yearlyDueSoon = store.yearlyDueSoon()
 
@@ -919,7 +918,7 @@ export function InfrastructureView() {
               {editHosting.form.cycle === 'yearly' && (
                 <div className="form-group">
                   <label className="form-label">Billing month</label>
-                  <select value={editHosting.form.billing_month ?? ''} onChange={e => editHosting.set('billing_month', e.target.value ? parseInt(e.target.value) : null)}>
+                  <select value={editHosting.form.billing_month ?? ''} onChange={e => editHosting.set('billing_month', Number(e.target.value) || 0)}>
                     <option value="">— Select month —</option>
                     {['January','February','March','April','May','June','July','August','September','October','November','December'].map((name, i) => (
                       <option key={i+1} value={i+1}>{name}</option>

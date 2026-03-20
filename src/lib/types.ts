@@ -264,27 +264,6 @@ export function hostingContractValue(h: Pick<HostingClient, 'cycle' | 'amount' |
   return hostingAnnualValue({ ...h, status: 'active', cancelled_from: null })
 }
 
-export interface TeamMember {
-  id: string
-  name: string
-  display_order: number
-  active: boolean
-  created_at: string
-}
-
-export interface ResourcePlan {
-  id: string
-  member_id: string | null   // null = Dev Team row
-  project_id: string | null
-  period: string             // YYYY-MM-DD (Monday for weeks, 1st for months)
-  period_type: 'week' | 'month'
-  hours: number
-  notes?: string | null
-  created_at: string
-  // Joined
-  project?: Pick<Project, 'id' | 'pn' | 'name' | 'client_id'> | null
-}
-
 // ── Supabase Database type for typed client ──────────────────────────────────
 
 export interface Database {

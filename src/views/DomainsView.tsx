@@ -17,12 +17,6 @@ function fmtDate(d: string) {
   const [y, m, day] = d.split('-')
   return `${day}/${m}/${y}`
 }
-// Parse dd/mm/yyyy → YYYY-MM-DD (for storage)
-function parseDMY(s: string): string {
-  const parts = s.split('/')
-  if (parts.length !== 3 || parts[2].length !== 4) return s
-  return `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`
-}
 // Convert YYYY-MM-DD → dd/mm/yyyy (for display in text input)
 function isoToDMY(s: string): string {
   if (!s) return ''

@@ -300,6 +300,11 @@ export function RevenuePlannerView() {
     return null
   }
 
+  function hostingCellStatus(hostingId: string, month: string): string | null {
+    const row = rpStore.rows.find(r => r.hosting_client_id === hostingId && r.month === month)
+    return row?.status ?? null
+  }
+
   function hostingRowTotal(hostingId: string): number {
     return months.reduce((sum, m) => sum + (hostingCellAmount(hostingId, m) ?? 0), 0)
   }
@@ -1254,6 +1259,8 @@ export function RevenuePlannerView() {
                           {months.map(month => {
                             const amount = hostingCellAmount(h.id, month)
                             const isEmpty = amount === null || amount === 0
+                            const cellStatus = isEmpty ? null : hostingCellStatus(h.id, month)
+                            const isSettled = cellStatus === 'issued' || cellStatus === 'paid'
 
                             return (
                               <td key={month} style={{
@@ -1265,7 +1272,7 @@ export function RevenuePlannerView() {
                                 {isEmpty ? (
                                   <span style={{ color: '#d1d5db', fontSize: 12, display: 'block', textAlign: 'right', padding: '4px 6px' }}>—</span>
                                 ) : (
-                                  <span style={{ fontWeight: 600, fontSize: 12, color: '#0369a1', fontVariantNumeric: 'tabular-nums', display: 'block', textAlign: 'right', padding: '4px 6px' }}>
+                                  <span style={{ fontWeight: 600, fontSize: 12, color: isSettled ? 'var(--green)' : '#0369a1', fontVariantNumeric: 'tabular-nums', display: 'block', textAlign: 'right', padding: '4px 6px' }}>
                                     {fmtAmt(amount!)}
                                   </span>
                                 )}

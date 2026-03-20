@@ -290,7 +290,7 @@ function plMonthCount(start: string, end: string): number {
   return Math.max(1, (e.getFullYear() - s.getFullYear()) * 12 + e.getMonth() - s.getMonth() + 1)
 }
 
-type TabId = 'overview' | 'projects' | 'infra' | 'maintenances' | 'invoices' | 'pipeline'
+type TabId = 'overview' | 'projects' | 'infra' | 'maintenances' | 'other-income' | 'invoices' | 'pipeline'
 
 // ── component ─────────────────────────────────────────────────────────────────
 
@@ -357,6 +357,13 @@ export function ClientDetailView() {
   const [pipelineSaving, setPipelineSaving] = useState(false)
   const [deletePipelineTarget, setDeletePipelineTarget] = useState<PipelineItem | null>(null)
 
+  // ── other income modal ───────────────────────────────────────────────────
+  const [showOtherIncome, setShowOtherIncome] = useState(false)
+  const [editOtherIncomeTarget, setEditOtherIncomeTarget] = useState<RevenuePlanner | null>(null)
+  const [otherIncomeForm, setOtherIncomeForm] = useState({ month: '', amount: '', notes: '', status: 'planned' as RevenuePlanner['status'] })
+  const [otherIncomeSaving, setOtherIncomeSaving] = useState(false)
+  const [deleteOtherIncomeTarget, setDeleteOtherIncomeTarget] = useState<RevenuePlanner | null>(null)
+
   useEffect(() => {
     cStore.fetchAll()
     pStore.fetchAll()
@@ -408,7 +415,7 @@ export function ClientDetailView() {
     .filter(r => r.project_id != null && projectIds.has(r.project_id) && r.status !== 'cost' && !r.notes?.startsWith('CR:'))
     .reduce((s, r) => s + (r.planned_amount ?? 0), 0)
   const projectApprovedCRSum = crStore.approvedCRs
-    .filter(cr => projectIds.has(cr.project_id))
+    .filter(cr => cr.project_id != null && projectIds.has(cr.project_id))
     .reduce((s, cr) => s + (cr.amount ?? 0), 0)
   // Extra invoiced above retainer + linked hosting (overages on confirmed maintenance invoices)
   const maintOverages = allClientRpRows
@@ -437,6 +444,12 @@ export function ClientDetailView() {
   const fullInvoiceHistory: RevenuePlanner[] = useMemo(() =>
     [...allClientRpRows]
       .filter(r => (r.status === 'issued' || r.status === 'paid') && (r.actual_amount ?? r.planned_amount ?? 0) > 0)
+      .sort((a, b) => b.month.localeCompare(a.month)),
+    [allClientRpRows])
+
+  const otherIncomeRows = useMemo(() =>
+    [...allClientRpRows]
+      .filter(r => r.project_id != null && !r.maintenance_id && !r.hosting_client_id && !r.domain_id)
       .sort((a, b) => b.month.localeCompare(a.month)),
     [allClientRpRows])
 
@@ -779,6 +792,93 @@ export function ClientDetailView() {
       toast('error', (err as Error).message)
     } finally {
       setDeletePipelineTarget(null)
+    }
+  }
+
+  // ── other income CRUD ────────────────────────────────────────────────────
+  function openAddOtherIncome() {
+    setEditOtherIncomeTarget(null)
+    setOtherIncomeForm({ month: getCurrentMonth(), amount: '', notes: '', status: 'planned' })
+    setShowOtherIncome(true)
+  }
+
+  function openEditOtherIncome(row: RevenuePlanner) {
+    setEditOtherIncomeTarget(row)
+    setOtherIncomeForm({
+      month: row.month.slice(0, 7),
+      amount: String(row.actual_amount ?? row.planned_amount ?? ''),
+      notes: row.notes ?? '',
+      status: row.status,
+    })
+    setShowOtherIncome(true)
+  }
+
+  async function saveOtherIncome() {
+    if (!otherIncomeForm.month || !otherIncomeForm.amount) return
+    setOtherIncomeSaving(true)
+    const amt = parseFloat(otherIncomeForm.amount)
+    const month = otherIncomeForm.month + '-01'
+    try {
+      if (editOtherIncomeTarget) {
+        const { error } = await supabase.from('revenue_planner').update({
+          month,
+          planned_amount: amt,
+          actual_amount: ['issued', 'paid'].includes(otherIncomeForm.status) ? amt : null,
+          status: otherIncomeForm.status,
+          notes: otherIncomeForm.notes.trim() || null,
+        }).eq('id', editOtherIncomeTarget.id)
+        if (error) throw error
+        toast('success', 'Invoice updated')
+      } else {
+        // Find or create a shared "Other Income" project for this client
+        let projectId: string
+        const existing = projects.find(p => p.name === 'Other Income' && p.client_id === client?.id)
+        if (existing) {
+          projectId = existing.id
+        } else {
+          const { data: newProj, error: pe } = await supabase.from('projects').insert({
+            client_id: client?.id ?? null,
+            pn: `OI-${new Date().getFullYear()}`,
+            name: 'Other Income',
+            type: 'fixed',
+            status: 'active',
+            currency: 'EUR',
+          }).select('id').single()
+          if (pe) throw pe
+          projectId = newProj.id
+          await pStore.fetchAll()
+        }
+        const { error } = await supabase.from('revenue_planner').insert({
+          project_id: projectId,
+          month,
+          planned_amount: amt,
+          actual_amount: ['issued', 'paid'].includes(otherIncomeForm.status) ? amt : null,
+          status: otherIncomeForm.status,
+          probability: 100,
+          notes: otherIncomeForm.notes.trim() || null,
+        })
+        if (error) throw error
+        toast('success', 'Invoice added')
+      }
+      await rpStore.fetchByMonths(allMonths)
+      setShowOtherIncome(false)
+    } catch (err) {
+      toast('error', (err as Error).message)
+    } finally {
+      setOtherIncomeSaving(false)
+    }
+  }
+
+  async function deleteOtherIncome(row: RevenuePlanner) {
+    try {
+      const { error } = await supabase.from('revenue_planner').delete().eq('id', row.id)
+      if (error) throw error
+      await rpStore.fetchByMonths(allMonths)
+      toast('success', 'Invoice removed')
+    } catch (err) {
+      toast('error', (err as Error).message)
+    } finally {
+      setDeleteOtherIncomeTarget(null)
     }
   }
 
@@ -1236,6 +1336,68 @@ export function ClientDetailView() {
     )
   }
 
+
+  function renderOtherIncome() {
+    const total = otherIncomeRows.reduce((s, r) => s + (r.actual_amount ?? r.planned_amount ?? 0), 0)
+    return (
+      <div>
+        <div className="section-bar" style={{ marginBottom: 10 }}>
+          <h2>Other Income <span style={{ fontWeight: 400, fontSize: 13, textTransform: 'none', letterSpacing: 0 }}>· {otherIncomeRows.length} entries</span></h2>
+          <button className="btn btn-primary btn-sm" onClick={openAddOtherIncome}>+ Add invoice</button>
+        </div>
+        <div className="card">
+          {otherIncomeRows.length === 0 ? (
+            <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>
+              No one-time invoices yet. Add ad-hoc charges, one-off services, or project billing.
+            </div>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>MONTH</th>
+                  <th>PROJECT</th>
+                  <th>DESCRIPTION</th>
+                  <th className="th-right">AMOUNT</th>
+                  <th>STATUS</th>
+                  <th style={{ width: 80 }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {otherIncomeRows.map(r => {
+                  const amtColor = r.status === 'paid' ? 'var(--green)' : r.status === 'issued' ? 'var(--navy)' : 'var(--c2)'
+                  return (
+                    <tr key={r.id}>
+                      <td className="text-mono" style={{ fontSize: 13, color: 'var(--c2)' }}>{fmtMonth(r.month)}</td>
+                      <td style={{ fontSize: 13, color: 'var(--c3)' }}>{r.project?.name ?? '—'}</td>
+                      <td style={{ fontSize: 13, color: 'var(--c1)' }}>{r.notes || <span style={{ color: 'var(--c4)' }}>—</span>}</td>
+                      <td className="td-right text-mono" style={{ color: amtColor, fontWeight: 600, fontSize: 13 }}>{fmtEuro(r.actual_amount ?? r.planned_amount)}</td>
+                      <td><span className={`badge ${RP_STATUS_BADGE[r.status] ?? 'badge-gray'}`}>{r.status.charAt(0).toUpperCase() + r.status.slice(1)}</span></td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                          <button className="btn btn-ghost btn-xs" onClick={() => openEditOtherIncome(r)}>Edit</button>
+                          <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red)' }} onClick={() => setDeleteOtherIncomeTarget(r)}>
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              <tfoot>
+                <tr style={{ background: 'var(--c7)', borderTop: '2px solid var(--c6)' }}>
+                  <td colSpan={3} style={{ fontWeight: 700, fontSize: 12, color: 'var(--c3)', letterSpacing: '0.05em' }}>TOTAL</td>
+                  <td className="td-right text-mono" style={{ fontWeight: 800, color: 'var(--navy)', fontSize: 14 }}>{fmtEuro(total)}</td>
+                  <td colSpan={2} />
+                </tr>
+              </tfoot>
+            </table>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   function renderInvoices() {
     function getCategoryBadge(r: RevenuePlanner) {
       if (r.maintenance_id) return <span className="badge badge-amber">Maintenance</span>
@@ -1399,6 +1561,7 @@ export function ClientDetailView() {
     { id: 'projects', label: `Projects${projects.length > 0 ? ` (${projects.length})` : ''}` },
     { id: 'infra', label: 'Domains & Hosting' },
     { id: 'maintenances', label: `Maintenances${maintenances.length > 0 ? ` (${maintenances.length})` : ''}` },
+    { id: 'other-income', label: `Other Income${otherIncomeRows.length > 0 ? ` (${otherIncomeRows.length})` : ''}` },
     { id: 'invoices', label: 'Invoices' },
     { id: 'pipeline', label: `Pipeline${activePipelineItems.length > 0 ? ` (${activePipelineItems.length})` : ''}` },
   ]
@@ -1757,6 +1920,54 @@ export function ClientDetailView() {
         </Modal>
       )}
 
+      {/* ── Other income modal ── */}
+      {showOtherIncome && (
+        <Modal title={editOtherIncomeTarget ? 'Edit invoice' : 'Add one-time invoice'} onClose={() => setShowOtherIncome(false)}>
+          <div className="form-group" style={{ marginBottom: 14 }}>
+            <label className="form-label">Description</label>
+            <input autoFocus value={otherIncomeForm.notes} onChange={e => setOtherIncomeForm(f => ({ ...f, notes: e.target.value }))} placeholder="e.g. Consultation fee, ad-hoc design work…" />
+          </div>
+          <div className="form-row" style={{ marginBottom: 14 }}>
+            <div className="form-group">
+              <label className="form-label">Month</label>
+              <input type="month" value={otherIncomeForm.month} onChange={e => setOtherIncomeForm(f => ({ ...f, month: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Amount (€)</label>
+              <input type="number" min="0" step="0.01" value={otherIncomeForm.amount} onChange={e => setOtherIncomeForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" />
+            </div>
+          </div>
+          <div className="form-group" style={{ marginBottom: 20 }}>
+            <label className="form-label">Status</label>
+            <Select
+              value={otherIncomeForm.status}
+              onChange={v => setOtherIncomeForm(f => ({ ...f, status: v as RevenuePlanner['status'] }))}
+              options={[
+                { value: 'planned', label: 'Planned' },
+                { value: 'issued',  label: 'Issued' },
+                { value: 'paid',    label: 'Paid' },
+              ]}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowOtherIncome(false)}>Cancel</button>
+            <button className="btn btn-primary btn-sm" disabled={otherIncomeSaving || !otherIncomeForm.month || !otherIncomeForm.amount} onClick={saveOtherIncome}>
+              {otherIncomeSaving ? 'Saving…' : editOtherIncomeTarget ? 'Save changes' : 'Add invoice'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {deleteOtherIncomeTarget && (
+        <Modal title="Remove invoice" onClose={() => setDeleteOtherIncomeTarget(null)}>
+          <p style={{ margin: '0 0 20px', fontSize: 14 }}>Remove this invoice entry of <strong>{fmtEuro(deleteOtherIncomeTarget.actual_amount ?? deleteOtherIncomeTarget.planned_amount)}</strong>?</p>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => setDeleteOtherIncomeTarget(null)}>Cancel</button>
+            <button className="btn btn-primary btn-sm" style={{ background: 'var(--red)', borderColor: 'var(--red)' }} onClick={() => deleteOtherIncome(deleteOtherIncomeTarget)}>Remove</button>
+          </div>
+        </Modal>
+      )}
+
       {/* ── Page header with tabs on right ── */}
       <div className="page-header" style={{ alignItems: 'flex-end' }}>
         <div>
@@ -1825,6 +2036,7 @@ export function ClientDetailView() {
         {activeTab === 'projects'     && renderProjects()}
         {activeTab === 'infra'        && renderInfra()}
         {activeTab === 'maintenances' && renderMaintenances()}
+        {activeTab === 'other-income' && renderOtherIncome()}
         {activeTab === 'invoices'     && renderInvoices()}
         {activeTab === 'pipeline'     && renderPipeline()}
       </div>

@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useMaintenancesStore } from '../stores/maintenances'
 import { useChangeRequestsStore } from '../stores/changeRequests'
-import { usePipelineStore } from '../stores/pipeline'
 import { supabase } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import type { RevenuePlanner, Maintenance, HostingClient, ChangeRequest } from '../lib/types'
@@ -39,12 +38,6 @@ const MAINT_STATUS_BADGE: Record<string, string> = {
   active:    'badge-green',
   paused:    'badge-amber',
   cancelled: 'badge-red',
-}
-
-const CR_STATUS_BADGE: Record<string, string> = {
-  pending:  'badge-amber',
-  approved: 'badge-green',
-  billed:   'badge-navy',
 }
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
@@ -168,7 +161,6 @@ export function MaintenanceDetailView() {
   const navigate = useNavigate()
   const store = useMaintenancesStore()
   const crStore = useChangeRequestsStore()
-  const plStore = usePipelineStore()
 
   const [rpRows, setRpRows] = useState<RevenuePlanner[]>([])
   const [hosting, setHosting] = useState<HostingClient | null>(null)
@@ -253,7 +245,6 @@ export function MaintenanceDetailView() {
   const totalInvoiced = invoiceRows
     .filter(r => r.status === 'paid' || r.status === 'issued')
     .reduce((s, r) => s + (r.actual_amount ?? 0), 0)
-  const totalPlanned  = invoiceRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0)
   const hostingMonthlyAmt = hosting?.cycle === 'monthly' ? (hosting.amount ?? 0) : 0
   const extraBilledRetainers = invoiceRows
     .filter(r => !r.notes?.startsWith('CR:') && (r.status === 'paid' || r.status === 'issued') && (r.actual_amount ?? 0) > (r.planned_amount ?? 0) + hostingMonthlyAmt)

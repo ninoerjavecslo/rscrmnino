@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  BarChart, Bar, ComposedChart, Line, XAxis, YAxis, CartesianGrid,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, ReferenceLine
 } from 'recharts'
 import { useClientsStore } from '../stores/clients'
@@ -12,7 +12,7 @@ import { useRevenuePlannerStore } from '../stores/revenuePlanner'
 import { useChangeRequestsStore } from '../stores/changeRequests'
 import { usePipelineStore } from '../stores/pipeline'
 import { hostingAnnualValue } from '../lib/types'
-import type { RevenuePlanner, PipelineItem, InfrastructureCost } from '../lib/types'
+import type { PipelineItem, InfrastructureCost } from '../lib/types'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -43,10 +43,6 @@ function shortMonth(s: string): string {
   return d.toLocaleString('en', { month: 'short' })
 }
 
-function humanK(n: number): string {
-  if (n >= 1000) return Math.round(n / 1000) + 'k'
-  return String(Math.round(n))
-}
 
 function costAnnualValue(c: InfrastructureCost): number {
   const yearStart = `${CURRENT_YEAR}-01-01`
@@ -95,7 +91,7 @@ function ForecastChart({ data, currentMonth }: {
         <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false} />
         <YAxis tickFormatter={eurFormatter} tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} width={58} />
         <Tooltip
-          formatter={(val: number, name: string) => [val > 0 ? `${val.toLocaleString('de-DE')} €` : '—', name]}
+          formatter={(val, name) => { const n = Number(val); return [n > 0 ? `${n.toLocaleString('de-DE')} €` : '—', String(name)] }}
           contentStyle={{ fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
         />
         <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
@@ -116,7 +112,7 @@ function MonthlyChart({ data }: { data: { label: string; plan: number; actual: n
         <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false} />
         <YAxis tickFormatter={eurFormatter} tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} width={58} />
         <Tooltip
-          formatter={(val: number, name: string) => [`${val.toLocaleString('de-DE')} €`, name]}
+          formatter={(val, name) => { const n = Number(val); return [`${n.toLocaleString('de-DE')} €`, String(name)] }}
           contentStyle={{ fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
         />
         <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
@@ -398,7 +394,6 @@ export function StatisticsView() {
 
   const projectsEndingSoon = useMemo(() => {
     const now = Date.now()
-    const in60 = now + 60 * 86_400_000
     return activeProjects
       .filter(p => p.end_date)
       .map(p => ({ ...p, daysLeft: Math.ceil((new Date(p.end_date! + 'T00:00:00').getTime() - now) / 86_400_000) }))
@@ -1303,7 +1298,7 @@ export function StatisticsView() {
                       <td style={{fontWeight:600}}>{m.name}</td>
                       <td style={{color:'var(--c3)',fontSize:13}}>{clientName}</td>
                       <td className="td-right text-mono" style={{fontWeight:700,color:'var(--amber)'}}>{fmtEur(m.monthly_retainer)}</td>
-                      <td className="td-right text-mono">{m.monthly_hours ?? '—'}</td>
+                      <td className="td-right text-mono">{m.hours_included ?? '—'}</td>
                       <td style={{fontSize:12,color: daysLeft !== null && daysLeft <= 30 ? 'var(--red)' : 'var(--c3)'}}>
                         {m.contract_start ? m.contract_start.slice(0,7) : '—'} → {m.contract_end ? m.contract_end.slice(0,7) : '∞'}
                         {daysLeft !== null && daysLeft <= 60 && <span className="badge badge-amber" style={{marginLeft:6}}>{daysLeft}d left</span>}

@@ -175,6 +175,7 @@ export function SalesView() {
   const [form, setForm] = useState<FormState>(EMPTY)
   const [saving, setSaving] = useState(false)
   const [filter, setFilter] = useState('active')
+  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list')
   const [deleteTarget, setDeleteTarget] = useState<PipelineItem | null>(null)
 
   // Won / Lost state
@@ -507,19 +508,101 @@ export function SalesView() {
       </div>
 
       <div className="page-content">
-        <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-          {(['active', 'all', 'won', 'lost'] as const).map(opt => (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {(['active', 'all', 'won', 'lost'] as const).map(opt => (
+              <button
+                key={opt}
+                className={`btn btn-sm ${filter === opt ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setFilter(opt)}
+                style={{ textTransform: 'capitalize' }}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 4, background: 'var(--c7)', borderRadius: 8, padding: 3 }}>
             <button
-              key={opt}
-              className={`btn btn-sm ${filter === opt ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setFilter(opt)}
-              style={{ textTransform: 'capitalize' }}
+              onClick={() => setViewMode('list')}
+              title="List view"
+              style={{ border: 'none', cursor: 'pointer', borderRadius: 6, padding: '5px 10px', background: viewMode === 'list' ? '#fff' : 'transparent', color: viewMode === 'list' ? 'var(--navy)' : 'var(--c4)', boxShadow: viewMode === 'list' ? '0 1px 3px rgba(0,0,0,.1)' : 'none', transition: 'all .12s' }}
             >
-              {opt}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
             </button>
-          ))}
+            <button
+              onClick={() => setViewMode('kanban')}
+              title="Kanban view"
+              style={{ border: 'none', cursor: 'pointer', borderRadius: 6, padding: '5px 10px', background: viewMode === 'kanban' ? '#fff' : 'transparent', color: viewMode === 'kanban' ? 'var(--navy)' : 'var(--c4)', boxShadow: viewMode === 'kanban' ? '0 1px 3px rgba(0,0,0,.1)' : 'none', transition: 'all .12s' }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="10" rx="1"/></svg>
+            </button>
+          </div>
         </div>
 
+        {viewMode === 'kanban' ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, alignItems: 'start' }}>
+            {([
+              { status: 'proposal', label: 'Proposal', color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
+              { status: 'won',      label: 'Won',      color: 'var(--green)', bg: '#f0fdf4', border: '#bbf7d0' },
+              { status: 'lost',     label: 'Lost',     color: 'var(--red)',   bg: '#fff1f1', border: '#fecaca' },
+            ] as const).map(col => {
+              const colItems = items.filter(i => i.status === col.status)
+              const colTotal = colItems.reduce((s, i) => s + dealTotal(i), 0)
+              return (
+                <div key={col.status}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: col.bg, border: `1px solid ${col.border}`, borderRadius: '8px 8px 0 0', borderBottom: 'none' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontWeight: 700, fontSize: 13, color: col.color }}>{col.label}</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: col.color, background: col.border, borderRadius: 10, padding: '1px 7px' }}>{colItems.length}</span>
+                    </div>
+                    {colTotal > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--c3)' }}>{fmtEuro(colTotal)}</span>}
+                  </div>
+                  <div style={{ border: `1px solid ${col.border}`, borderTop: 'none', borderRadius: '0 0 8px 8px', minHeight: 80, background: '#fafafa' }}>
+                    {colItems.length === 0 ? (
+                      <div style={{ padding: '24px 14px', textAlign: 'center', color: 'var(--c5)', fontSize: 12 }}>No deals</div>
+                    ) : colItems.map((item, idx) => {
+                      const name = item.company_name ?? item.client?.name ?? '—'
+                      const total = dealTotal(item)
+                      return (
+                        <div key={item.id} style={{ padding: '12px 14px', background: '#fff', borderBottom: idx < colItems.length - 1 ? `1px solid ${col.border}` : 'none', borderRadius: idx === colItems.length - 1 ? '0 0 8px 8px' : 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6, marginBottom: 6 }}>
+                            <div>
+                              <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--c1)', lineHeight: 1.3 }}>{item.title}</div>
+                              <div style={{ fontSize: 11, color: 'var(--c3)', marginTop: 2 }}>{name}</div>
+                            </div>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: item.probability >= 75 ? 'var(--green)' : item.probability >= 50 ? 'var(--navy)' : 'var(--amber, #d97706)', flexShrink: 0 }}>{item.probability}%</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+                            {item.deal_type === 'monthly'
+                              ? <span className="badge badge-blue" style={{ fontSize: 10 }}>Monthly</span>
+                              : item.deal_type === 'fixed'
+                              ? <span className="badge badge-navy" style={{ fontSize: 10 }}>Fixed</span>
+                              : <span className="badge badge-gray" style={{ fontSize: 10 }}>One-time</span>}
+                            {total > 0 && <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--c1)', fontVariantNumeric: 'tabular-nums' }}>
+                              {item.deal_type === 'monthly' ? `${fmtEuro(item.estimated_amount)}/mo` : fmtEuro(total)}
+                            </span>}
+                            {item.expected_month && <span style={{ fontSize: 11, color: 'var(--c4)' }}>{fmtMonth(item.expected_month)}</span>}
+                          </div>
+                          {item.description && <div style={{ fontSize: 11, color: 'var(--c4)', marginBottom: 8, lineHeight: 1.4 }}>{item.description}</div>}
+                          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                            {item.status !== 'won' && item.status !== 'lost' && (
+                              <>
+                                <button className="btn btn-xs" style={{ color: 'var(--green)', border: '1px solid var(--green)', padding: '2px 7px', fontSize: 10, fontWeight: 700 }} onClick={() => openWon(item)}>Won ✓</button>
+                                <button className="btn btn-xs" style={{ color: 'var(--red)', border: '1px solid var(--red)', padding: '2px 7px', fontSize: 10, fontWeight: 700 }} onClick={() => setLostTarget(item)}>Lost ✗</button>
+                              </>
+                            )}
+                            <button className="btn btn-secondary btn-xs" onClick={() => openEdit(item)}>Edit</button>
+                            <button className="btn btn-xs" style={{ color: 'var(--c4)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', fontSize: 13 }} onClick={() => setDeleteTarget(item)}>✕</button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
         <div className="card">
           {filtered.length === 0 ? (
             <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>
@@ -636,6 +719,7 @@ export function SalesView() {
             </table>
           )}
         </div>
+        )}
 
         {/* Forecast by month */}
         {forecastRows.length > 0 && (

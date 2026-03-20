@@ -8,22 +8,8 @@ import { useDomainsStore } from '../stores/domains'
 import { useMaintenancesStore } from '../stores/maintenances'
 import { useChangeRequestsStore } from '../stores/changeRequests'
 import type { Client } from '../lib/types'
-import { hostingContractValue } from '../lib/types'
 
 const CURRENT_YEAR = new Date().getFullYear()
-
-function maintMonthsThisYear(m: { contract_start?: string | null; contract_end?: string | null }): number {
-  const yearStart = `${CURRENT_YEAR}-01`
-  const yearEnd   = `${CURRENT_YEAR}-12`
-  const cStart = m.contract_start ? m.contract_start.slice(0, 7) : yearStart
-  const cEnd   = m.contract_end   ? m.contract_end.slice(0, 7)   : yearEnd
-  const effStart = cStart > yearStart ? cStart : yearStart
-  const effEnd   = cEnd   < yearEnd   ? cEnd   : yearEnd
-  if (effStart > effEnd) return 0
-  const [sy, sm] = effStart.split('-').map(Number)
-  const [ey, em] = effEnd.split('-').map(Number)
-  return (ey - sy) * 12 + (em - sm) + 1
-}
 
 // Wide range for total value calculation (same as ClientDetailView)
 const ALL_MONTHS: string[] = []
@@ -171,59 +157,6 @@ export function ClientsView() {
                   <tr><td colSpan={7} style={{textAlign:'center',padding:32,color:'var(--c4)'}}>Loading…</td></tr>
                 ) : pagedClients.map((c: Client) => {
                   const clientProjects = pStore.projects.filter(p => p.client_id === c.id)
-                  const activeProjects = clientProjects.filter(p => p.status === 'active')
-
-                  const hasVariable = activeProjects.some(p => p.contract_value == null)
-
-                  // Project value: regular rows (non-CR, non-cost) + approved CRs
-                  const projectRpSum = activeProjects.reduce((sum, p) => {
-                    const isRecurring = p.type === 'maintenance' || p.type === 'variable'
-                    const regularRows = rpStore.rows.filter(r => r.project_id === p.id && !r.notes?.startsWith('CR:') && r.status !== 'cost')
-                    const crTotal = crStore.approvedCRs.filter(cr => cr.project_id === p.id).reduce((s, cr) => s + (cr.amount ?? 0), 0)
-                    const base = isRecurring
-                      ? regularRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0)
-                      : (p.initial_contract_value ?? p.contract_value ?? 0)
-                    return sum + base + crTotal
-                  }, 0)
-
-                  // Hosting annual equivalent
-                  const hostingAnnual = infraStore.hostingClients
-                    .filter(h => h.client_id === c.id && h.status === 'active')
-                    .reduce((sum, h) => sum + hostingContractValue(h), 0)
-
-                  // Domains annual
-                  const domainsAnnual = domainStore.domains
-                    .filter(d => d.client_id === c.id && !d.archived)
-                    .reduce((sum, d) => sum + (d.yearly_amount ?? 0), 0)
-
-                  // Maintenance annual
-                  const maintAnnual = maintStore.maintenances
-                    .filter(m => m.client_id === c.id && m.status === 'active')
-                    .reduce((sum, m) => sum + m.monthly_retainer * maintMonthsThisYear(m), 0)
-
-                  // Maintenance overages: actual billed above retainer + linked hosting (non-CR rows only)
-                  const maintOverages = rpStore.rows
-                    .filter(r => r.maintenance_id != null && !r.notes?.startsWith('CR:') && r.maintenance?.client?.id === c.id && (r.status === 'issued' || r.status === 'paid'))
-                    .reduce((sum, r) => {
-                      const linkedHosting = infraStore.hostingClients.find(h => h.maintenance_id === r.maintenance_id)
-                      const hAmt = linkedHosting?.amount ?? 0
-                      return sum + Math.max(0, (r.actual_amount ?? 0) - (r.planned_amount ?? 0) - hAmt)
-                    }, 0)
-
-                  // Maintenance CRs: planned CR rows in revenue_planner + approved CRs not yet planned
-                  const maintCRPlanned = rpStore.rows
-                    .filter(r => r.maintenance_id != null && r.notes?.startsWith('CR:') && r.maintenance?.client?.id === c.id && r.status !== 'deferred' && r.status !== 'cost')
-                    .reduce((s, r) => s + (r.actual_amount ?? r.planned_amount ?? 0), 0)
-                  const maintCRApproved = crStore.approvedCRs
-                    .filter(cr => {
-                      if (!cr.maintenance_id) return false
-                      const maint = maintStore.maintenances.find(m => m.id === cr.maintenance_id)
-                      if (maint?.client_id !== c.id) return false
-                      return !rpStore.rows.some(r => r.notes === `CR: ${cr.title}` && r.maintenance_id === cr.maintenance_id)
-                    })
-                    .reduce((s, cr) => s + (cr.amount ?? 0), 0)
-
-                  const fixedValue = projectRpSum + hostingAnnual + domainsAnnual + maintAnnual + maintOverages + maintCRPlanned + maintCRApproved
 
                   // Hosting: any active hosting entry for this client
                   const hasHosting = infraStore.hostingClients.some(h => h.client_id === c.id && h.status === 'active')

@@ -123,6 +123,7 @@ export function ResourcePlanningView() {
   const [assignFor, setAssignFor] = useState<string | null>(null)
   const [assignEntries, setAssignEntries] = useState<AssignEntry[]>([])
   const [bufferStats, setBufferStats] = useState<Map<string, MemberBufferStats>>(new Map())
+  const [assignTab, setAssignTab] = useState<'simple' | 'advanced'>('simple')
 
   // batch assign modal
   const [showBatch, setShowBatch] = useState(false)
@@ -613,11 +614,11 @@ export function ResourcePlanningView() {
         const member = members.find(m => m.id === assignFor)
         if (!member) return null
         return (
-          <div className="modal-overlay" onClick={() => setAssignFor(null)}>
+          <div className="modal-overlay" onClick={() => { setAssignFor(null); setAssignTab('simple') }}>
             <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 640, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
               <div className="modal-header">
                 <h3>Assign to {member.name}</h3>
-                <button className="modal-close" onClick={() => setAssignFor(null)}>&times;</button>
+                <button className="modal-close" onClick={() => { setAssignFor(null); setAssignTab('simple') }}>&times;</button>
               </div>
 
               <div className="modal-body" style={{ flex: 1, overflowY: 'auto' }}>
@@ -669,8 +670,120 @@ export function ResourcePlanningView() {
                   </div>
                 </div>
 
-                {assignEntries.map((entry, idx) => (
-                  <div key={entry.id} style={{ border: '1.5px solid var(--c6)', borderRadius: 12, padding: 20, marginBottom: 16, position: 'relative' }}>
+                {/* Simple / Advanced tabs */}
+                <div style={{ display: 'flex', border: '1px solid var(--c6)', borderRadius: 6, overflow: 'hidden', marginBottom: 16 }}>
+                  {(['simple', 'advanced'] as const).map(tab => (
+                    <button key={tab} onClick={() => setAssignTab(tab)} style={{
+                      flex: 1, padding: '8px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                      fontWeight: 700, fontSize: 13,
+                      background: assignTab === tab ? 'var(--navy)' : 'var(--c7)',
+                      color: assignTab === tab ? '#fff' : 'var(--c3)',
+                    }}>
+                      {tab === 'simple' ? 'Simple' : 'Advanced'}
+                    </button>
+                  ))}
+                </div>
+
+                {/* ── Simple tab ── */}
+                {assignTab === 'simple' && (() => {
+                  const e0 = assignEntries[0]
+                  const needsProject = e0.category === 'project' || e0.category === 'maintenance'
+                  return (
+                    <div>
+                      <div className="form-row">
+                        <div className="form-group">
+                          <label className="form-label">Type</label>
+                          <Select
+                            value={e0.category}
+                            onChange={v => {
+                              const cat = v as AllocationCategory
+                              const b = CATS.find(c => c.value === cat)?.billable ?? false
+                              setAssignEntries(prev => prev.map((e, i) => i === 0 ? { ...e, category: cat, billable: b } : e))
+                            }}
+                            options={CATS.map(c => ({ value: c.value, label: c.label }))}
+                          />
+                        </div>
+                        {needsProject ? (
+                          <div className="form-group">
+                            <label className="form-label">Project</label>
+                            <Select
+                              value={e0.projectId}
+                              onChange={v => setAssignEntries(prev => prev.map((e, i) => i === 0 ? { ...e, projectId: v } : e))}
+                              options={projectOptions}
+                              placeholder="Choose project..."
+                              searchable
+                            />
+                          </div>
+                        ) : (
+                          <div className="form-group">
+                            <label className="form-label">Description</label>
+                            <input
+                              value={e0.label}
+                              onChange={ev => setAssignEntries(prev => prev.map((e, i) => i === 0 ? { ...e, label: ev.target.value } : e))}
+                              placeholder={e0.category === 'leave' ? 'e.g. Annual leave' : e0.category === 'meeting' ? 'e.g. Sprint planning' : 'Description'}
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">Hours this week</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                          <input
+                            type="number" min={1} step={1}
+                            value={e0.totalHours}
+                            onChange={ev => setAssignEntries(prev => prev.map((e, i) => i === 0 ? { ...e, totalHours: Number(ev.target.value), mode: 'week' } : e))}
+                            style={{ width: 80, fontSize: 20, fontWeight: 800, textAlign: 'center' }}
+                          />
+                          <span style={{ fontSize: 15, color: 'var(--c3)' }}>hours</span>
+                          <div style={{ display: 'flex', gap: 4, marginLeft: 'auto', flexWrap: 'wrap' }}>
+                            {[4, 8, 16, 20, 24, 32, 40].map(h => (
+                              <button key={h} type="button"
+                                className={`btn ${e0.totalHours === h ? 'btn-primary' : 'btn-ghost'} btn-sm`}
+                                onClick={() => setAssignEntries(prev => prev.map((e, i) => i === 0 ? { ...e, totalHours: h, mode: 'week' } : e))}
+                                style={{ padding: '6px 12px', fontSize: 13 }}
+                              >{h}h</button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginTop: 8, flexWrap: 'wrap' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
+                          <input type="checkbox" checked={e0.recurring}
+                            onChange={ev => setAssignEntries(prev => prev.map((e, i) => i === 0 ? { ...e, recurring: ev.target.checked } : e))}
+                            style={{ width: 18, height: 18 }} />
+                          Repeat weekly
+                        </label>
+                        {e0.recurring && (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14 }}>
+                            for <input type="number" value={e0.repeatWeeks}
+                              onChange={ev => setAssignEntries(prev => prev.map((e, i) => i === 0 ? { ...e, repeatWeeks: Number(ev.target.value) } : e))}
+                              min={2} max={52} style={{ width: 56, textAlign: 'center', fontSize: 14, padding: '6px' }} /> weeks
+                          </span>
+                        )}
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
+                          <input type="checkbox" checked={e0.billable}
+                            onChange={ev => setAssignEntries(prev => prev.map((e, i) => i === 0 ? { ...e, billable: ev.target.checked } : e))}
+                            style={{ width: 18, height: 18 }} />
+                          Billable
+                        </label>
+                      </div>
+
+                      <div className="modal-footer" style={{ padding: '16px 0 0', border: 'none' }}>
+                        <button className="btn btn-primary" onClick={handleAssign} style={{ height: 44, padding: '0 28px', fontSize: 15, fontWeight: 700, width: '100%' }}>
+                          Assign {e0.totalHours}h{e0.recurring ? ' + recurring' : ''}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {/* ── Advanced tab ── */}
+                {assignTab === 'advanced' && (
+                  <div>
+                    {assignEntries.map((entry, idx) => (
+                      <div key={entry.id} style={{ border: '1.5px solid var(--c6)', borderRadius: 12, padding: 20, marginBottom: 16, position: 'relative' }}>
                     {assignEntries.length > 1 && (
                       <button className="btn btn-ghost btn-xs" onClick={() => removeEntry(entry.id)} style={{ position: 'absolute', top: 12, right: 12, color: 'var(--red)', fontSize: 16 }}>&times;</button>
                     )}
@@ -793,16 +906,19 @@ export function ResourcePlanningView() {
                         <input type="date" value={entry.deadlineDate} onChange={e => updateEntry(entry.id, { deadlineDate: e.target.value })} style={{ fontSize: 14, padding: '6px 10px', borderRadius: 'var(--r)', border: '1.5px solid var(--red)', color: 'var(--red)', fontWeight: 600 }} />
                       )}
                     </div>
-                  </div>
-                ))}
+                      </div>
+                    ))}
 
-                <button className="btn btn-secondary" onClick={() => setAssignEntries(prev => [...prev, newEntry(weekEnd)])} style={{ width: '100%', height: 44, fontSize: 15 }}>
-                  + Add another allocation
-                </button>
+                    <button className="btn btn-secondary" onClick={() => setAssignEntries(prev => [...prev, newEntry(weekEnd)])} style={{ width: '100%', height: 44, fontSize: 15 }}>
+                      + Add another allocation
+                    </button>
+                  </div>
+                )}
+
               </div>
 
               <div className="modal-footer">
-                <button className="btn btn-secondary" onClick={() => setAssignFor(null)} style={{ height: 44, padding: '0 24px', fontSize: 15 }}>Cancel</button>
+                <button className="btn btn-secondary" onClick={() => { setAssignFor(null); setAssignTab('simple') }} style={{ height: 44, padding: '0 24px', fontSize: 15 }}>Cancel</button>
                 <button className="btn btn-primary" onClick={handleAssign} style={{ height: 44, padding: '0 28px', fontSize: 15, fontWeight: 700 }}>
                   Assign {assignEntries.reduce((s, e) => s + (e.mode === 'week' ? e.totalHours : e.dayHours.reduce((a, b) => a + b, 0)), 0)}h
                   {assignEntries.some(e => e.recurring) ? ' + recurring' : ''}

@@ -452,6 +452,23 @@ export interface ResourceAllocation {
   project?: Pick<Project, 'id' | 'pn' | 'name'> | null
 }
 
+export interface TemplateEntry {
+  member_id: string
+  member_name: string
+  project_id: string | null
+  project_label: string
+  category: AllocationCategory
+  weekly_hours: number
+  is_billable: boolean
+}
+
+export interface AllocationTemplate {
+  id: string
+  name: string
+  entries: TemplateEntry[]
+  created_at: string
+}
+
 export interface ProjectDeliverable {
   id: string
   project_id: string

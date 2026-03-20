@@ -48,8 +48,9 @@ function getMondaysInMonth(monthStart: string): string[] {
   while (true) {
     const fri = new Date(d)
     fri.setDate(fri.getDate() + 4)
-    // Stop when Monday is past the month
-    if (d.getMonth() > month && d.getFullYear() >= startDate.getFullYear()) break
+    // Stop when Monday is past the month (handles December: check year advance too)
+    if (d.getFullYear() > startDate.getFullYear() ||
+        (d.getMonth() > month && d.getFullYear() >= startDate.getFullYear())) break
     // Include weeks that have at least one day in the target month
     if (d.getMonth() === month || fri.getMonth() === month) {
       const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0')

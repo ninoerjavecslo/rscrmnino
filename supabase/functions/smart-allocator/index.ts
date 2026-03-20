@@ -37,17 +37,45 @@ interface WizardWeek {
 }
 
 function getMondaysInMonth(monthStart: string): string[] {
-  const d = new Date(monthStart + 'T00:00:00')
-  const month = d.getMonth()
-  // advance to first Monday
-  while (d.getDay() !== 1) d.setDate(d.getDate() + 1)
+  const startDate = new Date(monthStart + 'T00:00:00')
+  const month = startDate.getMonth()
+  // Go to the Monday of the week containing month_start
+  const d = new Date(startDate)
+  const dow = d.getDay()
+  d.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1))
+
   const mondays: string[] = []
-  while (d.getMonth() === month) {
-    const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0')
-    mondays.push(`${y}-${m}-${day}`)
+  while (true) {
+    const fri = new Date(d)
+    fri.setDate(fri.getDate() + 4)
+    // Stop when Monday is past the month
+    if (d.getMonth() > month && d.getFullYear() >= startDate.getFullYear()) break
+    // Include weeks that have at least one day in the target month
+    if (d.getMonth() === month || fri.getMonth() === month) {
+      const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0')
+      mondays.push(`${y}-${m}-${day}`)
+    }
     d.setDate(d.getDate() + 7)
   }
   return mondays
+}
+
+function normalizeWeeks(raw: { weeks?: unknown[] } | null, members: InputMember[], projects: InputProject[]): WizardWeek[] {
+  return ((raw?.weeks ?? []) as WizardWeek[]).map((w: WizardWeek) => ({
+    week_start: w.week_start,
+    allocations: (w.allocations ?? [])
+      .map((a: WizardAllocation) => ({
+        member_id: a.member_id,
+        project_id: a.project_id,
+        weekly_hours: Math.max(0, Number(a.weekly_hours) || 0),
+        reason: a.reason ?? '',
+      }))
+      .filter((a: WizardAllocation) =>
+        a.weekly_hours > 0
+        && members.some(m => m.id === a.member_id)
+        && projects.some(p => p.id === a.project_id)
+      ),
+  }))
 }
 
 function weekDays(monday: string): string[] {
@@ -145,26 +173,11 @@ Return ONLY valid JSON (no markdown):
     let weeks: WizardWeek[] = []
 
     try {
-      const parsed = JSON.parse(text.trim())
-      weeks = (parsed.weeks ?? []).map((w: WizardWeek) => ({
-        week_start: w.week_start,
-        allocations: (w.allocations ?? [])
-          .map((a: WizardAllocation) => ({
-            member_id: a.member_id,
-            project_id: a.project_id,
-            weekly_hours: Math.max(0, Number(a.weekly_hours) || 0),
-            reason: a.reason ?? '',
-          }))
-          .filter((a: WizardAllocation) =>
-            a.weekly_hours > 0
-            && members.some(m => m.id === a.member_id)
-            && projects.some(p => p.id === a.project_id)
-          ),
-      }))
+      weeks = normalizeWeeks(JSON.parse(text.trim()), members, projects)
     } catch {
       const match = text.match(/\{[\s\S]*\}/)
       if (match) {
-        try { weeks = JSON.parse(match[0]).weeks ?? [] } catch { /* give up */ }
+        try { weeks = normalizeWeeks(JSON.parse(match[0]), members, projects) } catch { /* give up */ }
       }
     }
 

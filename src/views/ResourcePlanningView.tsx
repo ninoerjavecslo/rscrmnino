@@ -9,6 +9,7 @@ import type { MemberBufferStats } from '../lib/bufferAnalysis'
 import { AdvisorPanel } from '../components/AdvisorPanel'
 import { generateAdvisories } from '../lib/planningAdvisor'
 import type { Advisory } from '../lib/planningAdvisor'
+import { distributeWeekly } from '../lib/distributeWeekly'
 
 /* ── helpers ──────────────────────────────────────────────────── */
 
@@ -420,37 +421,13 @@ export function ResourcePlanningView() {
     }
   }
 
-  // Distribute weekly_hours evenly across days with available capacity
-  function distributeWeekly(memberId: string, weeklyHours: number): { date: string; hours: number }[] {
-    const member = allActive.find(m => m.id === memberId)
-    if (!member) return []
-    const used: Record<string, number> = {}
-    for (const a of allocations) {
-      if (a.member_id === memberId && days.includes(a.date)) {
-        used[a.date] = (used[a.date] || 0) + a.hours
-      }
-    }
-    const avail = days.map(d => ({ date: d, avail: Math.max(0, member.hours_per_day - (used[d] || 0)) }))
-      .filter(x => x.avail > 0)
-    if (avail.length === 0) return []
-    const perDay = weeklyHours / avail.length
-    const result: { date: string; hours: number }[] = []
-    let remaining = weeklyHours
-    for (const { date, avail: cap } of avail) {
-      if (remaining <= 0) break
-      const h = Math.min(Math.round(Math.min(perDay, cap) * 2) / 2, remaining)
-      if (h > 0) { result.push({ date, hours: h }); remaining -= h }
-    }
-    return result
-  }
-
   const applySmartPlan = async () => {
     const toApply = smartSuggestions.filter((_, i) => !smartRemovedIdx.has(i))
     if (toApply.length === 0) { toast('error', 'Nothing selected'); return }
     setSmartSaving(true)
     try {
       const expanded = toApply.flatMap(s =>
-        distributeWeekly(s.member_id, s.weekly_hours).map(({ date, hours }) => ({
+        distributeWeekly(weekStart, s.member_id, s.weekly_hours, allActive, allocations).map(({ date, hours }) => ({
           member_id: s.member_id,
           project_id: s.project_id || null,
           category: s.category,

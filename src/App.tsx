@@ -23,6 +23,13 @@ import { SettingsView } from './views/SettingsView'
 import { AutomationsView } from './views/AutomationsView'
 import { AutomationFormView } from './views/AutomationFormView'
 import { PixelView } from './views/PixelView'
+import { ResourcePlanningView } from './views/ResourcePlanningView'
+import { ResourceReportsView } from './views/ResourceReportsView'
+import { ResourceMonthlyView } from './views/ResourceMonthlyView'
+import { ResourceByProjectView } from './views/ResourceByProjectView'
+import { TeamView } from './views/TeamView'
+import { TeamMemberDetailView } from './views/TeamMemberDetailView'
+import { MyWeekView } from './views/MyWeekView'
 import { Toaster } from './components/Toaster'
 
 function App() {
@@ -31,6 +38,9 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+
+        {/* ── Standalone routes (no sidebar) ── */}
+        <Route path="/my-week/:token" element={<MyWeekView />} />
 
         {/* ── Main app layout ── */}
         <Route path="*" element={
@@ -84,6 +94,12 @@ function App() {
                 <Route path="/domains"         element={<DomainsView />} />
                 <Route path="/tools"           element={<ToolsView />} />
                 <Route path="/tools/timesheet" element={<TimesheetView />} />
+                <Route path="/resource-planning" element={<ResourcePlanningView />} />
+                <Route path="/resource-reports" element={<ResourceReportsView />} />
+                <Route path="/resource-monthly" element={<ResourceMonthlyView />} />
+                <Route path="/resource-by-project" element={<ResourceByProjectView />} />
+                <Route path="/team"            element={<TeamView />} />
+                <Route path="/team/:id"        element={<TeamMemberDetailView />} />
                 <Route path="/email-tool"      element={<EmailToolView />} />
                 <Route path="/settings"        element={<SettingsView />} />
                 <Route path="/pixel"           element={<PixelView />} />

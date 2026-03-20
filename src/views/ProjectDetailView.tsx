@@ -4,9 +4,10 @@ import { useProjectsStore } from '../stores/projects'
 import { useClientsStore } from '../stores/clients'
 import { useChangeRequestsStore } from '../stores/changeRequests'
 import { useSettingsStore } from '../stores/settings'
+import { useResourceStore } from '../stores/resource'
 import { supabase } from '../lib/supabase'
 import { toast } from '../lib/toast'
-import type { RevenuePlanner, Project, ChangeRequest } from '../lib/types'
+import type { RevenuePlanner, Project, ChangeRequest, ProjectDeliverable } from '../lib/types'
 import { Select } from '../components/Select'
 
 function safeUrl(url: string | null | undefined): string | undefined {
@@ -221,6 +222,7 @@ export function ProjectDetailView() {
   const cStore = useClientsStore()
   const crStore = useChangeRequestsStore()
   const settingsStore = useSettingsStore()
+  const { deliverables, fetchDeliverables, addDeliverable, updateDeliverable, removeDeliverable } = useResourceStore()
   const pmOptions = settingsStore.projectManagers.map(m => ({ value: m, label: m }))
 
   // revenue_planner rows fetched directly
@@ -299,6 +301,13 @@ export function ProjectDetailView() {
   const [planCRAmount, setPlanCRAmount] = useState('')
   const [planCRSaving, setPlanCRSaving] = useState(false)
 
+  // deliverables
+  const [showDeliverableModal, setShowDeliverableModal] = useState(false)
+  const [delTitle, setDelTitle] = useState('')
+  const [delDue, setDelDue] = useState('')
+  const [delHours, setDelHours] = useState<number | ''>('')
+  const [delTeam, setDelTeam] = useState('')
+
   useEffect(() => {
     pStore.fetchAll()
     cStore.fetchAll()
@@ -323,6 +332,7 @@ export function ProjectDetailView() {
     if (!id) return
     fetchRpRows(id)
     crStore.fetchByProject(id)
+    fetchDeliverables(id)
   }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -946,6 +956,39 @@ export function ProjectDetailView() {
     : project.type === 'maintenance'
       ? (maintenancePlannedTotal != null ? fmt(maintenancePlannedTotal) : contractVal != null ? `${contractVal.toLocaleString()} €/mo` : '—')
       : (project.initial_contract_value ?? contractVal) != null ? fmt(project.initial_contract_value ?? contractVal) : '—'
+
+  // ── deliverable handlers ──────────────────────────────────────────────────
+  const handleAddDeliverable = async () => {
+    try {
+      await addDeliverable({
+        project_id: id!,
+        title: delTitle.trim(),
+        due_date: delDue,
+        estimated_hours: delHours || null,
+        team: delTeam || null,
+        status: 'active',
+        notes: null,
+      })
+      toast('success', 'Deliverable added')
+      setShowDeliverableModal(false)
+      setDelTitle(''); setDelDue(''); setDelHours(''); setDelTeam('')
+    } catch { toast('error', 'Failed to add deliverable') }
+  }
+
+  const handleToggleDeliverable = async (d: ProjectDeliverable) => {
+    try {
+      await updateDeliverable(d.id, { status: d.status === 'completed' ? 'active' : 'completed' })
+      toast('success', d.status === 'completed' ? 'Reopened' : 'Marked complete')
+    } catch { toast('error', 'Failed to update') }
+  }
+
+  const handleRemoveDeliverable = async (delId: string) => {
+    try {
+      await removeDeliverable(delId)
+      toast('success', 'Deliverable removed')
+    } catch { toast('error', 'Failed to remove') }
+  }
+
   return (
     <div>
       {/* ── Project edit modal ── */}
@@ -2008,6 +2051,102 @@ export function ProjectDetailView() {
             </table>
           )}
         </div>
+
+        {/* ── Deliverables ─── */}
+        <div className="card" style={{ marginTop: 20 }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--c6)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Deliverables</h3>
+            <button className="btn btn-primary btn-sm" onClick={() => setShowDeliverableModal(true)}>+ Add</button>
+          </div>
+          <div style={{ padding: deliverables.length ? 0 : '20px' }}>
+            {deliverables.length === 0 ? (
+              <p style={{ color: 'var(--c4)', textAlign: 'center' }}>No deliverables yet</p>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: 'left', padding: '10px 20px', fontSize: 12, color: 'var(--c4)', borderBottom: '1px solid var(--c6)' }}>Title</th>
+                    <th style={{ textAlign: 'left', padding: '10px 12px', fontSize: 12, color: 'var(--c4)', borderBottom: '1px solid var(--c6)' }}>Due Date</th>
+                    <th style={{ textAlign: 'left', padding: '10px 12px', fontSize: 12, color: 'var(--c4)', borderBottom: '1px solid var(--c6)' }}>Est. Hours</th>
+                    <th style={{ textAlign: 'left', padding: '10px 12px', fontSize: 12, color: 'var(--c4)', borderBottom: '1px solid var(--c6)' }}>Team</th>
+                    <th style={{ textAlign: 'center', padding: '10px 12px', fontSize: 12, color: 'var(--c4)', borderBottom: '1px solid var(--c6)' }}>Status</th>
+                    <th style={{ width: 80, borderBottom: '1px solid var(--c6)' }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {deliverables.map(d => {
+                    const isOverdue = d.status === 'active' && d.due_date < new Date().toISOString().slice(0, 10)
+                    return (
+                      <tr key={d.id}>
+                        <td style={{ padding: '12px 20px', borderBottom: '1px solid var(--c6)', fontWeight: 600, fontSize: 14 }}>{d.title}</td>
+                        <td style={{ padding: '12px', borderBottom: '1px solid var(--c6)', fontSize: 14, color: isOverdue ? 'var(--red)' : undefined, fontWeight: isOverdue ? 700 : undefined }}>
+                          {new Date(d.due_date + 'T00:00:00').toLocaleDateString('en-GB')}
+                          {isOverdue && ' \u26A0'}
+                        </td>
+                        <td style={{ padding: '12px', borderBottom: '1px solid var(--c6)', fontSize: 14 }}>{d.estimated_hours ? `${d.estimated_hours}h` : '\u2014'}</td>
+                        <td style={{ padding: '12px', borderBottom: '1px solid var(--c6)', fontSize: 14 }}>{d.team || '\u2014'}</td>
+                        <td style={{ padding: '12px', borderBottom: '1px solid var(--c6)', textAlign: 'center' }}>
+                          <span className={`badge ${d.status === 'completed' ? 'badge-green' : d.status === 'delayed' ? 'badge-red' : isOverdue ? 'badge-red' : 'badge-blue'}`}>
+                            {d.status === 'active' && isOverdue ? 'overdue' : d.status}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px', borderBottom: '1px solid var(--c6)', textAlign: 'center' }}>
+                          <button className="btn btn-ghost btn-xs" onClick={() => handleToggleDeliverable(d)} style={{ fontSize: 12 }}>
+                            {d.status === 'completed' ? 'Reopen' : 'Complete'}
+                          </button>
+                          <button className="btn btn-ghost btn-xs" onClick={() => handleRemoveDeliverable(d.id)} style={{ color: 'var(--red)', fontSize: 12 }}>Del</button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+
+        {/* ── Add Deliverable Modal ─── */}
+        {showDeliverableModal && (
+          <div className="modal-overlay" onClick={() => setShowDeliverableModal(false)}>
+            <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 480 }}>
+              <div className="modal-header">
+                <h3>Add Deliverable</h3>
+                <button className="modal-close" onClick={() => setShowDeliverableModal(false)}>&times;</button>
+              </div>
+              <div className="modal-body">
+                <div className="form-group">
+                  <label className="form-label">Title</label>
+                  <input value={delTitle} onChange={e => setDelTitle(e.target.value)} placeholder="e.g. UX/UI Design delivery" />
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Due Date</label>
+                    <input type="date" value={delDue} onChange={e => setDelDue(e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Estimated Hours</label>
+                    <input type="number" value={delHours} onChange={e => setDelHours(e.target.value ? Number(e.target.value) : '')} min={0} step={1} placeholder="40" />
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Team</label>
+                  <select value={delTeam} onChange={e => setDelTeam(e.target.value)}>
+                    <option value="">Any team</option>
+                    <option value="ux/ui">UX/UI</option>
+                    <option value="dev">Dev</option>
+                    <option value="content">Content</option>
+                    <option value="pm">PM</option>
+                    <option value="analytics">Analytics</option>
+                  </select>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-secondary btn-sm" onClick={() => setShowDeliverableModal(false)}>Cancel</button>
+                <button className="btn btn-primary btn-sm" disabled={!delTitle.trim() || !delDue} onClick={handleAddDeliverable}>Add</button>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

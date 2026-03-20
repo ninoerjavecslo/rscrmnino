@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useProjectsStore } from '../stores/projects'
 import { useClientsStore } from '../stores/clients'
@@ -143,6 +143,7 @@ export function DashboardView() {
   const pipeStore = usePipelineStore()
   const pixelStore = usePixelStore()
 
+  const [invoicePage, setInvoicePage] = useState(1)
   const currentMonth = getMonthStr()
 
   useEffect(() => {
@@ -335,6 +336,7 @@ export function DashboardView() {
                   <div style={{ fontSize: 12, color: 'var(--c4)' }}>No pending invoices for this month.</div>
                 </div>
               ) : (
+                <>
                 <table>
                   <thead>
                     <tr>
@@ -345,7 +347,7 @@ export function DashboardView() {
                     </tr>
                   </thead>
                   <tbody>
-                    {invoicesToIssue.map(row => (
+                    {invoicesToIssue.slice((invoicePage - 1) * 5, invoicePage * 5).map(row => (
                       <tr key={row.id}>
                         <td>
                           <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--c0)' }}>{getRowLabel(row)}</span>
@@ -373,6 +375,14 @@ export function DashboardView() {
                     </tfoot>
                   )}
                 </table>
+                {invoicesToIssue.length > 5 && (
+                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: '8px 0' }}>
+                    <button className="btn btn-ghost btn-xs" disabled={invoicePage === 1} onClick={() => setInvoicePage(p => p - 1)}>←</button>
+                    <span style={{ fontSize: 12, color: 'var(--c3)' }}>{invoicePage} / {Math.ceil(invoicesToIssue.length / 5)}</span>
+                    <button className="btn btn-ghost btn-xs" disabled={invoicePage >= Math.ceil(invoicesToIssue.length / 5)} onClick={() => setInvoicePage(p => p + 1)}>→</button>
+                  </div>
+                )}
+                </>
               )}
             </div>
           </div>

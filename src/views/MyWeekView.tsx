@@ -144,6 +144,7 @@ export function MyWeekView() {
   const [teamAllocations, setTeamAllocations] = useState<Array<{ member_id: string; date: string; hours: number }>>([])
   const [actualMap, setActualMap] = useState<Record<string, number>>({})
   const [noteMap, setNoteMap] = useState<Record<string, string>>({})
+  const [projectDailyInputs, setProjectDailyInputs] = useState<Record<string, number>>({})
   const [eodLoading, setEodLoading] = useState(false)
   const [aiOptions, setAiOptions] = useState<Array<{ id: string; title: string; description: string; impact: string }>>([])
   const [aiInsights, setAiInsights] = useState<Array<{ label: string; text: string }>>([])
@@ -201,6 +202,16 @@ export function MyWeekView() {
     })
   }, [member, weekStart, weekEnd])
 
+  // Reset daily inputs when date changes
+  useEffect(() => {
+    const inputs: Record<string, number> = {}
+    for (const a of allocations.filter(x => x.date === selectedDate)) {
+      const key = a.project_id || `${a.category}:${a.label || ''}`
+      inputs[key] = (inputs[key] || 0) + a.hours
+    }
+    setProjectDailyInputs(inputs)
+  }, [selectedDate]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Computed values ────────────────────────────────────────────────────────
 
   const matchedProject = useMemo(() => {
@@ -235,19 +246,49 @@ export function MyWeekView() {
   async function handleEodSubmit() {
     if (!member) return
     setEodLoading(true)
-    const selectedAllocs = allocations.filter(a => a.date === selectedDate)
     const snapDate = selectedDate
 
-    const inserts = selectedAllocs.map(a => ({
-      allocation_id: a.id,
-      member_id: member.id,
-      date: snapDate,
-      actual_hours: actualMap[a.id] ?? a.hours,
-      note: noteMap[a.id] || null,
-    }))
+    // Save actuals for existing today allocations (distribute project input across multiple allocs proportionally)
+    const inserts = selectedAllocs.map(a => {
+      const key = a.project_id || `${a.category}:${a.label || ''}`
+      const todayPlannedForKey = weekProjectList.find(g => g.key === key)?.todayPlanned ?? a.hours
+      const userInput = projectDailyInputs[key] ?? todayPlannedForKey
+      const ratio = todayPlannedForKey > 0 ? a.hours / todayPlannedForKey : 1
+      return {
+        allocation_id: a.id,
+        member_id: member.id,
+        date: snapDate,
+        actual_hours: Math.max(0, Math.round(userInput * ratio * 2) / 2),
+        note: noteMap[a.id] || null,
+      }
+    })
+    if (inserts.length > 0) {
+      const { error: actualsErr } = await supabase.from('allocation_actuals').upsert(inserts, { onConflict: 'allocation_id' })
+      if (actualsErr) { toast('error', 'Failed to save actuals: ' + actualsErr.message); setEodLoading(false); return }
+    }
 
-    const { error: actualsErr } = await supabase.from('allocation_actuals').upsert(inserts, { onConflict: 'allocation_id' })
-    if (actualsErr) { toast('error', 'Failed to save actuals: ' + actualsErr.message); setEodLoading(false); return }
+    // Create unplanned allocations for extra work on week projects not originally today
+    const extras = weekProjectList.filter(g => g.todayPlanned === 0 && (projectDailyInputs[g.key] ?? 0) > 0)
+    for (const g of extras) {
+      const hours = projectDailyInputs[g.key]
+      const { data: newAlloc } = await supabase.from('resource_allocations').insert({
+        member_id: member.id,
+        project_id: g.projectId,
+        category: g.category,
+        date: snapDate,
+        hours,
+        is_unplanned: true,
+        is_billable: g.category === 'project' || g.category === 'maintenance',
+      }).select().single()
+      if (newAlloc) {
+        await supabase.from('allocation_actuals').insert({
+          allocation_id: newAlloc.id,
+          member_id: member.id,
+          date: snapDate,
+          actual_hours: hours,
+        })
+      }
+    }
 
     const { error: confErr } = await supabase.from('resource_confirmations').upsert(
       { member_id: member.id, date: snapDate, status: 'confirmed' },
@@ -255,14 +296,22 @@ export function MyWeekView() {
     )
     if (confErr) { toast('error', 'Failed to confirm day: ' + confErr.message); setEodLoading(false); return }
 
+    // Reload allocations to include any newly created ones
+    const { data: freshAllocs } = await supabase.from('resource_allocations')
+      .select('*, project:projects(id, pn, name)')
+      .eq('member_id', member.id).gte('date', weekStart).lte('date', weekEnd).order('date')
+    if (freshAllocs) setAllocations(freshAllocs as ResourceAllocation[])
+
     setConfirmations(prev => [
       ...prev.filter(c => c.date !== snapDate),
       { id: '', member_id: member.id, date: snapDate, status: 'confirmed', delay_reason: null, confirmed_at: new Date().toISOString() },
     ])
     toast('success', 'Day confirmed!')
 
-    const hasDeltas = selectedAllocs.some(a => (actualMap[a.id] ?? a.hours) !== a.hours)
-    if (hasDeltas) await fetchAiAdvice(selectedAllocs, snapDate)
+    const hasDeltas = weekProjectList.some(g =>
+      Math.abs((projectDailyInputs[g.key] ?? g.todayPlanned) - g.todayPlanned) > 0.1
+    )
+    if (hasDeltas || extras.length > 0) await fetchAiAdvice(selectedAllocs, snapDate)
     setEodLoading(false)
   }
 
@@ -361,6 +410,50 @@ export function MyWeekView() {
 
   const capacity = member?.hours_per_day ?? 8
 
+  // All unique projects for this week, today's planned hours first
+  const weekProjectList = useMemo(() => {
+    type Entry = { key: string; projectId: string | null; label: string; category: AllocationCategory; todayPlanned: number; todayAllocIds: string[] }
+    const map = new Map<string, Entry>()
+    for (const a of selectedAllocs) {
+      const key = a.project_id || `${a.category}:${a.label || ''}`
+      if (!map.has(key)) {
+        const label = a.project ? `${a.project.pn} — ${a.project.name}` : a.label || a.category
+        map.set(key, { key, projectId: a.project_id || null, label, category: a.category as AllocationCategory, todayPlanned: 0, todayAllocIds: [] })
+      }
+      const g = map.get(key)!
+      g.todayPlanned += a.hours
+      g.todayAllocIds.push(a.id)
+    }
+    for (const a of allocations) {
+      if (a.date === selectedDate) continue
+      const key = a.project_id || `${a.category}:${a.label || ''}`
+      if (!map.has(key)) {
+        const label = a.project ? `${a.project.pn} — ${a.project.name}` : a.label || a.category
+        map.set(key, { key, projectId: a.project_id || null, label, category: a.category as AllocationCategory, todayPlanned: 0, todayAllocIds: [] })
+      }
+    }
+    return [...map.values()].sort((a, b) => b.todayPlanned - a.todayPlanned)
+  }, [allocations, selectedAllocs, selectedDate])
+
+  // Per-project week totals (planned vs confirmed)
+  const weekProjectProgress = useMemo(() => {
+    type PEntry = { key: string; label: string; category: AllocationCategory; planned: number; done: number }
+    const map = new Map<string, PEntry>()
+    for (const a of allocations) {
+      const key = a.project_id || `${a.category}:${a.label || ''}`
+      if (!map.has(key)) {
+        const label = a.project ? `${a.project.pn} — ${a.project.name}` : a.label || a.category
+        map.set(key, { key, label, category: a.category as AllocationCategory, planned: 0, done: 0 })
+      }
+      const g = map.get(key)!
+      g.planned += a.hours
+      if (confirmations.some(c => c.date === a.date && c.status === 'confirmed')) {
+        g.done += actualMap[a.id] ?? a.hours
+      }
+    }
+    return [...map.values()].sort((a, b) => b.planned - a.planned)
+  }, [allocations, confirmations, actualMap])
+
   const teamOverloaded = teamMembers.filter(tm => {
     if (!member || tm.id === member.id) return false
     const status = getTeamMemberStatus(tm.id, weekDays, teamAllocations, tm.hours_per_day)
@@ -446,8 +539,8 @@ export function MyWeekView() {
             </span>
             <button
               className="btn btn-ghost btn-xs"
-              disabled={weekOffset >= 0}
-              style={{ opacity: weekOffset >= 0 ? 0.4 : 1, cursor: weekOffset >= 0 ? 'not-allowed' : 'pointer' }}
+              disabled={false}
+              style={{ opacity: 1, cursor: 'pointer' }}
               onClick={() => {
                 const m = getOffsetMonday(weekOffset + 1)
                 setWeekOffset(w => w + 1)
@@ -580,48 +673,100 @@ export function MyWeekView() {
           ))}
         </div>
 
-        {/* EOD check-in section */}
+        {/* Weekly project progress */}
+        {weekProjectProgress.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              This week — project progress
+            </div>
+            {weekProjectProgress.map(g => {
+              const remaining = Math.max(0, g.planned - g.done)
+              const pct = g.planned > 0 ? Math.min(1, g.done / g.planned) : 0
+              return (
+                <div key={g.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--c1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.label}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+                      <div style={{ flex: 1, height: 4, background: 'var(--c6)', borderRadius: 2 }}>
+                        <div style={{ width: `${pct * 100}%`, height: 4, borderRadius: 2, background: pct >= 1 ? 'var(--green)' : 'var(--navy)', transition: 'width .3s' }} />
+                      </div>
+                      <span style={{ fontSize: 10, color: 'var(--c3)', whiteSpace: 'nowrap' }}>
+                        {g.done}h / {g.planned}h
+                        {remaining > 0 && <span style={{ color: 'var(--amber)', fontWeight: 700 }}> · {remaining}h left</span>}
+                        {pct >= 1 && <span style={{ color: 'var(--green)', fontWeight: 700 }}> · done</span>}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* EOD check-in / task view */}
         {isConfirmed ? (
-          <div style={{
-            background: 'var(--green-bg)', border: '1px solid var(--green-border)',
-            borderRadius: 10, padding: '14px 18px',
-            display: 'flex', alignItems: 'center', gap: 10,
-          }}>
-            <span style={{ fontSize: 18 }}>✓</span>
-            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--green)' }}>Day confirmed</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{
+              background: 'var(--green-bg)', border: '1px solid var(--green-border)',
+              borderRadius: 10, padding: '10px 14px',
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              <span style={{ fontSize: 16 }}>✓</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--green)' }}>Day confirmed</span>
+            </div>
+            {weekProjectList.filter(g => g.todayPlanned > 0 || (projectDailyInputs[g.key] ?? 0) > 0).map(g => (
+              <div key={g.key} style={{
+                borderRadius: 10, border: '1px solid var(--c6)', padding: '10px 14px',
+                display: 'flex', alignItems: 'center', gap: 10,
+              }}>
+                <div style={{ width: 3, borderRadius: 3, background: 'var(--green)', flexShrink: 0, alignSelf: 'stretch' }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--c0)' }}>{g.label}</div>
+                  <div style={{ fontSize: 11, color: 'var(--c3)', marginTop: 2 }}>
+                    {projectDailyInputs[g.key] ?? g.todayPlanned}h confirmed
+                    {g.todayPlanned > 0 && Math.abs((projectDailyInputs[g.key] ?? g.todayPlanned) - g.todayPlanned) > 0.1 && (
+                      <span style={{ marginLeft: 6, color: 'var(--amber)', fontWeight: 600 }}>
+                        (planned {g.todayPlanned}h)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         ) : isFutureDay ? (
           <div style={{ fontSize: 13, color: 'var(--c3)', padding: '12px 0' }}>No check-in needed for future days.</div>
-        ) : selectedAllocs.length === 0 ? (
+        ) : weekProjectList.length === 0 ? (
           <div style={{ fontSize: 13, color: 'var(--c3)', padding: '12px 0' }}>No work planned for this day.</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-              End of day check-in — how many hours did you actually work?
+              End of day check-in — how many hours did you work?
             </div>
 
-            {selectedAllocs.map(a => {
-              const actual = actualMap[a.id] ?? a.hours
-              const changed = actual !== a.hours
-              const delta = actual - a.hours
-              const taskName = a.category === 'project'
-                ? `${a.project?.pn ?? '?'} — ${a.project?.name ?? 'Unknown'}`
-                : a.label || a.category
+            {weekProjectList.map(g => {
+              const actual = projectDailyInputs[g.key] ?? g.todayPlanned
+              const changed = Math.abs(actual - g.todayPlanned) > 0.01
+              const delta = actual - g.todayPlanned
+              const isExtra = g.todayPlanned === 0
               return (
-                <div key={a.id} style={{
+                <div key={g.key} style={{
                   borderRadius: 10,
-                  background: changed ? 'var(--amber-bg)' : '#fff',
-                  border: changed ? '1px solid var(--amber-border)' : '1px solid var(--c6)',
+                  background: isExtra && actual > 0 ? 'var(--blue-bg)' : changed ? 'var(--amber-bg)' : '#fff',
+                  border: isExtra && actual > 0 ? '1px solid var(--blue-border)' : changed ? '1px solid var(--amber-border)' : '1px solid var(--c6)',
                   padding: '12px 14px',
                   display: 'flex',
                   gap: 12,
                 }}>
-                  <div style={{ width: 3, borderRadius: 3, background: 'var(--navy)', flexShrink: 0, alignSelf: 'stretch' }} />
+                  <div style={{ width: 3, borderRadius: 3, background: isExtra ? 'var(--blue)' : 'var(--navy)', flexShrink: 0, alignSelf: 'stretch' }} />
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--c0)' }}>{taskName}</span>
-                      <span style={{ fontSize: 11, color: 'var(--c3)' }}>Planned: {a.hours}h</span>
-                      {changed && (
+                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--c0)' }}>{g.label}</span>
+                      {isExtra
+                        ? <span style={{ fontSize: 11, color: 'var(--blue)', fontWeight: 600 }}>not planned today</span>
+                        : <span style={{ fontSize: 11, color: 'var(--c3)' }}>Planned: {g.todayPlanned}h</span>
+                      }
+                      {!isExtra && changed && (
                         <span style={{
                           fontSize: 11, fontWeight: 700,
                           color: delta < 0 ? 'var(--amber)' : 'var(--blue)',
@@ -632,29 +777,12 @@ export function MyWeekView() {
                           {delta > 0 ? '+' : ''}{delta}h vs plan
                         </span>
                       )}
-                      {changed && (
-                        <span style={{ fontSize: 10, color: 'var(--navy)', fontWeight: 600 }}>→ AI will suggest reschedule</span>
-                      )}
                     </div>
                     <HourChips
-                      planned={a.hours}
+                      planned={g.todayPlanned}
                       actual={actual}
-                      onChange={h => setActualMap(prev => ({ ...prev, [a.id]: h }))}
+                      onChange={h => setProjectDailyInputs(prev => ({ ...prev, [g.key]: h }))}
                     />
-                    {changed && (
-                      <input
-                        type="text"
-                        placeholder="Add a note (optional)"
-                        value={noteMap[a.id] ?? ''}
-                        onChange={e => setNoteMap(prev => ({ ...prev, [a.id]: e.target.value }))}
-                        style={{
-                          marginTop: 8, width: '100%', padding: '6px 10px',
-                          borderRadius: 6, border: '1px solid var(--amber-border)',
-                          fontSize: 12, fontFamily: 'inherit', boxSizing: 'border-box',
-                          background: '#fff',
-                        }}
-                      />
-                    )}
                   </div>
                 </div>
               )

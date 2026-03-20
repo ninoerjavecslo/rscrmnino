@@ -12,6 +12,7 @@ function IconTool()      { return <svg width="16" height="16" viewBox="0 0 24 24
 function IconTarget()    { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg> }
 function IconZap()       { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> }
 function IconSparkle()   { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5z"/><path d="M19 3l.75 2.25L22 6l-2.25.75L19 9l-.75-2.25L16 6l2.25-.75z"/></svg> }
+function IconGrid()      { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> }
 
 const nav = ({isActive}: {isActive: boolean}) => 'sidebar-item' + (isActive ? ' active' : '')
 
@@ -64,6 +65,15 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
           Forecast
         </NavLink>
+
+        <div className="sidebar-divider" />
+
+        <div className="sidebar-group-label">Planning</div>
+        <NavLink to="/resource-planning" className={nav}><IconGrid /> Allocation</NavLink>
+        <NavLink to="/resource-reports" className={nav}><IconBarChart /> Reports</NavLink>
+        <NavLink to="/resource-monthly" className={nav}><IconCalendar /> Monthly</NavLink>
+        <NavLink to="/resource-by-project" className={nav}><IconGrid /> By Project</NavLink>
+        <NavLink to="/team" className={nav}><IconUsers /> Team</NavLink>
 
         <div className="sidebar-divider" />
 

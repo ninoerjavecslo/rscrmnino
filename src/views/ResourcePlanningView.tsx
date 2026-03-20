@@ -1,12 +1,15 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useResourceStore } from '../stores/resource'
 import { useProjectsStore } from '../stores/projects'
 import { Select } from '../components/Select'
 import { toast } from '../lib/toast'
-import type { AllocationCategory, Project } from '../lib/types'
+import type { AllocationCategory, Project, ResourceAllocation } from '../lib/types'
 import { analyzeMemberBuffer } from '../lib/bufferAnalysis'
 import type { MemberBufferStats } from '../lib/bufferAnalysis'
 import { distributeWeekly } from '../lib/distributeWeekly'
+import { supabase } from '../lib/supabase'
+import { useTemplates } from '../hooks/useTemplates'
+import type { AllocationTemplate, TemplateEntry } from '../lib/types'
 
 /* ── helpers ──────────────────────────────────────────────────── */
 
@@ -111,6 +114,8 @@ export function ResourcePlanningView() {
   const projects: Project[] = useProjectsStore(s => s.projects)
   const fetchProjects = useProjectsStore(s => s.fetchAll)
 
+  const { templates, saveTemplate, deleteTemplate, applyTemplate } = useTemplates()
+
   const [weekStart, setWeekStart] = useState(() => getMonday(new Date()))
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [detailGroup, setDetailGroup] = useState<AllocGroup | null>(null)
@@ -138,6 +143,15 @@ export function ResourcePlanningView() {
   const [batchWeeks, setBatchWeeks] = useState(4)
   const [batchSaving, setBatchSaving] = useState(false)
 
+  // template state
+  const [showTemplatesDropdown, setShowTemplatesDropdown] = useState(false)
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false)
+  const [saveTemplateName, setSaveTemplateName] = useState('')
+  const [lastWeekDismissed, setLastWeekDismissed] = useState(
+    () => sessionStorage.getItem('rp_lastweek_dismissed_' + getMonday(new Date())) === '1'
+  )
+  const [lastWeekAllocations, setLastWeekAllocations] = useState<ResourceAllocation[]>([])
+
   // smart plan modal
   const [showSmartPlan, setShowSmartPlan] = useState(false)
   const [smartLoading, setSmartLoading] = useState(false)
@@ -164,6 +178,27 @@ export function ResourcePlanningView() {
       setBufferStats(prev => new Map(prev).set(assignFor, stats))
     })
   }, [assignFor])
+
+  useEffect(() => {
+    setLastWeekDismissed(sessionStorage.getItem('rp_lastweek_dismissed_' + weekStart) === '1')
+  }, [weekStart])
+
+  useEffect(() => {
+    const prevMonday = (() => {
+      const d = new Date(weekStart + 'T00:00:00')
+      d.setDate(d.getDate() - 7)
+      return localDate(d)
+    })()
+    const prevFriday = (() => {
+      const d = new Date(weekStart + 'T00:00:00')
+      d.setDate(d.getDate() - 3)
+      return localDate(d)
+    })()
+    supabase.from('resource_allocations')
+      .select('*, project:projects(id, pn, name)')
+      .gte('date', prevMonday).lte('date', prevFriday)
+      .then(({ data }) => setLastWeekAllocations((data ?? []) as ResourceAllocation[]))
+  }, [weekStart])
 
   /* ── grouping ─── */
 
@@ -198,6 +233,46 @@ export function ResourcePlanningView() {
   const unplannedCount = allocations.filter(a => a.is_unplanned).length
   const mTotal = (mid: string) => (groups[mid] || []).reduce((s, g) => s + g.weekTotal, 0)
   const mDayTotal = (mid: string, d: string) => allocations.filter(a => a.member_id === mid && a.date === d).reduce((s, a) => s + a.hours, 0)
+
+  const showLastWeekBanner = !lastWeekDismissed
+    && allocations.length === 0
+    && lastWeekAllocations.length > 0
+
+  const lastWeekSummary = useMemo(() => {
+    const groups: Record<string, number> = {}
+    for (const a of lastWeekAllocations) {
+      const label = (a.project as { pn?: string } | null)?.pn ?? (a as { label?: string }).label ?? a.category
+      const key = `${a.member_id}::${label}`
+      groups[key] = (groups[key] || 0) + a.hours
+    }
+    return Object.entries(groups).slice(0, 4).map(([key, h]) => {
+      const [mid, label] = key.split('::')
+      const m = allActive.find(x => x.id === mid)
+      return `${m?.name ?? '?'} ${h}h ${label}`
+    }).join(' · ')
+  }, [lastWeekAllocations, allActive])
+
+  function buildLastWeekTemplate(): Pick<AllocationTemplate, 'entries'> {
+    const grps: Record<string, TemplateEntry> = {}
+    for (const a of lastWeekAllocations) {
+      const key = `${a.member_id}::${a.project_id ?? a.category}`
+      if (!grps[key]) {
+        const m = allActive.find(x => x.id === a.member_id)
+        const proj = a.project as { pn?: string; name?: string } | null
+        grps[key] = {
+          member_id: a.member_id,
+          member_name: m?.name ?? '?',
+          project_id: a.project_id ?? null,
+          project_label: proj ? `${proj.pn} — ${proj.name}` : (a as { label?: string }).label ?? a.category,
+          category: a.category,
+          weekly_hours: 0,
+          is_billable: a.is_billable,
+        }
+      }
+      grps[key].weekly_hours += a.hours
+    }
+    return { entries: Object.values(grps) }
+  }
 
   /* ── assign ─── */
 
@@ -412,12 +487,51 @@ export function ResourcePlanningView() {
       <div className="page-header">
         <div><h1>Resource Planning</h1><p>Weekly team allocation</p></div>
         <div style={{ display: 'flex', gap: 8 }}>
+          {/* Templates dropdown */}
+          <div style={{ position: 'relative' }}>
+            <button className="btn btn-secondary btn-sm" onClick={e => { e.stopPropagation(); setShowTemplatesDropdown(v => !v) }}>
+              📋 Templates ▾
+            </button>
+            {showTemplatesDropdown && (
+              <div style={{
+                position: 'absolute', top: '100%', right: 0, zIndex: 200, marginTop: 4,
+                background: '#fff', border: '1px solid var(--c6)', borderRadius: 8,
+                boxShadow: '0 8px 24px rgba(0,0,0,0.12)', minWidth: 280, padding: 8,
+              }} onClick={e => e.stopPropagation()}>
+                {templates.length === 0 && (
+                  <div style={{ padding: '10px 8px', fontSize: 13, color: 'var(--c3)' }}>No saved templates yet.</div>
+                )}
+                {templates.map(t => (
+                  <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 6 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--c0)' }}>{t.name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--c3)' }}>{t.entries.length} entries</div>
+                    </div>
+                    <button className="btn btn-primary btn-xs" onClick={async () => {
+                      setShowTemplatesDropdown(false)
+                      await applyTemplate(t, weekStart, allocations, allActive, addAllocationsBatch)
+                    }}>Apply</button>
+                    <button className="btn btn-ghost btn-xs" onClick={() => deleteTemplate(t.id)}>×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Save as template */}
+          <button className="btn btn-secondary btn-sm" onClick={() => {
+            const d = new Date(weekStart + 'T00:00:00')
+            const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+            setSaveTemplateName(`Sprint Week ${label}`)
+            setShowSaveTemplate(true)
+          }}>💾 Save week</button>
+
           <button className="btn btn-secondary btn-sm" onClick={openBatch}>⚡ Batch Assign</button>
           <button className="btn btn-primary btn-sm" onClick={() => { setShowSmartPlan(true); runSmartPlan() }}>✦ Smart Plan</button>
         </div>
       </div>
 
-      <div className="page-content">
+      <div className="page-content" onClick={() => setShowTemplatesDropdown(false)}>
         {/* ── Week nav ─── */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
           <button className="btn btn-secondary" onClick={() => setWeekStart(shiftWeek(weekStart, -1))} style={{ height: 42, padding: '0 18px', fontSize: 14 }}>&larr; Prev</button>
@@ -426,6 +540,26 @@ export function ResourcePlanningView() {
           <button className="btn btn-secondary" onClick={() => setWeekStart(shiftWeek(weekStart, 1))} style={{ height: 42, padding: '0 18px', fontSize: 14 }}>Next &rarr;</button>
           {loading && <span style={{ fontSize: 13, color: 'var(--c4)' }}>Loading...</span>}
         </div>
+
+        {showLastWeekBanner && (
+          <div style={{
+            background: 'var(--navy-light)', border: '1px solid var(--c5)',
+            borderRadius: 8, padding: '10px 14px', marginBottom: 12,
+            display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <span style={{ fontSize: 14 }}>💡</span>
+            <span style={{ fontSize: 13, flex: 1, color: 'var(--c1)' }}>
+              <strong>Repeat last week?</strong> {lastWeekSummary}
+            </span>
+            <button className="btn btn-primary btn-sm" onClick={async () => {
+              await applyTemplate(buildLastWeekTemplate(), weekStart, allocations, allActive, addAllocationsBatch)
+            }}>Apply</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => {
+              sessionStorage.setItem('rp_lastweek_dismissed_' + weekStart, '1')
+              setLastWeekDismissed(true)
+            }}>Dismiss</button>
+          </div>
+        )}
 
         {/* ── Filters ─── */}
         <div style={{ display: 'flex', gap: 12, marginBottom: 20, alignItems: 'center' }}>
@@ -1211,6 +1345,67 @@ export function ResourcePlanningView() {
           </div>
         )
       })()}
+
+      {/* ═══════════ SAVE TEMPLATE MODAL ═══════════ */}
+      {showSaveTemplate && (
+        <div className="modal-overlay" onClick={() => setShowSaveTemplate(false)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 480 }}>
+            <div className="modal-header">
+              <h3>Save week as template</h3>
+              <button className="modal-close" onClick={() => setShowSaveTemplate(false)}>&times;</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label className="form-label">Template name</label>
+                <input className="form-input" value={saveTemplateName}
+                  onChange={e => setSaveTemplateName(e.target.value)} />
+              </div>
+              <div style={{ marginTop: 12 }}>
+                {(() => {
+                  const grps: Record<string, number> = {}
+                  for (const a of allocations) {
+                    const proj = a.project as { pn?: string; name?: string } | null
+                    const label = proj ? `${proj.pn} — ${proj.name}` : (a as { label?: string }).label ?? a.category
+                    const m = allActive.find(x => x.id === a.member_id)
+                    const key = `${m?.name ?? '?'} — ${label}`
+                    grps[key] = (grps[key] || 0) + a.hours
+                  }
+                  return Object.entries(grps).map(([key, h]) => (
+                    <div key={key} style={{ fontSize: 13, color: 'var(--c2)', padding: '3px 0' }}>
+                      {key}: <strong>{h}h</strong>
+                    </div>
+                  ))
+                })()}
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setShowSaveTemplate(false)}>Cancel</button>
+              <button className="btn btn-primary" disabled={!saveTemplateName.trim()} onClick={async () => {
+                const entryGroups: Record<string, TemplateEntry> = {}
+                for (const a of allocations) {
+                  const key = `${a.member_id}::${a.project_id ?? a.category}`
+                  if (!entryGroups[key]) {
+                    const m = allActive.find(x => x.id === a.member_id)
+                    const proj = a.project as { pn?: string; name?: string } | null
+                    entryGroups[key] = {
+                      member_id: a.member_id,
+                      member_name: m?.name ?? '?',
+                      project_id: a.project_id ?? null,
+                      project_label: proj ? `${proj.pn} — ${proj.name}` : (a as { label?: string }).label ?? a.category,
+                      category: a.category,
+                      weekly_hours: 0,
+                      is_billable: a.is_billable,
+                    }
+                  }
+                  entryGroups[key].weekly_hours += a.hours
+                }
+                await saveTemplate(saveTemplateName.trim(), Object.values(entryGroups))
+                setShowSaveTemplate(false)
+              }}>Save template</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

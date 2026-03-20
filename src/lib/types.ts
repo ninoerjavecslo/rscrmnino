@@ -387,6 +387,104 @@ export interface ReminderRule {
   updated_at: string
 }
 
+// ── Resource Planning ─────────────────────────────────────────────────────────
+
+export interface Team {
+  id: string
+  name: string
+  color: string
+  display_order: number
+  created_at: string
+}
+
+export interface TeamMember {
+  id: string
+  name: string
+  role?: string | null
+  team_id?: string | null
+  hours_per_day: number
+  display_order: number
+  active: boolean
+  share_token: string
+  created_at: string
+  // Joined
+  team?: Pick<Team, 'id' | 'name' | 'color'> | null
+}
+
+export interface MemberProject {
+  id: string
+  member_id: string
+  project_id: string
+  role?: string | null
+  created_at: string
+  // Joined
+  project?: Pick<Project, 'id' | 'pn' | 'name' | 'status' | 'type'> & { client?: Pick<Client, 'id' | 'name'> | null } | null
+}
+
+export interface TimeOff {
+  id: string
+  member_id: string
+  start_date: string
+  end_date: string
+  reason?: string | null
+  created_at: string
+}
+
+export type AllocationCategory = 'project' | 'maintenance' | 'internal' | 'meeting' | 'admin' | 'leave'
+
+export interface ResourceAllocation {
+  id: string
+  member_id: string
+  project_id?: string | null
+  category: AllocationCategory
+  date: string           // YYYY-MM-DD
+  hours: number
+  label?: string | null
+  notes?: string | null
+  recurring_group_id?: string | null
+  is_billable: boolean
+  deadline_date?: string | null  // YYYY-MM-DD
+  is_unplanned: boolean
+  displaced_allocation_id?: string | null
+  created_at: string
+  // Joined
+  member?: Pick<TeamMember, 'id' | 'name'> | null
+  project?: Pick<Project, 'id' | 'pn' | 'name'> | null
+}
+
+export interface ProjectDeliverable {
+  id: string
+  project_id: string
+  title: string
+  due_date: string        // YYYY-MM-DD
+  estimated_hours?: number | null
+  team?: string | null
+  status: 'active' | 'completed' | 'delayed'
+  notes?: string | null
+  created_at: string
+  // Joined
+  project?: Pick<Project, 'id' | 'pn' | 'name'> | null
+}
+
+export interface ResourceConfirmation {
+  id: string
+  member_id: string
+  date: string           // YYYY-MM-DD
+  status: 'confirmed' | 'delayed'
+  delay_reason?: string | null
+  confirmed_at: string
+}
+
+export interface AllocationActual {
+  id: string
+  allocation_id: string
+  member_id: string
+  date: string           // YYYY-MM-DD
+  actual_hours: number
+  note?: string | null
+  created_at: string
+}
+
 // ── Pixel AI ──────────────────────────────────────────────────────────────────
 
 export interface PixelConversation {

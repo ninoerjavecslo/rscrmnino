@@ -85,8 +85,8 @@ function DomainRowInputs({ rows, onChange }: { rows: DomainRow[]; onChange: (r: 
       {rows.map((row, i) => (
         <div key={i} style={{display:'grid',gridTemplateColumns:cols,gap:'6px 10px',alignItems:'center',marginBottom:8}}>
           <input value={row.domain_name} onChange={e => update(i,'domain_name',e.target.value)} placeholder="example.si" style={{height:36}} />
-          <input type="date" value={row.registered_date} onChange={e => update(i,'registered_date',e.target.value)} style={{height:36,width:'100%'}} />
-          <input type="date" value={row.expiry_date} onChange={e => update(i,'expiry_date',e.target.value)} style={{height:36,width:'100%'}} />
+          <input type="date" lang="en-GB" value={row.registered_date} onChange={e => update(i,'registered_date',e.target.value)} style={{height:36,width:'100%'}} />
+          <input type="date" lang="en-GB" value={row.expiry_date} onChange={e => update(i,'expiry_date',e.target.value)} style={{height:36,width:'100%'}} />
           <input type="number" value={row.yearly_amount} onChange={e => update(i,'yearly_amount',e.target.value)} placeholder="25" style={{height:36}} />
           <button onClick={() => remove(i)} disabled={rows.length === 1}
             style={{width:32,height:36,border:'1px solid var(--c6)',borderRadius:6,background:'#fff',cursor:'pointer',color:'var(--c4)',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>×</button>

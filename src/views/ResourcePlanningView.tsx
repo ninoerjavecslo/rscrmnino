@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import { useResourceStore } from '../stores/resource'
 import { useProjectsStore } from '../stores/projects'
 import { Select } from '../components/Select'
@@ -112,8 +112,8 @@ function WizardSteps({ step }: { step: number }) {
         const done = step > n
         const active = step === n
         return (
-          <>
-            <div key={n} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+          <Fragment key={n}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
               <div style={{
                 width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center',
                 justifyContent: 'center', fontSize: 10, fontWeight: 800,
@@ -125,7 +125,7 @@ function WizardSteps({ step }: { step: number }) {
             {i < labels.length - 1 && (
               <div style={{ flex: 1, height: 2, background: step > n ? 'var(--navy)' : 'var(--c6)', margin: '0 4px', marginBottom: 14 }} />
             )}
-          </>
+          </Fragment>
         )
       })}
     </div>
@@ -582,9 +582,17 @@ export function ResourcePlanningView() {
 
       const plan = (data.weeks ?? []).map((w: { week_start: string; allocations: { member_id: string; project_id: string; weekly_hours: number; reason: string }[] }) => ({
         week_start: w.week_start,
-        allocations: (w.allocations ?? []).map((a: { member_id: string; project_id: string; weekly_hours: number; reason: string }) => ({
-          ...a, _id: Math.random().toString(36).slice(2)
-        })),
+        allocations: (w.allocations ?? [])
+          .map((a: { member_id: string; project_id: string; weekly_hours: number; reason: string }) => ({
+            ...a,
+            weekly_hours: Number(a.weekly_hours),
+            _id: Math.random().toString(36).slice(2),
+          }))
+          .filter((a: { member_id: string; project_id: string; weekly_hours: number }) =>
+            a.weekly_hours > 0 &&
+            allActive.some(m => m.id === a.member_id) &&
+            wizardSelectedProjects.has(a.project_id)
+          ),
       }))
       setWizardPlan(plan)
       setWizardStep(3)

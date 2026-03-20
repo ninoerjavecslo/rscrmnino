@@ -3,9 +3,12 @@ import { useRevenuePlannerStore } from '../stores/revenuePlanner'
 import { useProjectsStore } from '../stores/projects'
 import { useClientsStore } from '../stores/clients'
 import { useInfraStore } from '../stores/infrastructure'
+import { useDomainsStore } from '../stores/domains'
+import { useChangeRequestsStore } from '../stores/changeRequests'
 import { supabase } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import type { RevenuePlanner, Project, HostingClient } from '../lib/types'
+import { hostingActiveInMonth } from '../lib/types'
 
 // ── Probability helpers ───────────────────────────────────────────────────────
 
@@ -144,8 +147,8 @@ function PlanForm({ project, month, onSave, onCancel, saving }: PlanFormProps) {
 // ── Actual amount cell (static display only) ────────────────────────────────
 
 function ActualAmountCell({ row }: { row: RevenuePlanner }) {
-  if (row.status === 'deferred' || row.status === 'retainer' || row.status === 'planned') {
-    return <span style={{ color: 'var(--c5)' }}>—</span>
+  if (row.status === 'planned' || row.status === 'deferred' || row.status === 'retainer') {
+    return <span style={{ fontWeight: 700, color: 'var(--red)', fontVariantNumeric: 'tabular-nums' }}>0 €</span>
   }
   // issued or paid
   const amount = row.actual_amount ?? row.planned_amount
@@ -165,6 +168,7 @@ export function ThisMonthView() {
   const pStore = useProjectsStore()
   const cStore = useClientsStore()
   const infraStore = useInfraStore()
+  const domainsStore = useDomainsStore()
 
   // Month offset for navigation
   const [monthOffset, setMonthOffset] = useState(0)
@@ -189,6 +193,25 @@ export function ThisMonthView() {
   const [confirmActual, setConfirmActual] = useState('')
   const [confirmNote, setConfirmNote] = useState('')
   const [confirmSaving, setConfirmSaving] = useState(false)
+  const [confirmOverageType, setConfirmOverageType] = useState<'cr' | 'overshoot'>('cr')
+  const [confirmPlannedTotal, setConfirmPlannedTotal] = useState(0) // includes linked hosting
+  const crStore = useChangeRequestsStore()
+
+  // Add Cost modal
+  const [showAddCost, setShowAddCost] = useState(false)
+  const [addCostProject, setAddCostProject] = useState('')
+  const [addCostDesc, setAddCostDesc] = useState('')
+  const [addCostAmount, setAddCostAmount] = useState('')
+  const [addCostSaving, setAddCostSaving] = useState(false)
+
+  // Add Invoice modal
+  const [showAddInvoice, setShowAddInvoice] = useState(false)
+  const [addInvClient, setAddInvClient] = useState('')
+  const [addInvNewClient, setAddInvNewClient] = useState('')
+  const [addInvProject, setAddInvProject] = useState('')
+  const [addInvPN, setAddInvPN] = useState('')
+  const [addInvAmount, setAddInvAmount] = useState('')
+  const [addInvSaving, setAddInvSaving] = useState(false)
 
   // "Not Invoiced" defer modal
   const [deferRow, setDeferRow] = useState<RevenuePlanner | null>(null)
@@ -202,8 +225,16 @@ export function ThisMonthView() {
   const [deferDomainMonth, setDeferDomainMonth] = useState('')
   const [deferDomainSaving, setDeferDomainSaving] = useState(false)
 
-  // Hosting confirmation
+  // Hosting confirmation modal
   const [hostingConfirming, setHostingConfirming] = useState<string | null>(null)
+  const [hostingConfirmModal, setHostingConfirmModal] = useState<{ id: string; clientName: string; amount: number } | null>(null)
+
+  // Batch hosting confirm
+  const [batchSelectedHosting, setBatchSelectedHosting] = useState<Set<string>>(new Set())
+  const [batchConfirmingHosting, setBatchConfirmingHosting] = useState(false)
+
+  // Domain renewal confirming (from domainsStore)
+  const [domainConfirming, setDomainConfirming] = useState<string | null>(null)
 
   // Fetch on mount and when month changes
   useEffect(() => {
@@ -211,6 +242,7 @@ export function ThisMonthView() {
     // Reset local overrides when month changes
     setLocalOverrides({})
     setPlanFormOpen(null)
+    setBatchSelectedHosting(new Set())
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentMonth])
 
@@ -218,6 +250,7 @@ export function ThisMonthView() {
     if (pStore.projects.length === 0) pStore.fetchAll()
     if (cStore.clients.length === 0) cStore.fetchAll()
     infraStore.fetchAll()
+    domainsStore.fetchAll()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -234,23 +267,40 @@ export function ThisMonthView() {
   const nonHostingRows = rows.filter(r => r.hosting_client_id == null && r.status !== 'cost' && (r.project_id != null || r.maintenance_id != null || r.domain_id != null))
 
   const maintenanceHostingExtra = rows
-    .filter(r => r.maintenance_id != null && r.domain_id == null)
+    .filter(r => r.maintenance_id != null && r.domain_id == null && r.status !== 'cost' && !r.notes?.startsWith('CR:'))
     .reduce((s, r) => {
-      const h = infraStore.hostingClients.find(h => h.maintenance_id === r.maintenance_id && h.cycle === 'monthly' && h.status === 'active')
+      const h = infraStore.hostingClients.find(h => h.maintenance_id === r.maintenance_id && h.cycle === 'monthly' && hostingActiveInMonth(h, currentMonth))
       return s + (h?.amount ?? 0)
     }, 0)
   const standaloneHostingTotal = infraStore.hostingClients
-    .filter(h => h.status === 'active' && h.cycle === 'monthly' && !h.maintenance_id)
+    .filter(h => hostingActiveInMonth(h, currentMonth) && h.cycle === 'monthly' && !h.maintenance_id)
     .reduce((s, h) => s + h.amount, 0)
 
+  const currentMonthNum = parseInt(currentMonth.slice(5, 7))
+
   // Yearly hosting: look for revenue_planner rows this month with a yearly hosting client
+  // Only show if the hosting client's billing_month matches the current month
   const yearlyHostingItems = rows
     .filter(r => r.hosting_client_id != null)
     .map(r => {
-      const h = infraStore.hostingClients.find(h => h.id === r.hosting_client_id && h.cycle === 'yearly')
+      const h = infraStore.hostingClients.find(h =>
+        h.id === r.hosting_client_id &&
+        h.cycle === 'yearly' &&
+        h.billing_month === currentMonthNum
+      )
       return h ? { row: r, h } : null
     })
     .filter((x): x is { row: RevenuePlanner; h: HostingClient } => x != null)
+
+  // Yearly hosting clients due this month but missing an rp row (e.g. not yet planned)
+  const yearlyHostingItemIds = new Set(yearlyHostingItems.map(x => x.h.id))
+  const yearlyHostingDue = infraStore.hostingClients.filter(h =>
+    h.cycle === 'yearly' &&
+    h.billing_month === currentMonthNum &&
+    hostingActiveInMonth(h, currentMonth) &&
+    !h.maintenance_id &&
+    !yearlyHostingItemIds.has(h.id)
+  )
 
   // Set of hosting_client_ids already confirmed (issued) this month in revenue_planner
   const confirmedHostingIds = new Set(
@@ -260,11 +310,25 @@ export function ThisMonthView() {
   )
 
   const yearlyHostingTotal = yearlyHostingItems.reduce((s, x) => s + (x.row.planned_amount ?? 0), 0)
-  const plannedTotal = nonHostingRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0) + maintenanceHostingExtra + standaloneHostingTotal + yearlyHostingTotal
+    + yearlyHostingDue.reduce((s, h) => s + h.amount, 0)
+
+  // ── Domains due this month but not yet in revenue_planner ────────────────────
+
+  const domainRpIds = new Set(rows.filter(r => r.domain_id != null).map(r => r.domain_id as string))
+  const domainsDue = domainsStore.domains.filter(d => {
+    if (d.archived || !d.billable || !d.yearly_amount) return false
+    const billingRef = d.registered_date ?? d.expiry_date
+    if (!billingRef) return false
+    const billingMonthNum = parseInt(billingRef.slice(5, 7))
+    return billingMonthNum === currentMonthNum && !domainRpIds.has(d.id)
+  })
+  const domainsDueTotal = domainsDue.reduce((s, d) => s + (d.yearly_amount ?? 0), 0)
+
+  const plannedTotal = nonHostingRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0) + maintenanceHostingExtra + standaloneHostingTotal + yearlyHostingTotal + domainsDueTotal
 
   const issuedRows = nonHostingRows.filter(r => r.status === 'issued' || r.status === 'paid')
   const confirmedStandaloneHostingTotal = infraStore.hostingClients
-    .filter(h => h.status === 'active' && h.cycle === 'monthly' && !h.maintenance_id && confirmedHostingIds.has(h.id))
+    .filter(h => hostingActiveInMonth(h, currentMonth) && h.cycle === 'monthly' && !h.maintenance_id && confirmedHostingIds.has(h.id))
     .reduce((s, h) => s + h.amount, 0)
   const confirmedYearlyHostingTotal = yearlyHostingItems
     .filter(x => x.row.status === 'issued' || x.row.status === 'paid')
@@ -273,18 +337,18 @@ export function ThisMonthView() {
 
   const notYetIssuedRows = nonHostingRows.filter(r => r.status === 'planned' && r.domain_id == null)
   const notYetIssuedMaintHostingExtra = notYetIssuedRows
-    .filter(r => r.maintenance_id != null)
+    .filter(r => r.maintenance_id != null && !r.notes?.startsWith('CR:'))
     .reduce((s, r) => {
-      const h = infraStore.hostingClients.find(h => h.maintenance_id === r.maintenance_id && h.cycle === 'monthly' && h.status === 'active')
+      const h = infraStore.hostingClients.find(h => h.maintenance_id === r.maintenance_id && h.cycle === 'monthly' && hostingActiveInMonth(h, currentMonth))
       return s + (h?.amount ?? 0)
     }, 0)
   const notYetIssuedStandaloneHosting = infraStore.hostingClients
-    .filter(h => h.status === 'active' && h.cycle === 'monthly' && !h.maintenance_id && !confirmedHostingIds.has(h.id))
+    .filter(h => hostingActiveInMonth(h, currentMonth) && h.cycle === 'monthly' && !h.maintenance_id && !confirmedHostingIds.has(h.id))
     .reduce((s, h) => s + h.amount, 0)
   const notYetIssuedYearlyHosting = yearlyHostingItems
     .filter(x => x.row.status === 'planned')
     .reduce((s, x) => s + (x.row.planned_amount ?? 0), 0)
-  const notYetIssuedTotal = notYetIssuedRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0) + notYetIssuedMaintHostingExtra + notYetIssuedStandaloneHosting + notYetIssuedYearlyHosting
+  const notYetIssuedTotal = notYetIssuedRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0) + notYetIssuedMaintHostingExtra + notYetIssuedStandaloneHosting + notYetIssuedYearlyHosting + domainsDueTotal
 
   const delta = issuedTotal - plannedTotal
 
@@ -297,13 +361,15 @@ export function ThisMonthView() {
   // ── Hosting revenue this month ───────────────────────────────────────────────
 
   const monthlyHosting = infraStore.hostingClients.filter(h =>
-    h.status === 'active' && h.cycle === 'monthly' && !h.maintenance_id
+    hostingActiveInMonth(h, currentMonth) && h.cycle === 'monthly' && !h.maintenance_id
   )
+  const unconfirmedMonthlyHosting = monthlyHosting.filter(h => !confirmedHostingIds.has(h.id))
 
   // ── Row separation ────────────────────────────────────────────────────────────
 
   const domainRows = rows.filter(r => r.domain_id != null)
-  const maintenanceRows = rows.filter(r => r.maintenance_id != null && r.domain_id == null)
+  const maintenanceRows = rows.filter(r => r.maintenance_id != null && r.domain_id == null && r.status !== 'cost' && !r.notes?.startsWith('CR:'))
+  const maintenanceCRRows = rows.filter(r => r.maintenance_id != null && r.domain_id == null && r.status !== 'cost' && r.notes?.startsWith('CR:'))
   const costRows = rows.filter(r => r.status === 'cost')
   const invoiceRows = rows.filter(r => r.project_id != null && r.domain_id == null && r.maintenance_id == null && r.hosting_client_id == null && r.status !== 'cost')
 
@@ -311,11 +377,13 @@ export function ThisMonthView() {
 
   function openConfirmModal(row: RevenuePlanner) {
     setConfirmModal(row)
-    const linkedHosting = row.maintenance_id
-      ? infraStore.hostingClients.find(h => h.maintenance_id === row.maintenance_id && h.cycle === 'monthly' && h.status === 'active')
+    const isCR = row.notes?.startsWith('CR:')
+    const linkedHosting = (!isCR && row.maintenance_id)
+      ? infraStore.hostingClients.find(h => h.maintenance_id === row.maintenance_id && h.cycle === 'monthly' && hostingActiveInMonth(h, currentMonth))
       : undefined
     const total = (row.planned_amount ?? 0) + (linkedHosting?.amount ?? 0)
     setConfirmActual(String(total))
+    setConfirmPlannedTotal(total)
     setConfirmNote(row.notes ?? '')
   }
 
@@ -330,12 +398,90 @@ export function ThisMonthView() {
         .eq('id', confirmModal.id)
       if (error) throw error
       setLocalOverrides(prev => ({ ...prev, [confirmModal.id]: { ...prev[confirmModal.id], status: 'issued', actual_amount: actual } }))
+      // Auto-create approved CR for project overage (same logic as ProjectDetailView)
+      // Use confirmPlannedTotal so linked hosting is NOT counted as overage
+      const extra = actual - confirmPlannedTotal
+      if (extra > 0 && confirmModal.project_id && confirmOverageType === 'cr') {
+        await crStore.add({
+          project_id: confirmModal.project_id,
+          title: `Extra: ${fmtMonthLabel(confirmModal.month)}`,
+          description: confirmNote.trim() || 'Extra above planned',
+          status: 'approved',
+          amount: extra,
+          probability: 100,
+          deal_type: 'one_time',
+          notes: 'auto_extra',
+          expected_month: null,
+          expected_end_month: null,
+          monthly_schedule: null,
+        })
+      }
       toast('success', 'Invoice confirmed')
       setConfirmModal(null)
     } catch (err) {
       toast('error', (err as Error).message)
     } finally {
       setConfirmSaving(false)
+    }
+  }
+
+  async function handleAddCost() {
+    if (!addCostProject || !addCostAmount) return
+    setAddCostSaving(true)
+    try {
+      const { error } = await supabase
+        .from('revenue_planner')
+        .insert({
+          project_id: addCostProject,
+          month: currentMonth + '-01',
+          notes: addCostDesc || null,
+          planned_amount: null,
+          actual_amount: Number(addCostAmount),
+          status: 'cost' as const,
+          probability: 100,
+        })
+      if (error) throw error
+      await rStore.fetchByMonths([currentMonth])
+      toast('success', 'Cost added')
+      setShowAddCost(false)
+      setAddCostProject(''); setAddCostDesc(''); setAddCostAmount('')
+    } catch (err) {
+      toast('error', (err as Error).message)
+    } finally {
+      setAddCostSaving(false)
+    }
+  }
+
+  async function handleAddInvoice() {
+    if (!addInvProject.trim() || !addInvAmount) return
+    setAddInvSaving(true)
+    try {
+      let clientId: string | null = addInvClient && addInvClient !== '__new__' ? addInvClient : null
+      if (addInvClient === '__new__' && addInvNewClient.trim()) {
+        const { data, error } = await supabase
+          .from('clients').insert({ name: addInvNewClient.trim() }).select('id').single()
+        if (error) throw error
+        clientId = data.id
+        await cStore.fetchAll()
+      }
+      const pn = addInvPN.trim() || `OT-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`
+      const { data: proj, error: projErr } = await supabase
+        .from('projects')
+        .insert({ client_id: clientId, pn, name: addInvProject.trim(), type: 'fixed', status: 'active', currency: 'EUR', contract_value: Number(addInvAmount), initial_contract_value: Number(addInvAmount) })
+        .select('id').single()
+      if (projErr) throw projErr
+      const { error: rpErr } = await supabase
+        .from('revenue_planner')
+        .insert({ project_id: proj.id, month: currentMonth + '-01', planned_amount: Number(addInvAmount), actual_amount: Number(addInvAmount), status: 'issued' as const, probability: 100 })
+      if (rpErr) throw rpErr
+      await Promise.all([rStore.fetchByMonths([currentMonth]), pStore.fetchAll()])
+      toast('success', 'Invoice added')
+      setShowAddInvoice(false)
+      setAddInvClient(''); setAddInvNewClient(''); setAddInvProject(''); setAddInvPN(''); setAddInvAmount('')
+    } catch (err) {
+      toast('error', (err as Error).message)
+    } finally {
+      setAddInvSaving(false)
     }
   }
 
@@ -481,6 +627,71 @@ export function ThisMonthView() {
     }
   }
 
+  // ── Batch hosting confirm ────────────────────────────────────────────────────
+
+  async function confirmHostingBatch(ids: string[]) {
+    if (ids.length === 0) return
+    setBatchConfirmingHosting(true)
+    try {
+      for (const id of ids) {
+        const h = monthlyHosting.find(h => h.id === id)
+        if (!h) continue
+        const { data: existing } = await supabase
+          .from('revenue_planner')
+          .select('id')
+          .eq('hosting_client_id', id)
+          .eq('month', currentMonth)
+          .single()
+        if (existing) {
+          const { error } = await supabase.from('revenue_planner')
+            .update({ status: 'issued', actual_amount: h.amount })
+            .eq('id', existing.id)
+          if (error) throw error
+        } else {
+          const { error } = await supabase.from('revenue_planner').insert({
+            hosting_client_id: id,
+            month: currentMonth,
+            planned_amount: h.amount,
+            actual_amount: h.amount,
+            status: 'issued' as const,
+            probability: 100,
+          })
+          if (error) throw error
+        }
+      }
+      await rStore.fetchByMonths([currentMonth])
+      setBatchSelectedHosting(new Set())
+      toast('success', `Confirmed ${ids.length} hosting invoice${ids.length !== 1 ? 's' : ''}`)
+    } catch (err) {
+      toast('error', (err as Error).message)
+    } finally {
+      setBatchConfirmingHosting(false)
+    }
+  }
+
+  // ── Confirm domain renewal (from domainsStore — no existing rp row) ─────────
+
+  async function confirmDomainDue(domainId: string, amount: number) {
+    setDomainConfirming(domainId)
+    try {
+      const { error } = await supabase.from('revenue_planner').insert({
+        domain_id: domainId,
+        month: currentMonth,
+        planned_amount: amount,
+        actual_amount: amount,
+        status: 'issued' as const,
+        probability: 100,
+      })
+      if (error) throw error
+      await rStore.fetchByMonths([currentMonth])
+      toast('success', 'Domain renewal confirmed')
+    } catch (err) {
+      toast('error', (err as Error).message)
+    } finally {
+      setDomainConfirming(null)
+    }
+  }
+
   // ── Client lookup ───────────────────────────────────────────────────────────
 
   function clientName(clientId: string | null | undefined): string {
@@ -508,10 +719,12 @@ export function ThisMonthView() {
                 <label className="form-label">Reason / note <span className="form-hint" style={{ display: 'inline' }}>optional</span></label>
                 <input value={deferNote} onChange={e => setDeferNote(e.target.value)} placeholder="e.g. Client requested delay" autoFocus />
               </div>
-              <div className="form-group">
-                <label className="form-label">Move to month <span className="form-hint" style={{ display: 'inline' }}>optional — leave blank to just mark deferred</span></label>
-                <input type="month" value={deferMonth} onChange={e => setDeferMonth(e.target.value)} />
-              </div>
+              {!deferRow.maintenance_id && (
+                <div className="form-group">
+                  <label className="form-label">Move to month <span className="form-hint" style={{ display: 'inline' }}>optional — leave blank to just mark deferred</span></label>
+                  <input type="month" value={deferMonth} onChange={e => setDeferMonth(e.target.value)} />
+                </div>
+              )}
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary btn-sm" onClick={() => setDeferRow(null)}>Cancel</button>
@@ -575,11 +788,31 @@ export function ThisMonthView() {
                   onChange={e => setConfirmActual(e.target.value)}
                   autoFocus
                 />
-                {parseFloat(confirmActual) > (confirmModal.planned_amount ?? 0) && (
-                  <div className="form-hint" style={{ color: 'var(--blue)' }}>
-                    Extra above planned: +{fmtEuro(parseFloat(confirmActual) - (confirmModal.planned_amount ?? 0))}
-                  </div>
-                )}
+                {parseFloat(confirmActual) > confirmPlannedTotal && (() => {
+                  const extra = parseFloat(confirmActual) - confirmPlannedTotal
+                  return (
+                    <div style={{ marginTop: 8 }}>
+                      <div className="form-hint" style={{ color: 'var(--amber)', fontWeight: 600, marginBottom: 8 }}>
+                        +{fmtEuro(extra)} above planned
+                      </div>
+                      {confirmModal.project_id && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+                            <input type="radio" name="overage" checked={confirmOverageType === 'cr'} onChange={() => setConfirmOverageType('cr')} style={{ marginTop: 2 }} />
+                            <span><strong>Change request</strong> — extra work, auto-creates approved CR (+{fmtEuro(extra)})</span>
+                          </label>
+                          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+                            <input type="radio" name="overage" checked={confirmOverageType === 'overshoot'} onChange={() => setConfirmOverageType('overshoot')} style={{ marginTop: 2 }} />
+                            <span><strong>Overshoot</strong> — invoiced more upfront, will invoice less later</span>
+                          </label>
+                        </div>
+                      )}
+                      {!confirmModal.project_id && (
+                        <div className="form-hint">Extra will be recorded on the invoice. Add a change request manually if needed.</div>
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
               <div className="form-group">
                 <label className="form-label">Note <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
@@ -590,6 +823,125 @@ export function ThisMonthView() {
               <button className="btn btn-secondary btn-sm" onClick={() => setConfirmModal(null)}>Cancel</button>
               <button className="btn btn-primary btn-sm" onClick={handleConfirmSubmit} disabled={confirmSaving}>
                 {confirmSaving ? <span className="spinner" /> : null} Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Add Cost modal ───────────────────────────────────────────────────── */}
+      {showAddCost && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowAddCost(false)}>
+          <div className="modal-box" style={{ maxWidth: 400 }}>
+            <div className="modal-header">
+              <h2>Add Cost</h2>
+              <button className="modal-close" onClick={() => setShowAddCost(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label className="form-label">Project</label>
+                <select value={addCostProject} onChange={e => setAddCostProject(e.target.value)} autoFocus>
+                  <option value="">— select project —</option>
+                  {pStore.projects.filter(p => p.status === 'active').map(p => (
+                    <option key={p.id} value={p.id}>{p.name} <span style={{opacity:.6}}>({p.pn})</span></option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Description</label>
+                <input value={addCostDesc} onChange={e => setAddCostDesc(e.target.value)} placeholder="e.g. Subcontractor, license…" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Amount (€)</label>
+                <input type="number" value={addCostAmount} onChange={e => setAddCostAmount(e.target.value)} placeholder="0" />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowAddCost(false)}>Cancel</button>
+              <button className="btn btn-primary btn-sm" onClick={handleAddCost} disabled={addCostSaving || !addCostProject || !addCostAmount}>
+                {addCostSaving ? <span className="spinner" /> : null} Add Cost
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Add Invoice modal ─────────────────────────────────────────────────── */}
+      {showAddInvoice && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowAddInvoice(false)}>
+          <div className="modal-box" style={{ maxWidth: 440 }}>
+            <div className="modal-header">
+              <h2>Add One-Time Invoice</h2>
+              <button className="modal-close" onClick={() => setShowAddInvoice(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label className="form-label">Client</label>
+                <select value={addInvClient} onChange={e => setAddInvClient(e.target.value)} autoFocus>
+                  <option value="">— select client —</option>
+                  <option value="__new__">+ New client…</option>
+                  {cStore.clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              {addInvClient === '__new__' && (
+                <div className="form-group">
+                  <label className="form-label">New client name</label>
+                  <input value={addInvNewClient} onChange={e => setAddInvNewClient(e.target.value)} placeholder="Client name" />
+                </div>
+              )}
+              <div className="form-row">
+                <div className="form-group" style={{ flex: 2 }}>
+                  <label className="form-label">Project / description</label>
+                  <input value={addInvProject} onChange={e => setAddInvProject(e.target.value)} placeholder="e.g. Website redesign" />
+                </div>
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label className="form-label">Project № <span className="form-hint" style={{ display: 'inline' }}>optional</span></label>
+                  <input value={addInvPN} onChange={e => setAddInvPN(e.target.value)} placeholder="RS-2026-…" />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Revenue (€)</label>
+                <input type="number" value={addInvAmount} onChange={e => setAddInvAmount(e.target.value)} placeholder="0" />
+              </div>
+              <p className="form-hint" style={{ marginTop: 8 }}>Creates a project and marks the invoice as issued for {monthLabel}.</p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowAddInvoice(false)}>Cancel</button>
+              <button className="btn btn-primary btn-sm" onClick={handleAddInvoice} disabled={addInvSaving || !addInvProject.trim() || !addInvAmount}>
+                {addInvSaving ? <span className="spinner" /> : null} Add Invoice
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Hosting confirm modal ────────────────────────────────────────────── */}
+      {hostingConfirmModal && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setHostingConfirmModal(null)}>
+          <div className="modal-box" style={{ maxWidth: 360 }}>
+            <div className="modal-header">
+              <h2>Confirm Hosting Invoice</h2>
+              <button className="modal-close" onClick={() => setHostingConfirmModal(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ margin: '0 0 4px', fontSize: 14 }}>
+                <strong>{hostingConfirmModal.clientName}</strong>
+              </p>
+              <p style={{ margin: 0, fontSize: 14, color: 'var(--c2)' }}>
+                Amount: <strong>{fmtEuro(hostingConfirmModal.amount)}</strong>
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary btn-sm" onClick={() => setHostingConfirmModal(null)}>Cancel</button>
+              <button
+                className="btn btn-primary btn-sm"
+                disabled={hostingConfirming === hostingConfirmModal.id}
+                onClick={async () => {
+                  await confirmHosting(hostingConfirmModal.id, hostingConfirmModal.amount)
+                  setHostingConfirmModal(null)
+                }}
+              >
+                {hostingConfirming === hostingConfirmModal.id ? <span className="spinner" /> : null} Confirm
               </button>
             </div>
           </div>
@@ -647,6 +999,8 @@ export function ThisMonthView() {
             )}
             Refresh
           </button>
+          <button className="btn btn-secondary btn-sm" style={{ marginLeft: 8 }} onClick={() => setShowAddCost(true)}>+ Add Cost</button>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowAddInvoice(true)}>+ Add Invoice</button>
         </div>
       </div>
 
@@ -667,7 +1021,7 @@ export function ThisMonthView() {
         <div className="stat-card" style={{ '--left-color': 'var(--c5)' } as React.CSSProperties}>
           <div className="stat-card-label">Planned this month</div>
           <div className="stat-card-value text-mono">{fmtEuro(plannedTotal)}</div>
-          <div className="stat-card-sub">{rows.length} invoice{rows.length !== 1 ? 's' : ''} planned</div>
+          <div className="stat-card-sub">{invoiceRows.length + maintenanceRows.length + domainRows.length} invoice{invoiceRows.length + maintenanceRows.length + domainRows.length !== 1 ? 's' : ''} planned</div>
         </div>
 
         <div className="stat-card" style={{ '--left-color': 'var(--navy)' } as React.CSSProperties}>
@@ -713,7 +1067,7 @@ export function ThisMonthView() {
                 <span className="spinner" style={{ width: 26, height: 26, borderWidth: 3, borderTopColor: 'var(--navy)', borderColor: 'var(--c5)', display: 'inline-block', marginBottom: 12 }} />
                 <div style={{ fontWeight: 600, marginTop: 12 }}>Loading invoices…</div>
               </div>
-            ) : invoiceRows.length === 0 ? (
+            ) : invoiceRows.length === 0 && maintenanceCRRows.length === 0 ? (
               <div className="card-body" style={{ textAlign: 'center', padding: '48px 20px' }}>
                 <div style={{ fontSize: 28, marginBottom: 10 }}>🗂</div>
                 <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--c2)', marginBottom: 5 }}>
@@ -735,19 +1089,26 @@ export function ThisMonthView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {invoiceRows.map(row => {
+                  {[...invoiceRows, ...maintenanceCRRows].map(row => {
                     const isMaintenance = !!row.maintenance_id
                     const displayName = row.project?.name ?? row.maintenance?.name ?? '—'
-                    const displaySub  = row.project?.pn ?? (isMaintenance ? row.maintenance?.client?.name : null)
+                    const displaySub  = row.project
+                      ? clientName(row.project.client_id)
+                      : (isMaintenance ? row.maintenance?.client?.name : null)
                     const isUpdating  = statusUpdating === row.id
                     const isPending   = row.status === 'planned'
                     const isDeferred  = row.status === 'deferred' || row.status === 'retainer'
+                    const isCRRow = row.notes?.startsWith('CR:')
+                    const crTitle = isCRRow ? row.notes!.slice(3).trim() : null
 
                     return (
                       <tr key={row.id} style={isDeferred ? { background: 'rgba(239,68,68,0.04)' } : undefined}>
                         <td>
-                          <div style={{ fontWeight: 700, color: 'var(--c0)', fontSize: 14 }} className="table-link">
-                            {displayName}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <div style={{ fontWeight: 700, color: 'var(--c0)', fontSize: 14 }} className="table-link">
+                              {displayName}
+                            </div>
+                            {isCRRow && <span className="badge badge-navy" style={{ fontSize: 10 }}>CR</span>}
                           </div>
                           {displaySub && (
                             <div style={{ fontSize: 11, color: 'var(--c4)', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
@@ -758,7 +1119,7 @@ export function ThisMonthView() {
 
                         <td>
                           <span style={{ fontSize: 12, color: 'var(--c3)' }}>
-                            {row.notes ?? '—'}
+                            {crTitle ?? row.notes ?? '—'}
                           </span>
                         </td>
 
@@ -854,7 +1215,7 @@ export function ThisMonthView() {
                         <td style={{ fontSize: 13, color: 'var(--c2)' }}>{row.maintenance?.client?.name ?? '—'}</td>
                         <td className="td-right text-mono">
                           {(() => {
-                            const linkedHosting = infraStore.hostingClients.find(h => h.maintenance_id === row.maintenance_id && h.cycle === 'monthly' && h.status === 'active')
+                            const linkedHosting = infraStore.hostingClients.find(h => h.maintenance_id === row.maintenance_id && h.cycle === 'monthly' && hostingActiveInMonth(h, currentMonth))
                             const total = (row.planned_amount ?? 0) + (linkedHosting?.amount ?? 0)
                             return <>
                               {fmtEuro(total)}
@@ -895,16 +1256,39 @@ export function ThisMonthView() {
         )}
 
         {/* ── Hosting revenue this month ────────────────────────────────────── */}
-        {(monthlyHosting.length > 0 || yearlyHostingItems.length > 0) && (
+        {(monthlyHosting.length > 0 || yearlyHostingItems.length > 0 || yearlyHostingDue.length > 0) && (
           <div>
             <div className="section-bar">
               <h2>Hosting Revenue — {monthLabel}</h2>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                {batchSelectedHosting.size > 0 && (
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => confirmHostingBatch([...batchSelectedHosting])}
+                    disabled={batchConfirmingHosting}
+                  >
+                    {batchConfirmingHosting ? <span className="spinner" style={{ width: 12, height: 12, borderWidth: 1.5 }} /> : null}
+                    Confirm selected ({batchSelectedHosting.size})
+                  </button>
+                )}
+                {unconfirmedMonthlyHosting.length > 1 && (
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => confirmHostingBatch(unconfirmedMonthlyHosting.map(h => h.id))}
+                    disabled={batchConfirmingHosting}
+                  >
+                    {batchConfirmingHosting ? <span className="spinner" style={{ width: 12, height: 12, borderWidth: 1.5 }} /> : null}
+                    Confirm all ({unconfirmedMonthlyHosting.length})
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="card">
               <table>
                 <thead>
                   <tr>
+                    <th style={{ width: 32 }}></th>
                     <th>Client</th>
                     <th>Description</th>
                     <th className="th-right">Amount</th>
@@ -914,8 +1298,26 @@ export function ThisMonthView() {
                 <tbody>
                   {monthlyHosting.map(h => {
                     const confirmed = confirmedHostingIds.has(h.id)
+                    const selected = batchSelectedHosting.has(h.id)
                     return (
                       <tr key={h.id}>
+                        <td style={{ paddingLeft: 12 }}>
+                          {!confirmed && (
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={e => {
+                                setBatchSelectedHosting(prev => {
+                                  const next = new Set(prev)
+                                  if (e.target.checked) next.add(h.id)
+                                  else next.delete(h.id)
+                                  return next
+                                })
+                              }}
+                              style={{ cursor: 'pointer', width: 14, height: 14 }}
+                            />
+                          )}
+                        </td>
                         <td>
                           <div style={{ fontWeight: 700, color: 'var(--c0)', fontSize: 14 }}>
                             {h.client?.name ?? '—'}
@@ -937,10 +1339,9 @@ export function ThisMonthView() {
                           ) : (
                             <button
                               className="btn btn-primary btn-xs"
-                              onClick={() => confirmHosting(h.id, h.amount)}
-                              disabled={hostingConfirming === h.id}
+                              onClick={() => setHostingConfirmModal({ id: h.id, clientName: h.client?.name ?? '—', amount: h.amount })}
                             >
-                              {hostingConfirming === h.id ? 'Saving…' : 'Confirm'}
+                              Confirm
                             </button>
                           )}
                         </td>
@@ -951,6 +1352,7 @@ export function ThisMonthView() {
                     const confirmed = row.status === 'issued' || row.status === 'paid'
                     return (
                       <tr key={h.id}>
+                        <td></td>
                         <td>
                           <div style={{ fontWeight: 700, color: 'var(--c0)', fontSize: 14 }}>
                             {h.client?.name ?? '—'}
@@ -972,16 +1374,32 @@ export function ThisMonthView() {
                           ) : (
                             <button
                               className="btn btn-primary btn-xs"
-                              onClick={() => confirmHosting(h.id, row.planned_amount ?? h.amount)}
-                              disabled={hostingConfirming === h.id}
+                              onClick={() => setHostingConfirmModal({ id: h.id, clientName: h.client?.name ?? '—', amount: row.planned_amount ?? h.amount })}
                             >
-                              {hostingConfirming === h.id ? 'Saving…' : 'Confirm'}
+                              Confirm
                             </button>
                           )}
                         </td>
                       </tr>
                     )
                   })}
+                  {yearlyHostingDue.map(h => (
+                    <tr key={h.id}>
+                      <td></td>
+                      <td><div style={{ fontWeight: 700, color: 'var(--c0)', fontSize: 14 }}>{h.client?.name ?? '—'}</div></td>
+                      <td><span style={{ fontSize: 13, color: 'var(--c3)' }}>{h.description ?? '—'}<span style={{ marginLeft: 6, fontSize: 11, color: 'var(--c4)' }}>yearly</span></span></td>
+                      <td className="td-right">
+                        <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--c1)' }}>
+                          {h.amount.toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €<span style={{ fontWeight: 400, color: 'var(--c4)', fontSize: 12 }}>/yr</span>
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <button className="btn btn-primary btn-xs" onClick={() => setHostingConfirmModal({ id: h.id, clientName: h.client?.name ?? '—', amount: h.amount })}>
+                          Confirm
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -989,7 +1407,7 @@ export function ThisMonthView() {
         )}
 
         {/* ── Domain renewals this month ────────────────────────────────────── */}
-        {domainRows.length > 0 && (
+        {(domainRows.length > 0 || domainsDue.length > 0) && (
           <div>
             <div className="section-bar">
               <h2>Domain Renewals — {monthLabel}</h2>
@@ -1006,6 +1424,40 @@ export function ThisMonthView() {
                   </tr>
                 </thead>
                 <tbody>
+                  {domainsDue.map(d => (
+                    <tr key={`due-${d.id}`}>
+                      <td>
+                        <div style={{ fontWeight: 700, color: 'var(--c0)', fontSize: 14 }}>
+                          {d.client?.name ?? '—'}
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                          <span style={{
+                            fontSize: 12, color: 'var(--c2)', background: 'var(--c7)',
+                            border: '1px solid var(--c6)', borderRadius: 4, padding: '2px 7px',
+                            fontFamily: 'monospace',
+                          }}>
+                            {d.domain_name}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="td-right">
+                        <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--c1)' }}>
+                          {fmtEuro(d.yearly_amount ?? 0)}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <button
+                          className="btn btn-primary btn-xs"
+                          onClick={() => confirmDomainDue(d.id, d.yearly_amount ?? 0)}
+                          disabled={domainConfirming === d.id}
+                        >
+                          {domainConfirming === d.id ? 'Saving…' : 'Confirm'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
                   {(() => {
                     // Group by client id
                     const groups = new Map<string, { clientName: string; rows: RevenuePlanner[] }>()
@@ -1078,81 +1530,6 @@ export function ThisMonthView() {
                       )
                     })
                   })()}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* ── Active projects with no invoice planned ───────────────────────── */}
-        {unplannedProjects.length > 0 && (
-          <div>
-            <div className="section-bar" style={{ paddingBottom: 8 }}>
-              <h2 style={{ color: 'var(--c3)', fontStyle: 'italic', fontSize: 13, fontWeight: 600 }}>
-                Active — no invoice planned this month
-              </h2>
-            </div>
-
-            <div className="card">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Project</th>
-                    <th>Client</th>
-                    <th>Last invoiced</th>
-                    <th className="th-right">Plan invoice</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {unplannedProjects.map(project => {
-                    const isOpen = planFormOpen === project.id
-                    const clientId = project.client_id ?? project.client?.id
-                    const cName = project.client?.name ?? clientName(clientId)
-
-                    return (
-                      <tr key={project.id}>
-                        <td>
-                          <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--c1)' }}>
-                            {project.name}
-                          </div>
-                          <div style={{ fontSize: 11, color: 'var(--c4)', marginTop: 2 }}>
-                            {project.pn}
-                          </div>
-                        </td>
-
-                        <td>
-                          <span style={{ color: 'var(--c2)', fontSize: 13 }}>
-                            {cName}
-                          </span>
-                        </td>
-
-                        <td>
-                          <span className="text-muted" style={{ fontSize: 13 }}>
-                            {fmtDate(project.end_date)}
-                          </span>
-                        </td>
-
-                        <td className="td-right">
-                          {isOpen ? (
-                            <PlanForm
-                              project={project}
-                              month={currentMonth}
-                              saving={rStore.saving}
-                              onSave={amount => handlePlanInvoice(project, amount)}
-                              onCancel={() => setPlanFormOpen(null)}
-                            />
-                          ) : (
-                            <button
-                              className="btn btn-secondary btn-xs"
-                              onClick={() => setPlanFormOpen(project.id)}
-                            >
-                              + Plan invoice
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
                 </tbody>
               </table>
             </div>

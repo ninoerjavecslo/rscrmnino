@@ -91,8 +91,8 @@ function DomainRowInputs({ rows, onChange }: { rows: DomainRow[]; onChange: (r: 
       {rows.map((row, i) => (
         <div key={i} style={{display:'grid',gridTemplateColumns:cols,gap:'6px 10px',alignItems:'center',marginBottom:8}}>
           <input value={row.domain_name} onChange={e => update(i,'domain_name',e.target.value)} placeholder="example.si" style={{height:36}} />
-          <input type="text" value={isoToDMY(row.registered_date)} onChange={e => update(i,'registered_date',parseDMY(e.target.value))} placeholder="DD/MM/YYYY" style={{height:36,width:'100%'}} />
-          <input type="text" value={isoToDMY(row.expiry_date)} onChange={e => update(i,'expiry_date',parseDMY(e.target.value))} placeholder="DD/MM/YYYY" style={{height:36,width:'100%'}} />
+          <input type="date" value={row.registered_date} onChange={e => update(i,'registered_date',e.target.value)} style={{height:36,width:'100%'}} />
+          <input type="date" value={row.expiry_date} onChange={e => update(i,'expiry_date',e.target.value)} style={{height:36,width:'100%'}} />
           <input type="number" value={row.yearly_amount} onChange={e => update(i,'yearly_amount',e.target.value)} placeholder="25" style={{height:36}} />
           <button onClick={() => remove(i)} disabled={rows.length === 1}
             style={{width:32,height:36,border:'1px solid var(--c6)',borderRadius:6,background:'#fff',cursor:'pointer',color:'var(--c4)',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>×</button>
@@ -333,7 +333,17 @@ export function DomainsView() {
     return matchQ && matchClient
   })
 
-  const totalYearly = activeDomains.reduce((s, d) => s + (d.yearly_amount ?? 0), 0)
+  const totalYearly = (() => {
+    const now = new Date()
+    const curYear = String(now.getFullYear())
+    const curMonthStr = `${curYear}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+    return store.domains.filter(d => {
+      if (d.status === 'expired') return false
+      if (!d.archived) return true
+      const billingMonth = `${curYear}-${(d.registered_date ?? d.expiry_date).slice(5, 7)}-01`
+      return billingMonth <= curMonthStr
+    }).reduce((s, d) => s + (d.yearly_amount ?? 0), 0)
+  })()
   const pagedActive   = filtered.slice((activePage - 1) * ACTIVE_PER_PAGE, activePage * ACTIVE_PER_PAGE)
   const pagedArchived = archivedDomains.slice((archivePage - 1) * ARCHIVE_PER_PAGE, archivePage * ARCHIVE_PER_PAGE)
   const allSelected   = pagedActive.length > 0 && pagedActive.every(d => selected.has(d.id))
@@ -980,18 +990,13 @@ export function DomainsView() {
             </div>
             <div className="form-group">
               <label className="form-label">Expiry date</label>
-              <input type="text" value={isoToDMY(editDomain.expiry_date)} onChange={e => setEditDomain(d => d ? {...d, expiry_date: parseDMY(e.target.value)} : d)} placeholder="DD/MM/YYYY" />
+              <input type="text" value={isoToDMY(editDomain.expiry_date)} readOnly style={{background:'var(--c7)',color:'var(--c3)',cursor:'not-allowed'}} />
             </div>
           </div>
           <div className="form-row" style={{marginBottom:14}}>
             <div className="form-group">
               <label className="form-label">Client</label>
-              <Select
-                value={editDomain.client_id ?? ''}
-                onChange={val => setEditDomain(d => d ? {...d, client_id: val || null} : d)}
-                placeholder="— own cost —"
-                options={cStore.clients.map(c => ({ value: c.id, label: c.name }))}
-              />
+              <input value={editDomain.client?.name ?? '— own cost —'} readOnly style={{background:'var(--c7)',color:'var(--c3)',cursor:'not-allowed'}} />
             </div>
             <div className="form-group">
               <label className="form-label">Project #</label>
@@ -1000,7 +1005,7 @@ export function DomainsView() {
           </div>
           <div className="form-group" style={{marginBottom:14}}>
             <label className="form-label">€ / year</label>
-            <input type="number" value={editDomain.yearly_amount ?? ''} onChange={e => setEditDomain(d => d ? {...d, yearly_amount: e.target.value ? parseFloat(e.target.value) : null} : d)} />
+            <input type="number" value={editDomain.yearly_amount ?? ''} readOnly style={{background:'var(--c7)',color:'var(--c3)',cursor:'not-allowed'}} />
           </div>
           <div className="form-group" style={{marginBottom:14}}>
             <label className="form-label">Contract / Order ID</label>

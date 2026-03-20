@@ -67,6 +67,9 @@ export function ClientsView() {
   const [showAdd, setShowAdd] = useState(false)
   const [name, setName]       = useState('')
   const [saving, setSaving]   = useState(false)
+  const [search, setSearch]   = useState('')
+  const [page, setPage]       = useState(1)
+  const PAGE_SIZE = 15
 
   useEffect(() => {
     store.fetchAll()
@@ -96,6 +99,15 @@ export function ClientsView() {
     return map
   }, [rpStore.rows])
 
+  const filteredClients = useMemo(() => {
+    setPage(1)
+    const q = search.trim().toLowerCase()
+    return q ? store.clients.filter(c => c.name.toLowerCase().includes(q)) : store.clients
+  }, [store.clients, search])
+
+  const totalPages = Math.max(1, Math.ceil(filteredClients.length / PAGE_SIZE))
+  const pagedClients = filteredClients.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
   async function handleCreate() {
     if (!name.trim()) return
     setSaving(true)
@@ -122,6 +134,15 @@ export function ClientsView() {
       <div className="page-content">
         {store.error && <div className="alert alert-red" style={{marginBottom:16}}>Failed to load clients. Please check your connection.</div>}
 
+        <div style={{ marginBottom: 16 }}>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search clients…"
+            style={{ maxWidth: 320 }}
+          />
+        </div>
+
         {!store.loading && store.clients.length === 0 ? (
           <div className="card">
             <div className="card-body" style={{textAlign:'center',padding:'52px 20px'}}>
@@ -141,15 +162,14 @@ export function ClientsView() {
                   <th style={{width:70}}>Hosting</th>
                   <th style={{width:70}}>Domains</th>
                   <th style={{width:100}}>Maintenance</th>
-                  <th className="th-right" style={{width:150}}>Total value</th>
                   <th className="th-right" style={{width:140}}>Invoiced YTD</th>
                   <th style={{width:80}}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {store.loading ? (
-                  <tr><td colSpan={8} style={{textAlign:'center',padding:32,color:'var(--c4)'}}>Loading…</td></tr>
-                ) : store.clients.map((c: Client) => {
+                  <tr><td colSpan={7} style={{textAlign:'center',padding:32,color:'var(--c4)'}}>Loading…</td></tr>
+                ) : pagedClients.map((c: Client) => {
                   const clientProjects = pStore.projects.filter(p => p.client_id === c.id)
                   const activeProjects = clientProjects.filter(p => p.status === 'active')
 
@@ -181,7 +201,29 @@ export function ClientsView() {
                     .filter(m => m.client_id === c.id && m.status === 'active')
                     .reduce((sum, m) => sum + m.monthly_retainer * maintMonthsThisYear(m), 0)
 
-                  const fixedValue = projectRpSum + hostingAnnual + domainsAnnual + maintAnnual
+                  // Maintenance overages: actual billed above retainer + linked hosting (non-CR rows only)
+                  const maintOverages = rpStore.rows
+                    .filter(r => r.maintenance_id != null && !r.notes?.startsWith('CR:') && r.maintenance?.client?.id === c.id && (r.status === 'issued' || r.status === 'paid'))
+                    .reduce((sum, r) => {
+                      const linkedHosting = infraStore.hostingClients.find(h => h.maintenance_id === r.maintenance_id)
+                      const hAmt = linkedHosting?.amount ?? 0
+                      return sum + Math.max(0, (r.actual_amount ?? 0) - (r.planned_amount ?? 0) - hAmt)
+                    }, 0)
+
+                  // Maintenance CRs: planned CR rows in revenue_planner + approved CRs not yet planned
+                  const maintCRPlanned = rpStore.rows
+                    .filter(r => r.maintenance_id != null && r.notes?.startsWith('CR:') && r.maintenance?.client?.id === c.id && r.status !== 'deferred' && r.status !== 'cost')
+                    .reduce((s, r) => s + (r.actual_amount ?? r.planned_amount ?? 0), 0)
+                  const maintCRApproved = crStore.approvedCRs
+                    .filter(cr => {
+                      if (!cr.maintenance_id) return false
+                      const maint = maintStore.maintenances.find(m => m.id === cr.maintenance_id)
+                      if (maint?.client_id !== c.id) return false
+                      return !rpStore.rows.some(r => r.notes === `CR: ${cr.title}` && r.maintenance_id === cr.maintenance_id)
+                    })
+                    .reduce((s, cr) => s + (cr.amount ?? 0), 0)
+
+                  const fixedValue = projectRpSum + hostingAnnual + domainsAnnual + maintAnnual + maintOverages + maintCRPlanned + maintCRApproved
 
                   // Hosting: any active hosting entry for this client
                   const hasHosting = infraStore.hostingClients.some(h => h.client_id === c.id && h.status === 'active')
@@ -205,22 +247,6 @@ export function ClientsView() {
                       <td><YesNo yes={hasMaintenance} /></td>
 
                       <td className="td-right">
-                        {fixedValue > 0 || hasVariable ? (
-                          <span className="text-mono" style={{fontWeight:600}}>
-                            {fixedValue > 0 && `${fixedValue.toLocaleString()} €`}
-                            {fixedValue > 0 && hasVariable && ' '}
-                            {hasVariable && (
-                              <span style={{fontSize:11,color:'var(--c4)',fontWeight:500,fontFamily:'inherit'}}>
-                                {fixedValue > 0 ? '+ variable' : 'variable'}
-                              </span>
-                            )}
-                          </span>
-                        ) : (
-                          <span className="text-muted">—</span>
-                        )}
-                      </td>
-
-                      <td className="td-right">
                         {(() => {
                           const inv = invoicedByClient.get(c.id)
                           return inv
@@ -235,6 +261,23 @@ export function ClientsView() {
                 })}
               </tbody>
             </table>
+            {filteredClients.length === 0 && !store.loading && (
+              <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>
+                No clients match "{search}"
+              </div>
+            )}
+            {totalPages > 1 && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderTop: '1px solid var(--c6)', fontSize: 13, color: 'var(--c3)' }}>
+                <span>{filteredClients.length} clients · page {page} of {totalPages}</span>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button className="btn btn-secondary btn-xs" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>‹ Prev</button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                    <button key={p} className={`btn btn-xs ${p === page ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setPage(p)}>{p}</button>
+                  ))}
+                  <button className="btn btn-secondary btn-xs" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>Next ›</button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

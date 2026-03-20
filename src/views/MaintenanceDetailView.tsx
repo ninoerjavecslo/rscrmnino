@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useMaintenancesStore } from '../stores/maintenances'
+import { useChangeRequestsStore } from '../stores/changeRequests'
+import { usePipelineStore } from '../stores/pipeline'
 import { supabase } from '../lib/supabase'
 import { toast } from '../lib/toast'
-import type { RevenuePlanner, Maintenance, HostingClient } from '../lib/types'
+import type { RevenuePlanner, Maintenance, HostingClient, ChangeRequest } from '../lib/types'
 import { Select } from '../components/Select'
 
 function safeUrl(url: string | null | undefined): string | undefined {
@@ -26,17 +28,23 @@ function fmtMonth(iso: string) {
 }
 
 const STATUS_BADGE: Record<string, string> = {
-  planned: 'badge-amber',
-  issued:  'badge-blue',
-  paid:    'badge-green',
-  retainer:'badge-gray',
-  cost:    'badge-red',
+  planned:  'badge-amber',
+  issued:   'badge-blue',
+  paid:     'badge-green',
+  retainer: 'badge-gray',
+  cost:     'badge-red',
 }
 
 const MAINT_STATUS_BADGE: Record<string, string> = {
   active:    'badge-green',
   paused:    'badge-amber',
   cancelled: 'badge-red',
+}
+
+const CR_STATUS_BADGE: Record<string, string> = {
+  pending:  'badge-amber',
+  approved: 'badge-green',
+  billed:   'badge-navy',
 }
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
@@ -74,6 +82,74 @@ interface EditForm {
   status: string
 }
 
+interface CRForm {
+  title: string
+  status: string
+  amount: string
+  description: string
+  probability: string
+  expected_month: string
+}
+
+const CR_PROB_OPTS = [
+  { value: '25',  label: '25%' },
+  { value: '50',  label: '50%' },
+  { value: '100', label: '100%' },
+]
+
+function CRModalFields({ form, setForm, autoFocus }: {
+  form: CRForm
+  setForm: React.Dispatch<React.SetStateAction<CRForm>>
+  autoFocus?: boolean
+}) {
+  return (
+    <>
+      <div className="form-group" style={{ marginBottom: 14 }}>
+        <label className="form-label">Title</label>
+        <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Add CRM integration" autoFocus={autoFocus} />
+      </div>
+      <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+        <div className="form-group">
+          <label className="form-label">Status</label>
+          <div style={{ display: 'flex', gap: 2, background: 'var(--c7)', borderRadius: 8, padding: 3 }}>
+            {(['pending', 'approved'] as const).map(s => (
+              <button key={s} type="button" onClick={() => setForm(f => ({ ...f, status: s }))}
+                style={{
+                  flex: 1, padding: '6px 0', borderRadius: 6, border: 'none', fontFamily: 'inherit',
+                  background: form.status === s ? '#fff' : 'transparent',
+                  color: form.status === s ? (s === 'approved' ? 'var(--green)' : 'var(--amber)') : 'var(--c4)',
+                  fontWeight: form.status === s ? 700 : 500, fontSize: 13,
+                  cursor: 'pointer',
+                  boxShadow: form.status === s ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                }}>
+                {s === 'pending' ? 'Pending' : 'Approved'}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Probability</label>
+          <Select value={form.probability} onChange={v => setForm(f => ({ ...f, probability: v }))} options={CR_PROB_OPTS} />
+        </div>
+      </div>
+      <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+        <div className="form-group">
+          <label className="form-label">Amount (€) <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
+          <input type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} placeholder="0" />
+        </div>
+        <div className="form-group">
+          <label className="form-label">Expected month</label>
+          <input type="month" value={form.expected_month} onChange={e => setForm(f => ({ ...f, expected_month: e.target.value }))} />
+        </div>
+      </div>
+      <div className="form-group" style={{ marginBottom: 20 }}>
+        <label className="form-label">Description <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
+        <textarea rows={2} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="What does this change involve?" style={{ width: '100%', resize: 'vertical' }} />
+      </div>
+    </>
+  )
+}
+
 function computeContractEnd(start: string, months: number): string {
   if (!start || !months) return ''
   const d = new Date(start + 'T00:00:00')
@@ -81,12 +157,18 @@ function computeContractEnd(start: string, months: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
 }
 
+const defaultCRForm = (): CRForm => ({
+  title: '', status: 'pending', amount: '', description: '', probability: '75', expected_month: '',
+})
+
 // ── Main view ─────────────────────────────────────────────────────────────────
 
 export function MaintenanceDetailView() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const store = useMaintenancesStore()
+  const crStore = useChangeRequestsStore()
+  const plStore = usePipelineStore()
 
   const [rpRows, setRpRows] = useState<RevenuePlanner[]>([])
   const [hosting, setHosting] = useState<HostingClient | null>(null)
@@ -109,16 +191,41 @@ export function MaintenanceDetailView() {
   const [notBilledRow, setNotBilledRow] = useState<RevenuePlanner | null>(null)
   const [notBilledReason, setNotBilledReason] = useState('')
 
+  // Plan again / delete for not-billed rows
+  const [planAgainRow, setPlanAgainRow] = useState<RevenuePlanner | null>(null)
+  const [deleteNotBilledRow, setDeleteNotBilledRow] = useState<RevenuePlanner | null>(null)
+
   // Add cost modal
   const [showAddCost, setShowAddCost] = useState(false)
   const [costForm, setCostForm] = useState({ month: '', description: '', amount: '' })
+
+  // Delete cost confirmation
+  const [deleteCostRow, setDeleteCostRow] = useState<RevenuePlanner | null>(null)
+
+  // Change requests
+  const [showAddCR, setShowAddCR] = useState(false)
+  const [showEditCR, setShowEditCR] = useState(false)
+  const [editCRTarget, setEditCRTarget] = useState<ChangeRequest | null>(null)
+  const [deleteCRTarget, setDeleteCRTarget] = useState<ChangeRequest | null>(null)
+  const [crForm, setCRForm] = useState<CRForm>(defaultCRForm())
+  const [crSaving, setCRSaving] = useState(false)
+
+  // Plan CR
+  const [showPlanCR, setShowPlanCR] = useState(false)
+  const [planCRTarget, setPlanCRTarget] = useState<ChangeRequest | null>(null)
+  const [planCRMonth, setPlanCRMonth] = useState('')
+  const [planCRAmount, setPlanCRAmount] = useState('')
+  const [planCRSaving, setPlanCRSaving] = useState(false)
 
   useEffect(() => {
     if (!store.maintenances.length) store.fetchAll()
   }, [])
 
   useEffect(() => {
-    if (id) fetchRows()
+    if (id) {
+      fetchRows()
+      crStore.fetchByMaintenance(id)
+    }
   }, [id])
 
   async function fetchRows() {
@@ -134,18 +241,27 @@ export function MaintenanceDetailView() {
 
   const maint = store.maintenances.find(m => m.id === id)
 
+  // Invoice plan pagination + year filter
+  const [planYear, setPlanYear] = useState<number>(new Date().getFullYear())
+  const [planPage, setPlanPage] = useState(0)
+
   // Derived data
   const invoiceRows = rpRows.filter(r => r.status !== 'cost')
   const costRows    = rpRows.filter(r => r.status === 'cost')
+  const notBilledRows = invoiceRows.filter(r => r.status === 'retainer')
 
   const totalInvoiced = invoiceRows
     .filter(r => r.status === 'paid' || r.status === 'issued')
     .reduce((s, r) => s + (r.actual_amount ?? 0), 0)
   const totalPlanned  = invoiceRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0)
   const hostingMonthlyAmt = hosting?.cycle === 'monthly' ? (hosting.amount ?? 0) : 0
-  const extraBilled   = invoiceRows
-    .filter(r => (r.status === 'paid' || r.status === 'issued') && (r.actual_amount ?? 0) > (r.planned_amount ?? 0) + hostingMonthlyAmt)
+  const extraBilledRetainers = invoiceRows
+    .filter(r => !r.notes?.startsWith('CR:') && (r.status === 'paid' || r.status === 'issued') && (r.actual_amount ?? 0) > (r.planned_amount ?? 0) + hostingMonthlyAmt)
     .reduce((s, r) => s + Math.max(0, (r.actual_amount ?? 0) - (r.planned_amount ?? 0) - hostingMonthlyAmt), 0)
+  const extraBilledCRs = invoiceRows
+    .filter(r => r.notes?.startsWith('CR:') && (r.status === 'paid' || r.status === 'issued'))
+    .reduce((s, r) => s + (r.actual_amount ?? r.planned_amount ?? 0), 0)
+  const extraBilled = extraBilledRetainers + extraBilledCRs
   const totalCosts    = costRows.reduce((s, r) => s + (r.actual_amount ?? 0), 0)
 
   // ── Status update ───────────────────────────────────────────────────────────
@@ -220,13 +336,14 @@ export function MaintenanceDetailView() {
 
   function openConfirm(row: RevenuePlanner) {
     setConfirmRow(row)
-    const hostingAdd = hosting?.cycle === 'monthly' ? hosting.amount : 0
+    const isCR = !!row.notes?.startsWith('CR:')
+    const hostingAdd = (!isCR && hosting?.cycle === 'monthly') ? hosting.amount : 0
     setConfirmActual(String((row.planned_amount ?? 0) + hostingAdd))
     setConfirmNote(row.notes ?? '')
   }
 
   async function handleConfirm() {
-    if (!confirmRow) return
+    if (!confirmRow || !id) return
     setSaving(true)
     try {
       const actual = parseFloat(confirmActual) || (confirmRow.planned_amount ?? 0)
@@ -235,6 +352,26 @@ export function MaintenanceDetailView() {
         .update({ status: 'issued', actual_amount: actual, notes: confirmNote || confirmRow.notes })
         .eq('id', confirmRow.id)
       if (error) throw error
+
+      // Auto-create approved CR for overage above retainer + hosting
+      const extra = actual - (confirmRow.planned_amount ?? 0) - hostingMonthlyAmt
+      if (extra > 0) {
+        await crStore.add({
+          maintenance_id: id,
+          project_id: null,
+          title: `Extra: ${fmtMonth(confirmRow.month)}`,
+          description: confirmNote.trim() || null,
+          status: 'approved',
+          amount: extra,
+          probability: 100,
+          deal_type: 'one_time',
+          notes: 'auto_extra',
+          expected_month: null,
+          expected_end_month: null,
+          monthly_schedule: null,
+        })
+      }
+
       await fetchRows()
       setConfirmRow(null)
       toast('success', 'Invoice confirmed')
@@ -263,6 +400,43 @@ export function MaintenanceDetailView() {
       await fetchRows()
       setNotBilledRow(null)
       toast('success', 'Marked as not billed')
+    } catch (err) {
+      toast('error', (err as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // ── Plan again (reset not-billed row back to planned) ─────────────────────
+
+  async function handlePlanAgain() {
+    if (!planAgainRow) return
+    setSaving(true)
+    try {
+      await supabase
+        .from('revenue_planner')
+        .update({ status: 'planned', actual_amount: null, notes: null })
+        .eq('id', planAgainRow.id)
+      await fetchRows()
+      setPlanAgainRow(null)
+      toast('success', 'Restored to planned')
+    } catch (err) {
+      toast('error', (err as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // ── Delete not-billed row ─────────────────────────────────────────────────
+
+  async function handleDeleteNotBilled() {
+    if (!deleteNotBilledRow) return
+    setSaving(true)
+    try {
+      await supabase.from('revenue_planner').delete().eq('id', deleteNotBilledRow.id)
+      await fetchRows()
+      setDeleteNotBilledRow(null)
+      toast('success', 'Row deleted')
     } catch (err) {
       toast('error', (err as Error).message)
     } finally {
@@ -307,6 +481,180 @@ export function MaintenanceDetailView() {
     }
   }
 
+  // ── Change Requests ─────────────────────────────────────────────────────────
+
+  async function saveAddCR() {
+    if (!id || !crForm.title.trim()) return
+    setCRSaving(true)
+    try {
+      await crStore.add({
+        maintenance_id: id,
+        project_id: null,
+        title: crForm.title.trim(),
+        status: crForm.status as ChangeRequest['status'],
+        amount: crForm.amount ? parseFloat(crForm.amount) : null,
+        description: crForm.description.trim() || null,
+        probability: parseInt(crForm.probability),
+        deal_type: 'one_time',
+        expected_month: crForm.expected_month ? crForm.expected_month + '-01' : null,
+        expected_end_month: null,
+        monthly_schedule: null,
+        notes: null,
+      })
+      setShowAddCR(false)
+      setCRForm(defaultCRForm())
+      toast('success', 'Change request added')
+    } catch (e) { toast('error', (e as Error).message) }
+    finally { setCRSaving(false) }
+  }
+
+  function openEditCR(cr: ChangeRequest) {
+    setEditCRTarget(cr)
+    setCRForm({
+      title: cr.title,
+      status: cr.status === 'billed' ? 'approved' : cr.status,
+      amount: cr.amount != null ? String(cr.amount) : '',
+      description: cr.description ?? '',
+      probability: cr.probability != null ? String(cr.probability) : '75',
+      expected_month: cr.expected_month ? cr.expected_month.slice(0, 7) : '',
+    })
+    setShowEditCR(true)
+  }
+
+  async function saveEditCR() {
+    if (!editCRTarget) return
+    setCRSaving(true)
+    try {
+      await crStore.update(editCRTarget.id, {
+        title: crForm.title.trim(),
+        status: crForm.status as ChangeRequest['status'],
+        amount: crForm.amount ? parseFloat(crForm.amount) : null,
+        description: crForm.description.trim() || null,
+        probability: parseInt(crForm.probability),
+        expected_month: crForm.expected_month ? crForm.expected_month + '-01' : null,
+      })
+      setShowEditCR(false)
+      setEditCRTarget(null)
+      toast('success', 'Change request updated')
+    } catch (e) { toast('error', (e as Error).message) }
+    finally { setCRSaving(false) }
+  }
+
+  async function saveEditCRAndPlan() {
+    if (!editCRTarget || !id) return
+    setCRSaving(true)
+    const title = crForm.title.trim()
+    const crNote = `CR: ${title}`
+    try {
+      await crStore.update(editCRTarget.id, {
+        title,
+        status: 'approved' as ChangeRequest['status'],
+        amount: crForm.amount ? parseFloat(crForm.amount) : null,
+        description: crForm.description.trim() || null,
+        probability: parseInt(crForm.probability),
+        expected_month: crForm.expected_month ? crForm.expected_month + '-01' : null,
+      })
+      if (crForm.expected_month) {
+        const { error } = await supabase.from('revenue_planner').insert({
+          maintenance_id: id,
+          month: crForm.expected_month + '-01',
+          notes: crNote,
+          planned_amount: crForm.amount ? parseFloat(crForm.amount) : null,
+          actual_amount: null,
+          status: 'planned' as const,
+          probability: 100,
+        })
+        if (error) { toast('error', error.message); return }
+        // Upsert pipeline entry as won (planned = confirmed)
+        if (maint?.client_id) {
+          const { data: existing } = await supabase.from('pipeline_items')
+            .select('id').eq('title', title).eq('client_id', maint.client_id).limit(1)
+          if (existing && existing.length > 0) {
+            await supabase.from('pipeline_items').update({ status: 'won' }).eq('id', existing[0].id)
+          } else {
+            await supabase.from('pipeline_items').insert({
+              client_id: maint.client_id,
+              title,
+              description: crForm.description.trim() || null,
+              estimated_amount: crForm.amount ? parseFloat(crForm.amount) : null,
+              probability: parseInt(crForm.probability),
+              deal_type: 'one_time' as const,
+              expected_month: crForm.expected_month + '-01',
+              status: 'won' as const,
+              notes: null,
+            })
+          }
+        }
+        await fetchRows()
+      }
+      setShowEditCR(false)
+      setEditCRTarget(null)
+      toast('success', crForm.expected_month ? 'Saved & added to invoice plan + pipeline' : 'Change request updated')
+    } catch (e) { toast('error', (e as Error).message) }
+    finally { setCRSaving(false) }
+  }
+
+  function openPlanCR(cr: ChangeRequest) {
+    setPlanCRTarget(cr)
+    const defaultMonth = cr.expected_month
+      ? cr.expected_month.slice(0, 7)
+      : (() => { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}` })()
+    setPlanCRMonth(defaultMonth)
+    setPlanCRAmount(cr.amount != null ? String(cr.amount) : '')
+    setShowPlanCR(true)
+  }
+
+  async function savePlanCR() {
+    if (!id || !planCRTarget || !planCRMonth) return
+    setPlanCRSaving(true)
+    try {
+      const { error } = await supabase.from('revenue_planner').insert({
+        maintenance_id: id,
+        month: planCRMonth + '-01',
+        notes: `CR: ${planCRTarget.title}`,
+        planned_amount: planCRAmount ? Number(planCRAmount) : null,
+        actual_amount: null,
+        status: 'planned' as const,
+        probability: 100,
+      })
+      if (error) { toast('error', error.message); return }
+      // Upsert pipeline entry as won (planned = confirmed)
+      if (maint?.client_id) {
+        const { data: existing } = await supabase.from('pipeline_items')
+          .select('id').eq('title', planCRTarget.title).eq('client_id', maint.client_id).limit(1)
+        if (existing && existing.length > 0) {
+          await supabase.from('pipeline_items').update({ status: 'won' }).eq('id', existing[0].id)
+        } else {
+          await supabase.from('pipeline_items').insert({
+            client_id: maint.client_id,
+            title: planCRTarget.title,
+            description: planCRTarget.description ?? null,
+            estimated_amount: planCRAmount ? Number(planCRAmount) : (planCRTarget.amount ?? null),
+            probability: planCRTarget.probability ?? 100,
+            deal_type: planCRTarget.deal_type ?? 'one_time',
+            expected_month: planCRMonth + '-01',
+            status: 'won' as const,
+            notes: null,
+          })
+        }
+      }
+      await fetchRows()
+      toast('success', 'Added to Invoice Plan & Pipeline')
+      setShowPlanCR(false)
+      setPlanCRTarget(null)
+      setPlanCRAmount('')
+    } catch (e) { toast('error', (e as Error).message) }
+    finally { setPlanCRSaving(false) }
+  }
+
+  async function deleteCR(cr: ChangeRequest) {
+    try {
+      await crStore.remove(cr.id)
+      setDeleteCRTarget(null)
+      toast('success', 'Change request deleted')
+    } catch (e) { toast('error', (e as Error).message) }
+  }
+
   // ── Render ──────────────────────────────────────────────────────────────────
 
   if (!store.loading && !maint) {
@@ -323,6 +671,8 @@ export function MaintenanceDetailView() {
     ? Math.ceil((new Date(maint.contract_end).getTime() - Date.now()) / 86_400_000)
     : null
   const expiringSoon = daysUntilEnd !== null && daysUntilEnd <= 30 && daysUntilEnd >= 0
+
+  const maintenanceCRs = crStore.maintenanceCRs
 
   return (
     <div>
@@ -516,69 +866,263 @@ export function MaintenanceDetailView() {
           </>
         )}
 
+        {/* Not-billed alert */}
+        {notBilledRows.length > 0 && (
+          <div className="alert alert-amber" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <div style={{ fontSize: 13 }}>
+              <strong>{notBilledRows.length} month{notBilledRows.length > 1 ? 's' : ''} not billed:</strong>{' '}
+              {notBilledRows.map(r => fmtMonth(r.month)).join(', ')}
+              <span style={{ color: 'var(--c3)', marginLeft: 8, fontSize: 12 }}>
+                — {fmtEuro(notBilledRows.reduce((s, r) => s + (r.planned_amount ?? 0) + hostingMonthlyAmt, 0))} not collected
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Invoice Plans */}
+        {(() => {
+          const PAGE_SIZE = 12
+          const planYears = [...new Set(invoiceRows.map(r => parseInt(r.month.slice(0, 4))))].sort()
+          const availYears = planYears.length > 0 ? planYears : [new Date().getFullYear()]
+          const currentYear = availYears.includes(planYear) ? planYear : availYears[availYears.length - 1]
+          const yearRows = invoiceRows.filter(r => parseInt(r.month.slice(0, 4)) === currentYear)
+          const totalPages = Math.ceil(yearRows.length / PAGE_SIZE)
+          const page = Math.min(planPage, Math.max(0, totalPages - 1))
+          const pagedRows = yearRows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+          const yearInvoiced = yearRows.filter(r => r.status === 'paid' || r.status === 'issued').reduce((s, r) => s + (r.actual_amount ?? 0), 0)
+          const yearPlanned = yearRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0)
+          const yearExtra = yearRows.filter(r => r.status === 'paid' || r.status === 'issued').reduce((s, r) => s + Math.max(0, (r.actual_amount ?? 0) - (r.planned_amount ?? 0) - hostingMonthlyAmt), 0)
+          const yearNotBilled = yearRows.filter(r => r.status === 'retainer').length
+
+          return (
+            <>
+              <div className="section-bar" style={{ marginBottom: 10 }}>
+                <h2>
+                  Invoice Plans
+                  {yearNotBilled > 0 && (
+                    <span className="badge badge-amber" style={{ marginLeft: 8, fontSize: 11 }}>
+                      {yearNotBilled} not billed
+                    </span>
+                  )}
+                </h2>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {availYears.map(y => (
+                    <button
+                      key={y}
+                      className={`btn btn-xs ${currentYear === y ? 'btn-primary' : 'btn-secondary'}`}
+                      onClick={() => { setPlanYear(y); setPlanPage(0) }}
+                    >{y}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="card" style={{ marginBottom: 20 }}>
+                {loading ? (
+                  <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>Loading…</div>
+                ) : yearRows.length === 0 ? (
+                  <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>No invoice rows for {currentYear}.</div>
+                ) : (
+                  <>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th style={{ width: 120 }}>MONTH</th>
+                          <th style={{ width: 120 }}>TYPE</th>
+                          <th className="th-right" style={{ width: 110 }}>AMOUNT</th>
+                          <th className="th-right" style={{ width: 110 }}>ACTUAL</th>
+                          <th className="th-right" style={{ width: 100 }}>EXTRA</th>
+                          <th>NOTES</th>
+                          <th style={{ width: 110 }}>STATUS</th>
+                          <th className="th-right" style={{ width: 200 }}>ACTIONS</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pagedRows.map(row => {
+                          const isPending   = row.status === 'planned'
+                          const isNotBilled = row.status === 'retainer'
+                          const isSettled   = row.status === 'paid' || row.status === 'issued'
+                          const isCR        = !!row.notes?.startsWith('CR:')
+                          const rowHosting  = isCR ? 0 : hostingMonthlyAmt
+                          const extra       = isSettled ? Math.max(0, (row.actual_amount ?? 0) - (row.planned_amount ?? 0) - rowHosting) : 0
+                          return (
+                            <tr key={row.id} style={{ background: isNotBilled ? 'rgba(255, 193, 7, 0.06)' : isPending ? 'var(--amber-bg, #fffbf0)' : undefined }}>
+                              <td style={{ fontWeight: 600 }}>{fmtMonth(row.month)}</td>
+                              <td>
+                                {isCR
+                                  ? <span className="badge badge-navy" style={{ fontSize: 10 }}>Change Request</span>
+                                  : <span style={{ fontSize: 12, color: 'var(--c4)' }}>Retainer</span>}
+                              </td>
+                              <td className="td-right text-mono">
+                                {fmtEuro((row.planned_amount ?? 0) + (isCR ? 0 : (hosting?.cycle === 'monthly' ? hosting.amount : 0)))}
+                                {!isCR && hosting?.cycle === 'monthly' && (
+                                  <div style={{ fontSize: 10, color: 'var(--c4)', fontWeight: 400 }}>
+                                    {fmtEuro(row.planned_amount ?? 0)} + {fmtEuro(hosting.amount)}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="td-right text-mono" style={{ fontWeight: isSettled ? 700 : 400, color: isSettled ? 'var(--green)' : 'var(--c3)' }}>
+                                {isSettled ? fmtEuro(row.actual_amount ?? 0) : '—'}
+                              </td>
+                              <td className="td-right text-mono" style={{ color: 'var(--blue)', fontWeight: extra > 0 ? 700 : 400 }}>
+                                {extra > 0 ? `+${fmtEuro(extra)}` : <span style={{ color: 'var(--c5)' }}>—</span>}
+                              </td>
+                              <td style={{ fontSize: 12, color: 'var(--c3)' }}>
+                                {row.notes
+                                  ? <span style={{ color: isNotBilled ? 'var(--c4)' : extra > 0 ? 'var(--blue)' : 'var(--c3)' }}>{row.notes}</span>
+                                  : <span style={{ color: 'var(--c6)' }}>—</span>}
+                              </td>
+                              <td>
+                                <span className={`badge ${STATUS_BADGE[row.status] ?? 'badge-gray'}`}>
+                                  {row.status === 'retainer' ? 'Not billed' : row.status.charAt(0).toUpperCase() + row.status.slice(1)}
+                                </span>
+                              </td>
+                              <td className="td-right">
+                                <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                                  {isPending && (
+                                    <>
+                                      <button className="btn btn-primary btn-xs" onClick={() => openConfirm(row)}>Confirm</button>
+                                      <button className="btn btn-secondary btn-xs" onClick={() => openNotBilled(row)}>Not billed</button>
+                                    </>
+                                  )}
+                                  {isNotBilled && (
+                                    <>
+                                      <button className="btn btn-secondary btn-xs" onClick={() => setPlanAgainRow(row)} style={{ color: 'var(--navy)' }}>Plan again</button>
+                                      <button className="btn btn-ghost btn-xs" onClick={() => setDeleteNotBilledRow(row)} style={{ color: 'var(--red)' }}>Delete</button>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr style={{ background: 'var(--c7)', borderTop: '2px solid var(--c6)' }}>
+                          <td colSpan={2} style={{ fontSize: 10, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{currentYear} total</td>
+                          <td className="td-right text-mono" style={{ fontWeight: 700 }}>
+                            {fmtEuro(yearPlanned + (hosting?.cycle === 'monthly' ? hosting.amount * yearRows.filter(r => !r.notes?.startsWith('CR:')).length : 0))}
+                          </td>
+                          <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--green)' }}>{yearInvoiced > 0 ? fmtEuro(yearInvoiced) : '—'}</td>
+                          <td className="td-right text-mono" style={{ color: 'var(--blue)', fontWeight: 700 }}>{yearExtra > 0 ? `+${fmtEuro(yearExtra)}` : '—'}</td>
+                          <td colSpan={3}></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                    {totalPages > 1 && (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 20px', borderTop: '1px solid var(--c6)', background: 'var(--c7)' }}>
+                        <span style={{ fontSize: 12, color: 'var(--c3)' }}>
+                          Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, yearRows.length)} of {yearRows.length}
+                        </span>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button className="btn btn-secondary btn-xs" onClick={() => setPlanPage(p => Math.max(0, p - 1))} disabled={page === 0}>← Prev</button>
+                          {Array.from({ length: totalPages }, (_, i) => (
+                            <button key={i} className={`btn btn-xs ${page === i ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setPlanPage(i)}>{i + 1}</button>
+                          ))}
+                          <button className="btn btn-secondary btn-xs" onClick={() => setPlanPage(p => Math.min(totalPages - 1, p + 1))} disabled={page === totalPages - 1}>Next →</button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </>
+          )
+        })()}
+
+        {/* Change Requests */}
         <div className="section-bar" style={{ marginBottom: 10 }}>
-          <h2>Invoice Plans</h2>
+          <h2>Change Requests
+            {maintenanceCRs.length > 0 && (
+              <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--c4)', marginLeft: 8 }}>
+                {fmtEuro(maintenanceCRs.reduce((s, cr) => s + (cr.amount ?? 0), 0))} total
+              </span>
+            )}
+          </h2>
+          <button className="btn btn-secondary btn-sm" onClick={() => { setCRForm(defaultCRForm()); setShowAddCR(true) }}>
+            + Add change request
+          </button>
         </div>
 
         <div className="card" style={{ marginBottom: 20 }}>
-          {loading ? (
-            <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>Loading…</div>
-          ) : invoiceRows.length === 0 ? (
-            <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>No invoice rows yet.</div>
+          {maintenanceCRs.length === 0 ? (
+            <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>
+              No change requests yet.
+            </div>
           ) : (
             <table>
               <thead>
                 <tr>
-                  <th style={{ width: 120 }}>MONTH</th>
-                  <th className="th-right" style={{ width: 110 }}>RETAINER</th>
-                  <th className="th-right" style={{ width: 110 }}>ACTUAL</th>
-                  <th className="th-right" style={{ width: 100 }}>EXTRA</th>
-                  <th>NOTES</th>
-                  <th style={{ width: 110 }}>STATUS</th>
-                  <th className="th-right" style={{ width: 180 }}>ACTIONS</th>
+                  <th style={{ width: 160 }}>STATUS</th>
+                  <th>TITLE</th>
+                  <th>DESCRIPTION</th>
+                  <th className="th-right" style={{ width: 100 }}>AMOUNT</th>
+                  <th style={{ width: 70 }}>PROB.</th>
+                  <th style={{ width: 100 }}>EXPECTED</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
-                {invoiceRows.map(row => {
-                  const isPending   = row.status === 'planned'
-                  const isNotBilled = row.status === 'retainer'
-                  const isSettled   = row.status === 'paid' || row.status === 'issued'
-                  const extra       = isSettled ? Math.max(0, (row.actual_amount ?? 0) - (row.planned_amount ?? 0) - hostingMonthlyAmt) : 0
+                {maintenanceCRs.map(cr => {
+                  const isAuto = cr.notes === 'auto_extra'
+                  const isPending = cr.status === 'pending'
+                  const isApproved = cr.status === 'approved'
+                  const alreadyPlanned = invoiceRows.some(r => r.notes?.includes(`CR: ${cr.title}`) && r.status !== 'deferred')
+                  const canPlan = !isAuto && isApproved && cr.amount != null && cr.amount > 0 && !alreadyPlanned
+                  const crStatusBadge = cr.status === 'billed'
+                    ? <span className="badge badge-navy">Billed</span>
+                    : isApproved
+                      ? <span className="badge badge-green">Approved</span>
+                      : <span className="badge badge-amber">Pending</span>
                   return (
-                    <tr key={row.id} style={{ background: isPending ? 'var(--amber-bg, #fffbf0)' : undefined }}>
-                      <td style={{ fontWeight: 600 }}>{fmtMonth(row.month)}</td>
-                      <td className="td-right text-mono">
-                        {fmtEuro((row.planned_amount ?? 0) + (hosting?.cycle === 'monthly' ? hosting.amount : 0))}
-                        {hosting?.cycle === 'monthly' && (
-                          <div style={{ fontSize: 10, color: 'var(--c4)', fontWeight: 400 }}>
-                            {fmtEuro(row.planned_amount ?? 0)} + {fmtEuro(hosting.amount)}
-                          </div>
-                        )}
+                    <tr key={cr.id}>
+                      <td>
+                        {crStatusBadge}
+                        {isAuto && <span className="badge badge-gray" style={{ marginLeft: 4, fontSize: 10 }}>Auto</span>}
                       </td>
-                      <td className="td-right text-mono" style={{ fontWeight: isSettled ? 700 : 400, color: isSettled ? 'var(--green)' : 'var(--c3)' }}>
-                        {isSettled ? fmtEuro(row.actual_amount ?? 0) : '—'}
-                      </td>
-                      <td className="td-right text-mono" style={{ color: 'var(--blue)', fontWeight: extra > 0 ? 700 : 400 }}>
-                        {extra > 0 ? `+${fmtEuro(extra)}` : <span style={{ color: 'var(--c5)' }}>—</span>}
+                      <td style={{ fontSize: 13, fontWeight: 600, color: 'var(--c0)' }}>{cr.title}</td>
+                      <td style={{ fontSize: 12, color: 'var(--c3)', maxWidth: 200 }}>{cr.description ?? <span style={{ color: 'var(--c5)' }}>—</span>}</td>
+                      <td className="td-right text-mono" style={{ fontSize: 13, color: 'var(--c2)' }}>
+                        {cr.amount != null ? fmtEuro(cr.amount) : <span style={{ color: 'var(--c5)' }}>—</span>}
                       </td>
                       <td style={{ fontSize: 12, color: 'var(--c3)' }}>
-                        {row.notes
-                          ? <span style={{ color: isNotBilled ? 'var(--c4)' : extra > 0 ? 'var(--blue)' : 'var(--c3)' }}>{row.notes}</span>
-                          : <span style={{ color: 'var(--c6)' }}>—</span>}
+                        {cr.probability != null ? `${cr.probability}%` : '—'}
+                      </td>
+                      <td style={{ fontSize: 12, color: 'var(--c3)' }}>
+                        {cr.expected_month ? fmtMonth(cr.expected_month) : <span style={{ color: 'var(--c5)' }}>—</span>}
                       </td>
                       <td>
-                        <span className={`badge ${STATUS_BADGE[row.status] ?? 'badge-gray'}`}>
-                          {row.status === 'retainer' ? 'Not billed' : row.status.charAt(0).toUpperCase() + row.status.slice(1)}
-                        </span>
-                      </td>
-                      <td className="td-right">
-                        {isPending && (
-                          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                            <button className="btn btn-primary btn-xs" onClick={() => openConfirm(row)}>Confirm</button>
-                            <button className="btn btn-secondary btn-xs" onClick={() => openNotBilled(row)}>Not billed</button>
-                          </div>
-                        )}
+                        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                          {isPending && !isAuto && (
+                            <button
+                              className="btn btn-primary btn-xs"
+                              onClick={async () => {
+                                await crStore.update(cr.id, { status: 'approved' })
+                                if (maint?.client_id) {
+                                  await supabase.from('pipeline_items')
+                                    .update({ status: 'won' })
+                                    .eq('title', cr.title)
+                                    .eq('client_id', maint.client_id)
+                                }
+                                toast('success', 'Approved')
+                              }}
+                            >
+                              Approve
+                            </button>
+                          )}
+                          {canPlan && (
+                            <button className="btn btn-secondary btn-xs" onClick={() => openPlanCR(cr)}>
+                              + Plan Invoice
+                            </button>
+                          )}
+                          {isPending && !isAuto && (
+                            <button className="btn btn-secondary btn-xs" onClick={() => openEditCR(cr)}>Edit</button>
+                          )}
+                          {!isAuto && !alreadyPlanned && (
+                            <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red)' }} onClick={() => setDeleteCRTarget(cr)}>
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   )
@@ -586,12 +1130,10 @@ export function MaintenanceDetailView() {
               </tbody>
               <tfoot>
                 <tr style={{ background: 'var(--c7)', borderTop: '2px solid var(--c6)' }}>
-                  <td style={{ fontSize: 10, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total</td>
-                  <td className="td-right text-mono" style={{ fontWeight: 700 }}>
-                    {fmtEuro(totalPlanned + (hosting?.cycle === 'monthly' ? hosting.amount * invoiceRows.length : 0))}
+                  <td colSpan={3} style={{ fontSize: 10, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total extra billed</td>
+                  <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--blue)' }}>
+                    {fmtEuro(maintenanceCRs.reduce((s, cr) => s + (cr.amount ?? 0), 0))}
                   </td>
-                  <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--green)' }}>{totalInvoiced > 0 ? fmtEuro(totalInvoiced) : '—'}</td>
-                  <td className="td-right text-mono" style={{ color: 'var(--blue)', fontWeight: 700 }}>{extraBilled > 0 ? `+${fmtEuro(extraBilled)}` : '—'}</td>
                   <td colSpan={3}></td>
                 </tr>
               </tfoot>
@@ -625,7 +1167,7 @@ export function MaintenanceDetailView() {
                     <td style={{ fontSize: 13, color: 'var(--c2)' }}>{row.notes ?? '—'}</td>
                     <td className="td-right text-mono" style={{ color: 'var(--red)', fontWeight: 700 }}>{fmtEuro(row.actual_amount ?? 0)}</td>
                     <td>
-                      <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red)' }} onClick={() => handleDeleteCost(row.id)}>Remove</button>
+                      <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red)' }} onClick={() => setDeleteCostRow(row)}>Remove</button>
                     </td>
                   </tr>
                 ))}
@@ -671,7 +1213,10 @@ export function MaintenanceDetailView() {
             <div className="form-row" style={{ marginBottom: 14 }}>
               <div className="form-group">
                 <label className="form-label">Monthly retainer (€)</label>
-                <input type="number" value={editForm.monthly_retainer} onChange={e => setEditForm(f => f ? { ...f, monthly_retainer: e.target.value } : f)} placeholder="500" />
+                <div style={{ height: 42, display: 'flex', alignItems: 'center', padding: '0 12px', background: 'var(--c7)', border: '1px solid var(--c6)', borderRadius: 8, fontSize: 14, fontWeight: 600, color: 'var(--c1)' }}>
+                  {editForm.monthly_retainer} €
+                </div>
+                <div className="form-hint">Contact support to change retainer amount</div>
               </div>
               <div className="form-group">
                 <label className="form-label">Hours / mo</label>
@@ -685,11 +1230,15 @@ export function MaintenanceDetailView() {
             <div className="form-row" style={{ marginBottom: 14 }}>
               <div className="form-group">
                 <label className="form-label">Contract start</label>
-                <input type="month" value={editForm.contract_start} onChange={e => setEditForm(f => f ? { ...f, contract_start: e.target.value } : f)} />
+                <div style={{ height: 42, display: 'flex', alignItems: 'center', padding: '0 12px', background: 'var(--c7)', border: '1px solid var(--c6)', borderRadius: 8, fontSize: 14, color: 'var(--c1)' }}>
+                  {editForm.contract_start ? fmtMonth(editForm.contract_start + '-01') : '—'}
+                </div>
               </div>
               <div className="form-group">
                 <label className="form-label">Duration (months)</label>
-                <input type="number" value={editForm.contract_duration_months} onChange={e => setEditForm(f => f ? { ...f, contract_duration_months: e.target.value } : f)} placeholder="12" />
+                <div style={{ height: 42, display: 'flex', alignItems: 'center', padding: '0 12px', background: 'var(--c7)', border: '1px solid var(--c6)', borderRadius: 8, fontSize: 14, color: 'var(--c1)' }}>
+                  {editForm.contract_duration_months} months
+                </div>
                 {editForm.contract_start && editForm.contract_duration_months && (
                   <div className="form-hint">
                     Ends: {fmtMonth(computeContractEnd(editForm.contract_start + '-01', parseInt(editForm.contract_duration_months) || 12))}
@@ -727,9 +1276,10 @@ export function MaintenanceDetailView() {
             <div className="form-group" style={{ marginBottom: 12 }}>
               <label className="form-label">Actual amount (€)</label>
               <input type="number" value={confirmActual} onChange={e => setConfirmActual(e.target.value)} autoFocus />
-              {parseFloat(confirmActual) > (confirmRow.planned_amount ?? 0) && (
+              {parseFloat(confirmActual) > (confirmRow.planned_amount ?? 0) + (hosting?.cycle === 'monthly' ? (hosting.amount ?? 0) : 0) && (
                 <div className="form-hint" style={{ color: 'var(--blue)' }}>
-                  Extra above retainer: +{fmtEuro(parseFloat(confirmActual) - (confirmRow.planned_amount ?? 0))}
+                  Extra above retainer: +{fmtEuro(parseFloat(confirmActual) - (confirmRow.planned_amount ?? 0) - (hosting?.cycle === 'monthly' ? (hosting.amount ?? 0) : 0))}
+                  <span style={{ marginLeft: 6, color: 'var(--c4)' }}>→ auto-added as change request</span>
                 </div>
               )}
             </div>
@@ -765,6 +1315,108 @@ export function MaintenanceDetailView() {
         )}
       </Modal>
 
+      {/* Plan again modal */}
+      <Modal open={!!planAgainRow} title="Restore to Planned" maxWidth={380} onClose={() => setPlanAgainRow(null)}
+        footer={<>
+          <button className="btn btn-secondary btn-sm" onClick={() => setPlanAgainRow(null)}>Cancel</button>
+          <button className="btn btn-primary btn-sm" onClick={handlePlanAgain} disabled={saving}>Plan again</button>
+        </>}>
+        {planAgainRow && (
+          <p style={{ margin: 0, color: 'var(--c2)', fontSize: 14 }}>
+            Restore <strong>{fmtMonth(planAgainRow.month)}</strong> back to <em>planned</em> status so it can be confirmed or re-marked as not billed.
+          </p>
+        )}
+      </Modal>
+
+      {/* Delete not-billed row confirmation */}
+      <Modal open={!!deleteNotBilledRow} title="Delete Row" maxWidth={380} onClose={() => setDeleteNotBilledRow(null)}
+        footer={<>
+          <button className="btn btn-secondary btn-sm" onClick={() => setDeleteNotBilledRow(null)}>Cancel</button>
+          <button className="btn btn-sm" style={{ background: 'var(--red)', color: '#fff' }} onClick={handleDeleteNotBilled} disabled={saving}>Delete</button>
+        </>}>
+        {deleteNotBilledRow && (
+          <p style={{ margin: 0, color: 'var(--c2)', fontSize: 14 }}>
+            Permanently delete the not-billed row for <strong>{fmtMonth(deleteNotBilledRow.month)}</strong>?
+            <br /><br />
+            <span style={{ color: 'var(--c4)', fontSize: 13 }}>
+              This removes {fmtEuro((deleteNotBilledRow.planned_amount ?? 0) + hostingMonthlyAmt)} from the planned total for this contract.
+            </span>
+          </p>
+        )}
+      </Modal>
+
+      {/* Add change request modal */}
+      {showAddCR && (
+        <Modal open={showAddCR} title="Add Change Request" maxWidth={480} onClose={() => setShowAddCR(false)}>
+          <CRModalFields form={crForm} setForm={setCRForm} autoFocus />
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowAddCR(false)}>Cancel</button>
+            <button className="btn btn-primary btn-sm" onClick={saveAddCR} disabled={crSaving || !crForm.title.trim()}>
+              {crSaving ? 'Saving…' : 'Add Change Request'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Edit change request modal */}
+      {showEditCR && editCRTarget && (
+        <Modal open={showEditCR} title="Edit Change Request" maxWidth={480} onClose={() => { setShowEditCR(false); setEditCRTarget(null) }}>
+          <CRModalFields form={crForm} setForm={setCRForm} />
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => { setShowEditCR(false); setEditCRTarget(null) }}>Cancel</button>
+            <button className="btn btn-secondary btn-sm" onClick={saveEditCR} disabled={crSaving || !crForm.title.trim()}>
+              {crSaving ? 'Saving…' : 'Save'}
+            </button>
+            <button className="btn btn-primary btn-sm" onClick={saveEditCRAndPlan} disabled={crSaving || !crForm.title.trim()}>
+              {crSaving ? 'Saving…' : 'Save & Add to Plan'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Plan CR invoice modal */}
+      {showPlanCR && planCRTarget && (
+        <Modal open={showPlanCR} title="Plan Invoice" maxWidth={440} onClose={() => { setShowPlanCR(false); setPlanCRTarget(null) }}>
+          <p style={{ fontSize: 13, color: 'var(--c2)', marginBottom: 16 }}>
+            Adding invoice plan for: <strong>{planCRTarget.title}</strong>
+          </p>
+          <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+            <div className="form-group">
+              <label className="form-label">Invoice month <span style={{ color: 'var(--red)' }}>*</span></label>
+              <input type="month" value={planCRMonth} onChange={e => setPlanCRMonth(e.target.value)} autoFocus />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Amount (€)</label>
+              <input type="number" value={planCRAmount} onChange={e => setPlanCRAmount(e.target.value)} placeholder="0" />
+            </div>
+          </div>
+          {planCRMonth && (
+            <div className="alert alert-amber" style={{ fontSize: 12, marginBottom: 4 }}>
+              Will add a planned invoice row for {fmtMonth(planCRMonth + '-01')} — {planCRAmount ? fmtEuro(Number(planCRAmount)) : 'no amount set'}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => { setShowPlanCR(false); setPlanCRTarget(null) }}>Cancel</button>
+            <button className="btn btn-primary btn-sm" onClick={savePlanCR} disabled={planCRSaving || !planCRMonth}>
+              {planCRSaving ? 'Saving…' : '+ Add to Invoice Plan'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Delete CR confirmation */}
+      <Modal open={!!deleteCRTarget} title="Delete Change Request" maxWidth={380} onClose={() => setDeleteCRTarget(null)}
+        footer={<>
+          <button className="btn btn-secondary btn-sm" onClick={() => setDeleteCRTarget(null)}>Cancel</button>
+          <button className="btn btn-sm" style={{ background: 'var(--red)', color: '#fff' }} onClick={() => deleteCRTarget && deleteCR(deleteCRTarget)}>Delete</button>
+        </>}>
+        {deleteCRTarget && (
+          <p style={{ margin: 0, color: 'var(--c2)', fontSize: 14 }}>
+            Delete change request "<strong>{deleteCRTarget.title}</strong>"? This cannot be undone.
+          </p>
+        )}
+      </Modal>
+
       {/* Add cost modal */}
       <Modal open={showAddCost} title="Add Cost" maxWidth={400} onClose={() => setShowAddCost(false)}
         footer={<>
@@ -785,6 +1437,23 @@ export function MaintenanceDetailView() {
           <label className="form-label">Description</label>
           <input value={costForm.description} onChange={e => setCostForm(f => ({ ...f, description: e.target.value }))} placeholder="e.g. SSL certificate, plugin license…" />
         </div>
+      </Modal>
+
+      {/* Delete cost confirmation */}
+      <Modal open={!!deleteCostRow} title="Remove Cost" maxWidth={380} onClose={() => setDeleteCostRow(null)}
+        footer={<>
+          <button className="btn btn-secondary btn-sm" onClick={() => setDeleteCostRow(null)}>Cancel</button>
+          <button className="btn btn-sm" style={{ background: 'var(--red)', color: '#fff' }} onClick={async () => {
+            if (!deleteCostRow) return
+            await handleDeleteCost(deleteCostRow.id)
+            setDeleteCostRow(null)
+          }}>Remove</button>
+        </>}>
+        <p style={{ margin: 0, color: 'var(--c2)', fontSize: 14 }}>
+          Are you sure you want to remove this cost entry
+          {deleteCostRow?.notes ? <> "<strong>{deleteCostRow.notes}</strong>"</> : ''}?
+          This cannot be undone.
+        </p>
       </Modal>
     </div>
   )

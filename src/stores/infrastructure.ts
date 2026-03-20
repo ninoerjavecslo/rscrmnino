@@ -20,6 +20,8 @@ interface InfraState {
   addHostingClient: (data: Omit<HostingClient, 'id' | 'client'>) => Promise<void>
   updateHostingClient: (id: string, data: Partial<Omit<HostingClient, 'id' | 'client'>>) => Promise<void>
   addInfraCost: (data: Omit<InfrastructureCost, 'id'>) => Promise<void>
+  cancelCost: (id: string, cancelledFrom: string) => Promise<void>
+  removeCost: (id: string) => Promise<void>
 }
 
 function monthlyEquiv(h: HostingClient) {
@@ -41,10 +43,13 @@ export const useInfraStore = create<InfraState>((set, get) => ({
       .filter(h => h.status === 'active')
       .reduce((s, h) => s + monthlyEquiv(h), 0),
 
-  totalMonthlyCost: () =>
-    get().infraCosts
-      .filter(c => c.status === 'active')
-      .reduce((s, c) => s + c.monthly_cost, 0),
+  totalMonthlyCost: () => {
+    const today = new Date()
+    const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
+    return get().infraCosts
+      .filter(c => c.status === 'active' || (c.status === 'inactive' && c.cancelled_from && currentMonth < c.cancelled_from))
+      .reduce((s, c) => s + c.monthly_cost, 0)
+  },
 
   margin: () => get().monthlyRevenueEquiv() - get().totalMonthlyCost(),
 
@@ -71,7 +76,6 @@ export const useInfraStore = create<InfraState>((set, get) => ({
         supabase
           .from('infrastructure_costs')
           .select('*')
-          .eq('status', 'active')
           .order('provider'),
       ])
       if (he) throw he
@@ -99,6 +103,28 @@ export const useInfraStore = create<InfraState>((set, get) => ({
   addInfraCost: async (data) => {
     const { error } = await supabase.from('infrastructure_costs').insert(data)
     if (error) throw error
+    await get().fetchAll()
+  },
+
+  cancelCost: async (id, cancelledFrom) => {
+    const { error } = await supabase.from('infrastructure_costs')
+      .update({ status: 'inactive', cancelled_from: cancelledFrom })
+      .eq('id', id)
+    if (error) throw error
+    await get().fetchAll()
+  },
+
+  removeCost: async (id) => {
+    const cost = get().infraCosts.find(c => c.id === id)
+    const { error } = await supabase.from('infrastructure_costs').delete().eq('id', id)
+    if (error) throw error
+    // If no other costs share this provider, clear it from hosting clients too
+    if (cost) {
+      const remaining = get().infraCosts.filter(c => c.id !== id && c.provider === cost.provider)
+      if (remaining.length === 0) {
+        await supabase.from('hosting_clients').update({ provider: null }).eq('provider', cost.provider)
+      }
+    }
     await get().fetchAll()
   },
 }))

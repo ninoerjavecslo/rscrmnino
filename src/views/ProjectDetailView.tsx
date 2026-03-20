@@ -232,6 +232,7 @@ export function ProjectDetailView() {
   const defaultPlanDescription = () => project?.type === 'variable' ? (project?.name ?? '') : ''
   const [planRows, setPlanRows] = useState<InvoicePlanRow[]>([{ month: '', description: '', planned_amount: '', probability: '100' }])
   const [planSaving, setPlanSaving] = useState(false)
+  const [planYear, setPlanYear] = useState<number>(new Date().getFullYear())
 
   const [showAddCost, setShowAddCost] = useState(false)
   const [costForm, setCostForm] = useState<CostForm>({ month_from: '', month_to: '', description: '', amount: '' })
@@ -804,9 +805,30 @@ export function ProjectDetailView() {
         if (data) setRpRows(prev => [...prev, ...(data as RevenuePlanner[])].sort((a, b) => a.month.localeCompare(b.month)))
       }
 
+      // Upsert pipeline entry as won if we planned
+      if (planRows.length > 0 && project?.client_id) {
+        const { data: existing } = await supabase.from('pipeline_items')
+          .select('id').eq('title', title).eq('client_id', project.client_id).limit(1)
+        if (existing && existing.length > 0) {
+          await supabase.from('pipeline_items').update({ status: 'won' }).eq('id', existing[0].id)
+        } else {
+          await supabase.from('pipeline_items').insert({
+            client_id: project.client_id,
+            title,
+            description: crForm.description.trim() || null,
+            estimated_amount: crForm.amount ? parseFloat(crForm.amount) : null,
+            probability: parseInt(crForm.probability),
+            deal_type: 'one_time' as const,
+            expected_month: crForm.expected_month + '-01',
+            status: 'won' as const,
+            notes: null,
+          })
+        }
+      }
+
       setShowEditCR(false)
       setEditCRTarget(null)
-      toast('success', planRows.length > 0 ? 'Saved & added to invoice plan' : 'Change request updated')
+      toast('success', planRows.length > 0 ? 'Saved & added to invoice plan + pipeline' : 'Change request updated')
     } catch (e) { toast('error', (e as Error).message) }
     finally { setCrSaving(false) }
   }
@@ -847,7 +869,27 @@ export function ProjectDetailView() {
         .select('*, project:projects(id, pn, name, type)')
       if (error) { toast('error', error.message); return }
       if (data) setRpRows(prev => [...prev, ...(data as RevenuePlanner[])].sort((a, b) => a.month.localeCompare(b.month)))
-      toast('success', 'Added to Invoice Plan')
+      // Upsert pipeline entry as won (planned = confirmed)
+      if (project?.client_id) {
+        const { data: existing } = await supabase.from('pipeline_items')
+          .select('id').eq('title', planCRTarget.title).eq('client_id', project.client_id).limit(1)
+        if (existing && existing.length > 0) {
+          await supabase.from('pipeline_items').update({ status: 'won' }).eq('id', existing[0].id)
+        } else {
+          await supabase.from('pipeline_items').insert({
+            client_id: project.client_id,
+            title: planCRTarget.title,
+            description: planCRTarget.description ?? null,
+            estimated_amount: planCRAmount ? Number(planCRAmount) : (planCRTarget.amount ?? null),
+            probability: planCRTarget.probability ?? 100,
+            deal_type: planCRTarget.deal_type ?? 'one_time',
+            expected_month: planCRMonth + '-01',
+            status: 'won' as const,
+            notes: null,
+          })
+        }
+      }
+      toast('success', 'Added to Invoice Plan & Pipeline')
       setShowPlanCR(false)
       setPlanCRTarget(null)
       setPlanCRAmount('')
@@ -1601,14 +1643,25 @@ export function ProjectDetailView() {
         )}
 
         {/* ── Invoice Plans section ── */}
+        {(() => {
+          const planYears = [...new Set(invoiceRows.map(r => parseInt(r.month.slice(0, 4))))].sort()
+          const availYears = planYears.length > 0 ? planYears : [new Date().getFullYear()]
+          const currentYear = availYears.includes(planYear) ? planYear : availYears[availYears.length - 1]
+          const yearInvoiceRows = invoiceRows.filter(r => r.month.startsWith(String(currentYear)))
+          return (<>
         <div className="section-bar" style={{ marginBottom: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <h2>Invoice Plans</h2>
             <span className="text-muted text-sm" style={{ fontSize: 12 }}>← synced with planning grid</span>
           </div>
-          <button className="btn btn-primary btn-sm" onClick={() => { setPlanRows([{ month: '', description: defaultPlanDescription(), planned_amount: '', probability: '100' }]); setShowAddPlan(true) }}>
-            + Add planned invoice
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {availYears.map(y => (
+              <button key={y} className={`btn btn-xs ${currentYear === y ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setPlanYear(y)}>{y}</button>
+            ))}
+            <button className="btn btn-primary btn-sm" style={{ marginLeft: 4 }} onClick={() => { setPlanRows([{ month: '', description: defaultPlanDescription(), planned_amount: '', probability: '100' }]); setShowAddPlan(true) }}>
+              + Add planned invoice
+            </button>
+          </div>
         </div>
         {project.type === 'fixed' && contractVal != null && (() => {
           const activePlanTotal = invoiceRows
@@ -1646,7 +1699,7 @@ export function ProjectDetailView() {
                 </tr>
               </thead>
               <tbody>
-                {invoiceRows.map(r => {
+                {yearInvoiceRows.map(r => {
                   const isSettled = r.status === 'issued' || r.status === 'paid'
                   const isPending = r.status === 'planned' || r.status === 'retainer'
                   const isDeferred = r.status === 'deferred'
@@ -1749,6 +1802,7 @@ export function ProjectDetailView() {
             </table>
           )}
         </div>
+        </>)})()}
 
         {/* ── Change Requests section ── */}
         <div className="section-bar" style={{ marginBottom: 10 }}>
@@ -1766,25 +1820,28 @@ export function ProjectDetailView() {
             <table>
               <thead>
                 <tr>
-                  <th>STATUS</th>
+                  <th style={{ width: 160 }}>STATUS</th>
                   <th>TITLE</th>
-                  <th className="th-right">AMOUNT</th>
-                  <th>EXPECTED</th>
                   <th>DESCRIPTION</th>
+                  <th className="th-right" style={{ width: 100 }}>AMOUNT</th>
+                  <th style={{ width: 70 }}>PROB.</th>
+                  <th style={{ width: 100 }}>EXPECTED</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {crStore.changeRequests.map(cr => {
                   const isAuto = cr.notes === 'auto_extra'
+                  const isPending = cr.status === 'pending'
+                  const isApproved = cr.status === 'approved'
                   const alreadyPlanned = rpRows.some(r => r.notes?.includes(`CR: ${cr.title}`) && r.status !== 'deferred')
                   const crDisplayAmount = cr.deal_type === 'fixed' && cr.monthly_schedule
                     ? cr.monthly_schedule.reduce((s, r) => s + r.amount, 0)
                     : cr.amount
-                  const canPlan = !isAuto && cr.status === 'approved' && crDisplayAmount != null && crDisplayAmount > 0 && !alreadyPlanned
+                  const canPlan = !isAuto && isApproved && crDisplayAmount != null && crDisplayAmount > 0 && !alreadyPlanned
                   const crStatusBadge = cr.status === 'billed'
                     ? <span className="badge badge-navy">Billed</span>
-                    : cr.status === 'approved'
+                    : isApproved
                       ? <span className="badge badge-green">Approved</span>
                       : <span className="badge badge-amber">Pending</span>
                   return (
@@ -1794,27 +1851,75 @@ export function ProjectDetailView() {
                         {isAuto && <span className="badge badge-gray" style={{ marginLeft: 4 }}>Auto</span>}
                       </td>
                       <td style={{ fontSize: 13, fontWeight: 600, color: 'var(--c0)' }}>{cr.title}</td>
+                      <td style={{ fontSize: 12, color: 'var(--c3)', maxWidth: 200 }}>{cr.description ?? <span className="text-muted">—</span>}</td>
                       <td className="td-right text-mono" style={{ fontSize: 13, color: 'var(--c2)' }}>
                         {crDisplayAmount != null ? fmt(crDisplayAmount) : <span className="text-muted">—</span>}
+                      </td>
+                      <td style={{ fontSize: 12, color: 'var(--c3)' }}>
+                        {cr.probability != null ? `${cr.probability}%` : '—'}
                       </td>
                       <td className="text-mono" style={{ fontSize: 12, color: 'var(--c3)' }}>
                         {cr.expected_month ? fmtMonth(cr.expected_month) : <span className="text-muted">—</span>}
                       </td>
-                      <td style={{ fontSize: 12, color: 'var(--c3)', maxWidth: 300 }}>{cr.description ?? <span className="text-muted">—</span>}</td>
                       <td>
                         <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                          {isPending && !isAuto && (
+                            <button
+                              className="btn btn-primary btn-xs"
+                              onClick={async () => {
+                                await crStore.update(cr.id, { status: 'approved' })
+                                // Auto-plan if expected_month is set
+                                if (cr.expected_month && cr.amount && !alreadyPlanned) {
+                                  const { data } = await supabase.from('revenue_planner')
+                                    .insert({
+                                      project_id: id,
+                                      month: cr.expected_month,
+                                      notes: `CR: ${cr.title}`,
+                                      planned_amount: cr.amount,
+                                      actual_amount: null,
+                                      status: 'planned' as const,
+                                      probability: cr.probability ?? 100,
+                                    })
+                                    .select('*, project:projects(id, pn, name, type)')
+                                  if (data) setRpRows(prev => [...prev, ...(data as RevenuePlanner[])].sort((a, b) => a.month.localeCompare(b.month)))
+                                }
+                                if (project?.client_id) {
+                                  const { data: existing } = await supabase.from('pipeline_items')
+                                    .select('id').eq('title', cr.title).eq('client_id', project.client_id).limit(1)
+                                  if (existing && existing.length > 0) {
+                                    await supabase.from('pipeline_items').update({ status: 'won' }).eq('id', existing[0].id)
+                                  } else if (cr.expected_month && cr.amount) {
+                                    await supabase.from('pipeline_items').insert({
+                                      client_id: project.client_id,
+                                      title: cr.title,
+                                      description: cr.description ?? null,
+                                      estimated_amount: cr.amount,
+                                      probability: cr.probability ?? 100,
+                                      deal_type: cr.deal_type ?? 'one_time',
+                                      expected_month: cr.expected_month,
+                                      status: 'won' as const,
+                                      notes: null,
+                                    })
+                                  }
+                                }
+                                toast('success', cr.expected_month ? 'Approved & added to plan' : 'Approved')
+                              }}
+                            >
+                              Approve
+                            </button>
+                          )}
                           {canPlan && (
-                            <button className="btn btn-primary btn-xs" onClick={() => openPlanCR(cr)} title="Plan invoice for this CR">
+                            <button className="btn btn-secondary btn-xs" onClick={() => openPlanCR(cr)}>
                               + Plan Invoice
                             </button>
                           )}
-                          {!isAuto && (
-                            <>
-                              <button className="btn btn-secondary btn-xs" onClick={() => openEditCR(cr)}>Edit</button>
-                              <button className="btn btn-ghost btn-xs" onClick={() => setDeleteCRTarget(cr)} style={{ color: 'var(--red)' }}>
-                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                              </button>
-                            </>
+                          {!isAuto && isPending && (
+                            <button className="btn btn-secondary btn-xs" onClick={() => openEditCR(cr)}>Edit</button>
+                          )}
+                          {!isAuto && !alreadyPlanned && (
+                            <button className="btn btn-ghost btn-xs" onClick={() => setDeleteCRTarget(cr)} style={{ color: 'var(--red)' }}>
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                            </button>
                           )}
                         </div>
                       </td>
@@ -1822,6 +1927,15 @@ export function ProjectDetailView() {
                   )
                 })}
               </tbody>
+              <tfoot>
+                <tr style={{ background: 'var(--c7)', borderTop: '2px solid var(--c6)' }}>
+                  <td colSpan={3} style={{ fontSize: 10, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total</td>
+                  <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--blue)' }}>
+                    {fmt(crStore.changeRequests.reduce((s, cr) => s + (cr.amount ?? 0), 0))}
+                  </td>
+                  <td colSpan={3}></td>
+                </tr>
+              </tfoot>
             </table>
           )}
         </div>

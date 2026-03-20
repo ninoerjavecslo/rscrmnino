@@ -65,7 +65,9 @@ export interface HostingClient {
   amount: number
   billing_since?: string | null
   next_invoice_date?: string | null
+  billing_month?: number | null
   status: 'active' | 'paused' | 'cancelled'
+  provider?: string | null
   maintenance_id?: string | null
   accounting_email?: boolean
   notes?: string | null
@@ -83,6 +85,7 @@ export interface InfrastructureCost {
   monthly_cost: number
   billing_cycle: 'monthly' | 'annual' | 'variable'
   status: 'active' | 'inactive'
+  cancelled_from?: string | null
   notes?: string | null
 }
 
@@ -180,7 +183,8 @@ export interface PipelineItem {
 
 export interface ChangeRequest {
   id: string
-  project_id: string
+  project_id?: string | null
+  maintenance_id?: string | null
   title: string
   description?: string | null
   status: 'pending' | 'approved' | 'billed'
@@ -192,21 +196,93 @@ export interface ChangeRequest {
   expected_end_month?: string | null
   monthly_schedule?: Array<{ month: string; amount: number }> | null
   created_at: string
+  // Joined (only available when fetched with select joins)
+  maintenance?: { id: string; name: string; client: Pick<Client, 'id' | 'name'> | null } | null
+  project?: Pick<Project, 'id' | 'pn' | 'name' | 'client_id'> | null
 }
 
-// ── Hosting contract value helper ────────────────────────────────────────────
-// Returns the total contract value, capped at contract_expiry if set.
-export function hostingContractValue(h: Pick<HostingClient, 'cycle' | 'amount' | 'billing_since' | 'contract_expiry'>): number {
-  if (h.cycle === 'monthly') {
-    if (h.contract_expiry && h.billing_since) {
-      const start = new Date(h.billing_since + 'T00:00:00')
-      const end = new Date(h.contract_expiry + 'T00:00:00')
-      const months = Math.max(1, (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth() + 1)
-      return h.amount * months
-    }
-    return h.amount * 12
+// ── Hosting active-in-month helper ───────────────────────────────────────────
+// Returns true if the hosting client should generate revenue in the given month.
+// Cancelled clients are active for months strictly before cancelled_from.
+// month format: YYYY-MM-01 (same as cancelled_from)
+export function hostingActiveInMonth(
+  h: Pick<HostingClient, 'status' | 'cancelled_from' | 'billing_since'>,
+  month: string,
+): boolean {
+  if (h.billing_since) {
+    const bs = h.billing_since.slice(0, 7) + '-01'
+    if (month < bs) return false
   }
-  return h.amount
+  if (h.status === 'active') return true
+  if (h.status === 'cancelled' && h.cancelled_from) return month < h.cancelled_from
+  return false
+}
+
+// ── Hosting annual value helper ──────────────────────────────────────────────
+// Returns how much a hosting client will be billed in the given calendar year.
+// Accounts for: billing_since (partial first year), contract_expiry, cancelled_from.
+// This is the single source of truth used by the Hosting table, stat cards,
+// ForecastView, and client value summaries.
+export function hostingAnnualValue(
+  h: Pick<HostingClient, 'cycle' | 'amount' | 'billing_since' | 'contract_expiry' | 'status' | 'cancelled_from'>,
+  year: number = new Date().getFullYear(),
+): number {
+  if (h.cycle === 'yearly') return h.amount  // one payment per year regardless
+
+  const yearStart = `${year}-01-01`
+  const yearEnd   = `${year}-12-01`
+
+  // Effective end: earliest of Dec, contract_expiry, or month before cancelled_from
+  let effEnd = yearEnd
+  if (h.contract_expiry) {
+    const expiry = h.contract_expiry.slice(0, 7) + '-01'
+    if (expiry < effEnd) effEnd = expiry
+  }
+  if (h.status === 'cancelled' && h.cancelled_from) {
+    // cancelled_from = first month NOT billed → last billed = one month before
+    const cf = new Date(h.cancelled_from + 'T00:00:00')
+    cf.setMonth(cf.getMonth() - 1)
+    const lastBilled = `${cf.getFullYear()}-${String(cf.getMonth() + 1).padStart(2, '0')}-01`
+    if (lastBilled < effEnd) effEnd = lastBilled
+  }
+
+  // billing_since constrains the start when it falls within the current year
+  let effStart = yearStart
+  if (h.billing_since) {
+    const bs = h.billing_since.slice(0, 7) + '-01'
+    if (bs > yearStart) effStart = bs
+  }
+
+  if (effStart > effEnd) return 0
+  const [sy, sm] = effStart.split('-').map(Number)
+  const [ey, em] = effEnd.split('-').map(Number)
+  return Math.max(0, (ey - sy) * 12 + (em - sm) + 1) * h.amount
+}
+
+/** @deprecated Use hostingAnnualValue instead */
+export function hostingContractValue(h: Pick<HostingClient, 'cycle' | 'amount' | 'billing_since' | 'contract_expiry'>): number {
+  return hostingAnnualValue({ ...h, status: 'active', cancelled_from: null })
+}
+
+export interface TeamMember {
+  id: string
+  name: string
+  display_order: number
+  active: boolean
+  created_at: string
+}
+
+export interface ResourcePlan {
+  id: string
+  member_id: string | null   // null = Dev Team row
+  project_id: string | null
+  period: string             // YYYY-MM-DD (Monday for weeks, 1st for months)
+  period_type: 'week' | 'month'
+  hours: number
+  notes?: string | null
+  created_at: string
+  // Joined
+  project?: Pick<Project, 'id' | 'pn' | 'name' | 'client_id'> | null
 }
 
 // ── Supabase Database type for typed client ──────────────────────────────────
@@ -254,6 +330,98 @@ export interface Database {
         Insert: Omit<RevenuePlanner, 'id' | 'project'>
         Update: Partial<Omit<RevenuePlanner, 'id' | 'project'>>
       }
+      invoice_automations: {
+        Row: Omit<InvoiceAutomation, 'client'>
+        Insert: Omit<InvoiceAutomation, 'id' | 'created_at' | 'updated_at' | 'client'>
+        Update: Partial<Omit<InvoiceAutomation, 'id' | 'created_at' | 'updated_at' | 'client'>>
+      }
     }
   }
+}
+
+export interface Automation {
+  id: string
+  name: string
+  recipient_email: string
+  send_day: number       // 1–28: day of month to send
+  active: boolean
+  subject?: string | null  // email subject line (defaults to name — month year)
+  message?: string | null  // optional intro message shown in email body
+  notes?: string | null
+  sent_count: number
+  last_sent_at?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AutomationItem {
+  id: string
+  automation_id: string
+  client_id: string
+  contract_ref?: string | null
+  pn: string
+  description_template: string   // supports {month} and {year}
+  quantity: number
+  unit_price: number
+  due_days: number
+  sort_order: number
+  hosting_client_id?: string | null
+  created_at: string
+  // Joined
+  client?: { id: string; name: string } | null
+}
+
+export interface InvoiceAutomation {
+  id: string
+  name: string
+  client_id: string
+  contract_ref?: string | null
+  pn: string
+  description_template: string
+  quantity: number
+  unit_price: number
+  due_days: number
+  hosting_client_id?: string | null
+  maintenance_id?: string | null
+  active: boolean
+  sort_order: number
+  created_at: string
+  updated_at: string
+  client?: { id: string; name: string } | null
+}
+
+export interface ReminderRule {
+  id: string
+  name: string
+  trigger_type: 'domain_expiry' | 'maintenance_end' | 'hosting_renewal' | 'pipeline_stale'
+  days_before: number
+  recipient_email: string
+  active: boolean
+  notes?: string | null
+  // Domain expiry invoice generation
+  invoice_email?: string | null      // if set, send invoice-style email to accounting
+  invoice_pn?: string | null         // PN for invoice lines (default '6820')
+  invoice_unit_price?: number | null // price per domain
+  invoice_due_days?: number | null   // payment due days
+  last_run_at?: string | null
+  created_at: string
+  updated_at: string
+}
+
+// ── Pixel AI ──────────────────────────────────────────────────────────────────
+
+export interface PixelConversation {
+  id: string
+  title: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface PixelMessage {
+  id: string
+  conversation_id: string
+  role: 'user' | 'assistant'
+  content: string
+  model: 'claude' | 'gpt4o' | null
+  created_at: string
 }

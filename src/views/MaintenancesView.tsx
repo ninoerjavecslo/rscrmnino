@@ -101,6 +101,8 @@ export function MaintenancesView() {
   const [editing, setEditing] = useState<Maintenance | null>(null)
   const [form, setForm] = useState<FormState>({ ...EMPTY_FORM })
   const [saving, setSaving] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Maintenance | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     async function init() {
@@ -179,6 +181,10 @@ export function MaintenancesView() {
 
   async function save() {
     if (!form.client_id || !form.name || !form.monthly_retainer || !form.contract_start) return
+    if (form.hosting_enabled && form.hosting_amount && !form.hosting_billing_since) {
+      toast('error', 'Billing since is required when hosting is included')
+      return
+    }
     setSaving(true)
     try {
       const payload = {
@@ -363,8 +369,8 @@ export function MaintenancesView() {
                   <input type="number" value={form.hosting_amount} onChange={f('hosting_amount')} placeholder="120" />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Billing since <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
-                  <input type="month" value={form.hosting_billing_since} onChange={f('hosting_billing_since')} />
+                  <label className="form-label">Billing since</label>
+                  <input type="month" value={form.hosting_billing_since} onChange={f('hosting_billing_since')} required />
                 </div>
               </div>
               <div className="form-group">
@@ -412,7 +418,6 @@ export function MaintenancesView() {
       <div className="page-content">
         <div className="section-bar" style={{ marginBottom: 10 }}>
           <h2>Contracts</h2>
-          <button className="btn btn-primary btn-sm" onClick={openAdd}>+ New Contract</button>
         </div>
         <div className="card">
           {store.loading ? (
@@ -467,8 +472,15 @@ export function MaintenancesView() {
                       <td className="td-right text-mono" style={{ fontWeight: 600, color: 'var(--green)' }}>
                         {fmtEuro(m.monthly_retainer)}
                       </td>
-                      <td>
+                      <td style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                         <button className="btn btn-secondary btn-xs" onClick={() => openEdit(m)}>Edit</button>
+                        <button
+                          className="btn btn-xs"
+                          style={{ background: '#fee2e2', color: 'var(--red)', border: '1px solid #fecaca' }}
+                          onClick={() => setDeleteTarget(m)}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                        </button>
                       </td>
                     </tr>
                   )
@@ -478,6 +490,51 @@ export function MaintenancesView() {
           )}
         </div>
       </div>
+
+      {/* ── Delete confirmation modal ── */}
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setDeleteTarget(null)}>
+          <div className="modal-box" style={{ maxWidth: 420 }}>
+            <div className="modal-header">
+              <h2>Delete Contract</h2>
+              <button className="modal-close" onClick={() => setDeleteTarget(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 8, background: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--red)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                </div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--c0)' }}>{deleteTarget.name}</div>
+                  <div style={{ fontSize: 13, color: 'var(--c3)', marginTop: 4 }}>This will permanently delete the contract and all associated revenue planner entries.</div>
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button className="btn btn-secondary btn-sm" onClick={() => setDeleteTarget(null)} disabled={deleting}>Cancel</button>
+              <button
+                className="btn btn-sm"
+                style={{ background: 'var(--red)', borderColor: 'var(--red)', color: '#fff' }}
+                disabled={deleting}
+                onClick={async () => {
+                  setDeleting(true)
+                  try {
+                    await store.remove(deleteTarget.id)
+                    toast('success', 'Contract deleted')
+                    setDeleteTarget(null)
+                  } catch (e) {
+                    toast('error', (e as Error).message)
+                  } finally {
+                    setDeleting(false)
+                  }
+                }}
+              >
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

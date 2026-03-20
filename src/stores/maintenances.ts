@@ -102,6 +102,7 @@ interface MaintenancesState {
   fetchAll: () => Promise<void>
   add: (data: Omit<Maintenance, 'id' | 'created_at' | 'client'>, hosting?: HostingPayload | null) => Promise<void>
   update: (id: string, data: Partial<Omit<Maintenance, 'id' | 'created_at' | 'client'>>, hosting?: HostingPayload | null) => Promise<void>
+  remove: (id: string) => Promise<void>
 }
 
 export const useMaintenancesStore = create<MaintenancesState>((set, get) => ({
@@ -149,6 +150,14 @@ export const useMaintenancesStore = create<MaintenancesState>((set, get) => ({
       await upsertRetainerRows(updated as Maintenance)
       await syncHosting(id, updated.client_id, hosting ?? null)
     }
+    await get().fetchAll()
+  },
+
+  remove: async (id) => {
+    await supabase.from('revenue_planner').delete().eq('maintenance_id', id)
+    await supabase.from('hosting_clients').delete().eq('maintenance_id', id)
+    const { error } = await supabase.from('maintenances').delete().eq('id', id)
+    if (error) throw error
     await get().fetchAll()
   },
 }))

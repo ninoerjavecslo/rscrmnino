@@ -1,15 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useRevenuePlannerStore } from '../stores/revenuePlanner'
 import { usePipelineStore } from '../stores/pipeline'
+import { useChangeRequestsStore } from '../stores/changeRequests'
 import { useClientsStore } from '../stores/clients'
 import { useInfraStore } from '../stores/infrastructure'
+import { useDomainsStore } from '../stores/domains'
 import type { PipelineItem } from '../lib/types'
+import { hostingActiveInMonth } from '../lib/types'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function fmtEuro(n?: number | null) {
   if (!n) return '—'
-  return n.toLocaleString('en-EU') + ' €'
+  return n.toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' €'
 }
 
 function fmtMonthLabel(m: string) {
@@ -61,8 +64,10 @@ function probColor(p: number) {
 export function ForecastView() {
   const rpStore = useRevenuePlannerStore()
   const plStore = usePipelineStore()
+  const crStore = useChangeRequestsStore()
   const cStore = useClientsStore()
   const infraStore = useInfraStore()
+  const domainsStore = useDomainsStore()
 
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(currentYear)
@@ -72,8 +77,10 @@ export function ForecastView() {
   useEffect(() => {
     rpStore.fetchByMonths(loadMonths)
     plStore.fetchAll()
+    crStore.fetchAllPending()
     cStore.fetchAll()
     infraStore.fetchAll()
+    domainsStore.fetchAll()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── confirmed rows ─────────────────────────────────────────────────────────
@@ -87,14 +94,13 @@ export function ForecastView() {
 
   // Amount to use for a revenue_planner row in forecast:
   // - issued/paid → actual_amount (or planned as fallback)
-  // - planned/retainer in past month → 0 (not yet invoiced)
-  // - planned/retainer in current or future month → planned_amount (forecast)
+  // - deferred → 0
+  // - all other planned rows → planned_amount (confirmed contracted revenue regardless of month)
   const today = new Date()
   const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
-  function rowForecastAmount(r: { status: string; month: string; planned_amount?: number | null; actual_amount?: number | null }): number {
+  function rowForecastAmount(r: { status: string; month: string; planned_amount?: number | null; actual_amount?: number | null; maintenance_id?: string | null }): number {
     if (r.status === 'issued' || r.status === 'paid') return r.actual_amount ?? r.planned_amount ?? 0
     if (r.status === 'deferred') return 0
-    if (r.month <= currentMonth) return 0
     return r.planned_amount ?? 0
   }
 
@@ -115,65 +121,118 @@ export function ForecastView() {
       if (!clientId) continue
       if (!map.has(clientId)) map.set(clientId, { name: clientName ?? '—', byMonth: new Map() })
       const entry = map.get(clientId)!
-      entry.byMonth.set(r.month, (entry.byMonth.get(r.month) ?? 0) + rowForecastAmount(r))
+      let amt = rowForecastAmount(r)
+      // For issued maintenance retainer rows: subtract linked monthly hosting (tracked separately in hosting row)
+      // CR rows are extra work — hosting does NOT apply
+      const isCRRow = r.notes?.startsWith('CR:')
+      if (!isCRRow && r.maintenance_id && (r.status === 'issued' || r.status === 'paid')) {
+        const linkedHosting = infraStore.hostingClients.find(
+          h => h.maintenance_id === r.maintenance_id && h.cycle === 'monthly'
+        )
+        if (linkedHosting) amt = Math.max(0, amt - linkedHosting.amount)
+      }
+      entry.byMonth.set(r.month, (entry.byMonth.get(r.month) ?? 0) + amt)
     }
     return [...map.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name))
-  }, [confirmedRows, cStore.clients])
+  }, [confirmedRows, cStore.clients, infraStore.hostingClients])
 
-  // ── hosting aggregate — from infraStore (authoritative) ───────────────────
-  // Monthly hosting: same amount every month
-  // Yearly hosting: show in the month of next_invoice_date (if within range)
+  // ── hosting aggregate — from infraStore (matches Hosting Revenue view) ──────
+  // Monthly: all active hosting clients (standalone + maintenance-linked)
+  // Yearly: add in the anniversary month (same month as billing_since) each year
   const hostingByMonth = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const m of months) {
-      let amt = 0
-      for (const h of infraStore.hostingClients) {
-        if (h.status !== 'active') continue
-        // Stop at contract expiry
-        if (h.contract_expiry && m > h.contract_expiry) continue
-        if (h.cycle === 'monthly') {
-          amt += h.amount
-        }
-        // yearly handled via revenue_planner rows below
+    // Build set of (maintenance_id, month) pairs where maintenance was explicitly deferred
+    const maintDeferredSet = new Set<string>()
+    for (const r of rpStore.rows) {
+      if (r.maintenance_id && (r.status === 'deferred' || r.status === 'retainer')) {
+        maintDeferredSet.add(`${r.maintenance_id}:${r.month}`)
       }
-      if (amt > 0) map.set(m, amt)
+    }
+    const map = new Map<string, number>()
+    for (const h of infraStore.hostingClients) {
+      if (h.status === 'paused') continue
+      if (h.cycle === 'monthly') {
+        for (const m of months) {
+          if (!hostingActiveInMonth(h, m)) continue
+          if (h.contract_expiry && m > h.contract_expiry.slice(0, 7) + '-01') continue
+          // For maintenance-linked hosting: skip months where maintenance was explicitly deferred
+          if (h.maintenance_id && maintDeferredSet.has(`${h.maintenance_id}:${m}`)) continue
+          map.set(m, (map.get(m) ?? 0) + h.amount)
+        }
+      } else if (h.cycle === 'yearly' && h.billing_month) {
+        // Show in billing_month every year
+        for (const m of months) {
+          if (parseInt(m.slice(5, 7)) !== h.billing_month) continue
+          if (!hostingActiveInMonth(h, m)) continue
+          if (h.contract_expiry && m > h.contract_expiry.slice(0, 7) + '-01') continue
+          map.set(m, (map.get(m) ?? 0) + h.amount)
+        }
+      }
     }
     return map
-  }, [months, infraStore.hostingClients])
+  }, [months, infraStore.hostingClients, rpStore.rows, currentMonth])
 
-  // ── domains aggregate ──────────────────────────────────────────────────────
+  // ── domains aggregate (from domains store, not revenue_planner) ────────────
   const domainsByMonth = useMemo(() => {
     const map = new Map<string, number>()
-    for (const r of confirmedRows.filter(r => r.domain_id)) {
-      map.set(r.month, (map.get(r.month) ?? 0) + rowForecastAmount(r))
+    const now = new Date()
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+    const thisYear = now.getFullYear()
+    for (const d of domainsStore.domains) {
+      if (!d.yearly_amount) continue
+      const billingMonth = `${year}-${(d.registered_date ?? d.expiry_date).slice(5, 7)}-01`
+      if (!months.includes(billingMonth)) continue
+      if (d.archived) {
+        // Archived domain: only count in current year if billing month already passed
+        if (year !== thisYear) continue
+        if (billingMonth > todayStr) continue
+      }
+      map.set(billingMonth, (map.get(billingMonth) ?? 0) + d.yearly_amount)
     }
     return map
-  }, [confirmedRows])
+  }, [domainsStore.domains, months, year])
 
-  // ── confirmed total per month (project + maintenance + domains; monthly hosting from infra; yearly hosting from revenue_planner) ──
+  // ── confirmed total per month (projects + maintenance + domains + hosting from infra) ──
   const confirmedByMonth = useMemo(() => {
     const map = new Map<string, number>()
-    // project + maintenance + domain rows + yearly hosting rows from revenue_planner
-    for (const r of confirmedRows) {
-      if (r.hosting_client_id) {
-        const h = infraStore.hostingClients.find(h => h.id === r.hosting_client_id)
-        if (h?.cycle !== 'yearly') continue  // monthly hosting handled via hostingByMonth
+    // sum exactly what's shown: client rows (projects + maintenance with resolvable client)
+    for (const [, { byMonth }] of clientRows) {
+      for (const [m, amt] of byMonth) {
+        map.set(m, (map.get(m) ?? 0) + amt)
       }
-      map.set(r.month, (map.get(r.month) ?? 0) + rowForecastAmount(r))
     }
-    // monthly hosting from infra
+    // hosting from infra
     for (const [m, amt] of hostingByMonth) {
       map.set(m, (map.get(m) ?? 0) + amt)
     }
+    // domains from domains store
+    for (const [m, amt] of domainsByMonth) {
+      map.set(m, (map.get(m) ?? 0) + amt)
+    }
     return map
-  }, [confirmedRows, hostingByMonth, infraStore.hostingClients])
+  }, [clientRows, hostingByMonth, domainsByMonth])
 
   // ── pipeline ───────────────────────────────────────────────────────────────
   const activePipeline = useMemo(() =>
     plStore.items
       .filter(i => i.status !== 'won' && i.status !== 'lost')
+      .filter(i => months.some(m => pipelineAmountInMonth(i, m) > 0))
       .sort((a, b) => (a.expected_month ?? 'zzzz').localeCompare(b.expected_month ?? 'zzzz')),
-    [plStore.items]
+    [plStore.items, months]
+  )
+
+  // Pending change requests shown as pipeline (proposals not yet approved, and not yet planned in revenue planner)
+  const pendingCRPipeline = useMemo(() =>
+    crStore.pendingCRs
+      .filter(cr => {
+        if (!cr.amount || !cr.expected_month || !months.includes(cr.expected_month)) return false
+        // Hide if already has a planned revenue_planner row (confirmed)
+        const alreadyPlanned = rpStore.rows.some(r =>
+          r.notes === `CR: ${cr.title}` && r.maintenance_id === cr.maintenance_id && r.status !== 'deferred'
+        )
+        return !alreadyPlanned
+      })
+      .sort((a, b) => (a.expected_month ?? 'zzzz').localeCompare(b.expected_month ?? 'zzzz')),
+    [crStore.pendingCRs, months, rpStore.rows]
   )
 
   const pipelineFaceByMonth = useMemo(() => {
@@ -184,18 +243,79 @@ export function ForecastView() {
         if (amt > 0) map.set(m, (map.get(m) ?? 0) + amt)
       }
     }
+    for (const cr of pendingCRPipeline) {
+      if (cr.expected_month && cr.amount) {
+        map.set(cr.expected_month, (map.get(cr.expected_month) ?? 0) + cr.amount)
+      }
+    }
     return map
-  }, [activePipeline, months])
+  }, [activePipeline, pendingCRPipeline, months])
 
   function getPipelineClientName(item: PipelineItem): string {
     return item.client?.name ?? cStore.clients.find(c => c.id === item.client_id)?.name ?? item.company_name ?? '—'
   }
 
+  function getCRClientName(cr: typeof crStore.pendingCRs[0]): string {
+    if (cr.maintenance?.client?.name) return cr.maintenance.client.name
+    if (cr.project?.client_id) return cStore.clients.find(c => c.id === cr.project!.client_id)?.name ?? '—'
+    return '—'
+  }
+
+  // ── maintenance cost rows (status='cost' in revenue_planner) ─────────────
+  const maintCostRows = useMemo(() => {
+    const byMaint = new Map<string, { name: string; clientName: string; amountByMonth: Map<string, number> }>()
+    for (const r of rpStore.rows) {
+      if (r.status !== 'cost' || !r.maintenance_id || !months.includes(r.month)) continue
+      if (!byMaint.has(r.maintenance_id)) {
+        byMaint.set(r.maintenance_id, {
+          name: r.maintenance?.name ?? 'Maintenance cost',
+          clientName: r.maintenance?.client?.name ?? '',
+          amountByMonth: new Map(),
+        })
+      }
+      const entry = byMaint.get(r.maintenance_id)!
+      entry.amountByMonth.set(r.month, (entry.amountByMonth.get(r.month) ?? 0) + (r.planned_amount ?? 0))
+    }
+    return [...byMaint.values()]
+  }, [rpStore.rows, months])
+
+  // ── infrastructure costs by month ─────────────────────────────────────────
+  const costsByMonth = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const c of infraStore.infraCosts) {
+      for (const m of months) {
+        if (c.status === 'active') {
+          map.set(m, (map.get(m) ?? 0) + c.monthly_cost)
+        } else if (c.status === 'inactive' && c.cancelled_from && m < c.cancelled_from) {
+          map.set(m, (map.get(m) ?? 0) + c.monthly_cost)
+        }
+      }
+    }
+    for (const mc of maintCostRows) {
+      for (const [m, amt] of mc.amountByMonth) {
+        map.set(m, (map.get(m) ?? 0) + amt)
+      }
+    }
+    return map
+  }, [months, infraStore.infraCosts, maintCostRows])
+
+  const costRows = useMemo(() =>
+    infraStore.infraCosts.filter(c => {
+      // Show if active, or if cancelled within or after first month of this year
+      if (c.status === 'active') return true
+      if (c.status === 'inactive' && c.cancelled_from) return c.cancelled_from > months[0]
+      return false
+    }),
+    [infraStore.infraCosts, months]
+  )
+
   // ── stats ──────────────────────────────────────────────────────────────────
   const totalConfirmed = months.reduce((s, m) => s + (confirmedByMonth.get(m) ?? 0), 0)
-  const totalPipelineFace = activePipeline.reduce((s, i) => s + pipelineDealTotal(i), 0)
+  const totalPipelineFace = months.reduce((s, m) => s + (pipelineFaceByMonth.get(m) ?? 0), 0)
   const totalBestCase = totalConfirmed + totalPipelineFace
-  const totalLikely = totalConfirmed + activePipeline.filter(i => i.probability >= 50).reduce((s, i) => s + pipelineDealTotal(i), 0)
+  const crPipelineLikely = pendingCRPipeline.filter(cr => (cr.probability ?? 0) >= 50).reduce((s, cr) => s + (cr.amount ?? 0), 0)
+  const totalLikely = totalConfirmed + activePipeline.filter(i => i.probability >= 50).reduce((s, i) => s + pipelineDealTotal(i), 0) + crPipelineLikely
+  const totalCosts = months.reduce((s, m) => s + (costsByMonth.get(m) ?? 0), 0)
 
   const sectionHeaderStyle: React.CSSProperties = {
     fontWeight: 700, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px', padding: '6px 12px'
@@ -215,7 +335,7 @@ export function ForecastView() {
           <p>Confirmed plans + sales pipeline — {year}</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button className="btn btn-ghost btn-sm" onClick={() => setYear(y => y - 1)}>← {year - 1}</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setYear(y => y - 1)} disabled={year <= 2025}>← {year - 1}</button>
           <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--navy)', minWidth: 40, textAlign: 'center' }}>{year}</span>
           <button className="btn btn-ghost btn-sm" onClick={() => setYear(y => y + 1)}>{year + 1} →</button>
         </div>
@@ -230,7 +350,7 @@ export function ForecastView() {
         <div className="stat-card" style={{ '--left-color': '#d97706' } as React.CSSProperties}>
           <div className="stat-card-label">PIPELINE</div>
           <div className="stat-card-value" style={{ color: '#d97706' }}>{totalPipelineFace > 0 ? fmtEuro(totalPipelineFace) : '—'}</div>
-          <div className="stat-card-sub">{activePipeline.length} active deals, face value</div>
+          <div className="stat-card-sub">{activePipeline.length + pendingCRPipeline.length} active deals, face value</div>
         </div>
         <div className="stat-card" style={{ '--left-color': 'var(--green)' } as React.CSSProperties}>
           <div className="stat-card-label">BEST CASE</div>
@@ -245,8 +365,8 @@ export function ForecastView() {
       </div>
 
       <div className="page-content">
-        <div className="card">
-          <table className="no-row-hover">
+        <div className="card" style={{ overflowX: 'auto' }}>
+          <table className="no-row-hover" style={{ minWidth: 'max-content' }}>
             <thead>
               <tr>
                 <th style={{ width: 200 }}>CLIENT / SOURCE</th>
@@ -343,7 +463,7 @@ export function ForecastView() {
                 </td>
               </tr>
 
-              {activePipeline.length === 0 && (
+              {activePipeline.length === 0 && pendingCRPipeline.length === 0 && (
                 <tr>
                   <td colSpan={months.length + 2} style={{ padding: '16px 12px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>
                     No active pipeline items. Add prospects from the client page.
@@ -378,8 +498,41 @@ export function ForecastView() {
                 )
               })}
 
+              {/* Pending Change Requests as pipeline */}
+              {pendingCRPipeline.map(cr => {
+                const clientName = getCRClientName(cr)
+                const prob = cr.probability ?? 50
+                const source = cr.maintenance?.name ?? cr.project?.name ?? '—'
+                return (
+                  <tr key={cr.id}>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ fontWeight: 600, fontSize: 13 }}>{clientName}</span>
+                        <span className="badge badge-navy" style={{ fontSize: 9 }}>CR</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--c3)', marginTop: 1 }}>{cr.title}</div>
+                      <div style={{ fontSize: 10, color: 'var(--c4)' }}>{source}</div>
+                    </td>
+                    {months.map(m => {
+                      const amt = cr.expected_month === m ? (cr.amount ?? 0) : 0
+                      return (
+                        <td key={m} className="td-right" style={{ fontSize: 13 }}>
+                          {amt > 0 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                              <span className="text-mono" style={{ fontWeight: 600, color: '#d97706' }}>{fmtEuro(amt)}</span>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: probColor(prob) }}>{prob}%</span>
+                            </div>
+                          ) : <span style={{ color: 'var(--c5)' }}>—</span>}
+                        </td>
+                      )
+                    })}
+                    <td className="td-right text-mono" style={{ fontWeight: 700, color: '#d97706' }}>{fmtEuro(cr.amount)}</td>
+                  </tr>
+                )
+              })}
+
               {/* Pipeline sub-total (face value) */}
-              {activePipeline.length > 0 && (
+              {(activePipeline.length > 0 || pendingCRPipeline.length > 0) && (
                 <tr style={subTotalRowStyle}>
                   <td style={{ ...subTotalLabelStyle, color: '#d97706' }}>Pipeline Total</td>
                   {months.map(m => (
@@ -393,19 +546,92 @@ export function ForecastView() {
                 </tr>
               )}
 
-              {/* Grand total */}
+              {/* ── Costs section header ── */}
+              {(costRows.length > 0 || maintCostRows.length > 0) && (
+                <tr style={{ background: '#7f1d1d' }}>
+                  <td colSpan={months.length + 2} style={{ ...sectionHeaderStyle, color: '#fff' }}>
+                    Costs
+                  </td>
+                </tr>
+              )}
+
+              {/* Per-cost rows */}
+              {costRows.map(c => {
+                const isCancelled = c.status === 'inactive'
+                const rowTotal = months.reduce((s, m) => {
+                  if (c.status === 'active') return s + c.monthly_cost
+                  if (isCancelled && c.cancelled_from && m < c.cancelled_from) return s + c.monthly_cost
+                  return s
+                }, 0)
+                return (
+                  <tr key={c.id} style={isCancelled ? { opacity: 0.7 } : undefined}>
+                    <td style={{ fontSize: 13 }}>
+                      <div style={{ fontWeight: 600, color: 'var(--red)' }}>{c.provider}</div>
+                      {c.description && <div style={{ fontSize: 11, color: 'var(--c3)', marginTop: 1 }}>{c.description}</div>}
+                    </td>
+                    {months.map(m => {
+                      const active = c.status === 'active' || (isCancelled && !!c.cancelled_from && m < c.cancelled_from)
+                      return (
+                        <td key={m} className="td-right text-mono" style={{ fontSize: 13, color: active ? 'var(--red)' : 'var(--c5)' }}>
+                          {active ? fmtEuro(c.monthly_cost) : '—'}
+                        </td>
+                      )
+                    })}
+                    <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--red)' }}>{fmtEuro(rowTotal)}</td>
+                  </tr>
+                )
+              })}
+
+              {/* Maintenance cost rows */}
+              {maintCostRows.map((mc, i) => {
+                const rowTotal = months.reduce((s, m) => s + (mc.amountByMonth.get(m) ?? 0), 0)
+                return (
+                  <tr key={i}>
+                    <td style={{ fontSize: 13 }}>
+                      <div style={{ fontWeight: 600, color: 'var(--red)' }}>{mc.name}</div>
+                      {mc.clientName && <div style={{ fontSize: 11, color: 'var(--c3)', marginTop: 1 }}>{mc.clientName}</div>}
+                    </td>
+                    {months.map(m => {
+                      const amt = mc.amountByMonth.get(m) ?? 0
+                      return (
+                        <td key={m} className="td-right text-mono" style={{ fontSize: 13, color: amt ? 'var(--red)' : 'var(--c5)' }}>
+                          {amt ? fmtEuro(amt) : '—'}
+                        </td>
+                      )
+                    })}
+                    <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--red)' }}>{fmtEuro(rowTotal)}</td>
+                  </tr>
+                )
+              })}
+
+              {/* Costs subtotal */}
+              {(costRows.length > 0 || maintCostRows.length > 0) && (
+                <tr style={{ ...subTotalRowStyle, borderTop: '2px solid #fca5a5' }}>
+                  <td style={{ ...subTotalLabelStyle, color: 'var(--red)' }}>Costs Total</td>
+                  {months.map(m => (
+                    <td key={m} className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--red)' }}>
+                      {(costsByMonth.get(m) ?? 0) > 0 ? fmtEuro(costsByMonth.get(m)) : '—'}
+                    </td>
+                  ))}
+                  <td className="td-right text-mono" style={{ fontWeight: 800, color: 'var(--red)', fontSize: 14 }}>
+                    {fmtEuro(totalCosts)}
+                  </td>
+                </tr>
+              )}
+
+              {/* Grand total (revenue - costs) */}
               <tr style={{ background: 'var(--navy)', borderTop: '2px solid var(--navy)' }}>
                 <td style={{ ...sectionHeaderStyle, color: '#fff', fontSize: 12 }}>Grand Total</td>
                 {months.map(m => {
-                  const total = (confirmedByMonth.get(m) ?? 0) + (pipelineFaceByMonth.get(m) ?? 0)
+                  const net = (confirmedByMonth.get(m) ?? 0) + (pipelineFaceByMonth.get(m) ?? 0) - (costsByMonth.get(m) ?? 0)
                   return (
-                    <td key={m} className="td-right text-mono" style={{ fontWeight: 700, color: '#fff', fontSize: 13 }}>
-                      {total > 0 ? fmtEuro(total) : '—'}
+                    <td key={m} className="td-right text-mono" style={{ fontWeight: 700, color: net < 0 ? '#fca5a5' : '#fff', fontSize: 13 }}>
+                      {net !== 0 ? fmtEuro(net) : '—'}
                     </td>
                   )
                 })}
-                <td className="td-right text-mono" style={{ fontWeight: 800, color: '#fff', fontSize: 14 }}>
-                  {fmtEuro(totalBestCase)}
+                <td className="td-right text-mono" style={{ fontWeight: 800, color: (totalBestCase - totalCosts) < 0 ? '#fca5a5' : '#fff', fontSize: 14 }}>
+                  {fmtEuro(totalBestCase - totalCosts)}
                 </td>
               </tr>
 

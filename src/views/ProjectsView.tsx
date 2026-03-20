@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useProjectsStore } from '../stores/projects'
 import { useClientsStore } from '../stores/clients'
-import { useInfraStore } from '../stores/infrastructure'
 import { useRevenuePlannerStore } from '../stores/revenuePlanner'
 import { useChangeRequestsStore } from '../stores/changeRequests'
 import { useSettingsStore } from '../stores/settings'
@@ -12,9 +11,12 @@ import { Select } from '../components/Select'
 
 const CURRENT_YEAR = new Date().getFullYear()
 
-
-function currentYearMonths() {
-  return Array.from({ length: 12 }, (_, i) => `${CURRENT_YEAR}-${String(i + 1).padStart(2, '0')}-01`)
+// Wide range: YEAR-1 through YEAR+2 to capture multi-year contracts
+const ALL_MONTHS: string[] = []
+for (let y = CURRENT_YEAR - 1; y <= CURRENT_YEAR + 2; y++) {
+  for (let m = 1; m <= 12; m++) {
+    ALL_MONTHS.push(`${y}-${String(m).padStart(2, '0')}-01`)
+  }
 }
 
 function nextPn(projects: { pn: string }[]) {
@@ -108,7 +110,6 @@ function buildVarRows(startMonth: string, endMonth: string, defaultAmount: strin
 export function ProjectsView() {
   const pStore = useProjectsStore()
   const cStore = useClientsStore()
-  const iStore = useInfraStore()
   const rpStore = useRevenuePlannerStore()
   const crStore = useChangeRequestsStore()
   const settingsStore = useSettingsStore()
@@ -123,8 +124,7 @@ export function ProjectsView() {
   const [deleteTarget, setDeleteTarget] = useState<Project | null>(null)
   const [deleting, setDeleting]       = useState(false)
 
-  const months = useMemo(() => currentYearMonths(), [])
-  useEffect(() => { pStore.fetchAll(); cStore.fetchAll(); iStore.fetchAll(); rpStore.fetchByMonths(months); crStore.fetchAllApproved(); settingsStore.fetch() }, [])
+  useEffect(() => { pStore.fetchAll(); cStore.fetchAll(); rpStore.fetchByMonths(ALL_MONTHS); crStore.fetchAllApproved(); settingsStore.fetch() }, [])
 
   function setF(k: string, v: string) {
     setForm(f => {
@@ -250,8 +250,6 @@ export function ProjectsView() {
         : (p.initial_contract_value ?? p.contract_value ?? 0)
       return sum + base + crTotal
     }, 0)
-  const monthsElapsed  = new Date().getMonth() + 1
-  const costsYTD       = iStore.totalMonthlyCost() * monthsElapsed
   const invoicedYTD    = rpStore.rows.filter(r => r.project_id != null && r.hosting_client_id == null && r.maintenance_id == null && r.domain_id == null && r.status !== 'cost').reduce((s, r) => s + (r.actual_amount ?? 0), 0)
 
   return (
@@ -273,7 +271,6 @@ export function ProjectsView() {
           { label:'Total projects',  value:String(pStore.projects.length), sub:`${activeCount} active`, color:'var(--c5)' },
           { label:'Portfolio value', value: portfolioValue ? `${portfolioValue.toLocaleString()} €` : '—', sub:'active contracts', color:'var(--navy)' },
           { label:'Invoiced YTD',    value: invoicedYTD ? `${invoicedYTD.toLocaleString(undefined,{maximumFractionDigits:0})} €` : '—', sub:'from invoices', color:'var(--green)' },
-          { label:'Costs YTD',       value: costsYTD ? `${costsYTD.toLocaleString(undefined,{maximumFractionDigits:0})} €` : '—', sub:'infrastructure costs', color:'var(--red)' },
         ].map(s => (
           <div key={s.label} className="stat-card" style={{'--left-color':s.color} as React.CSSProperties}>
             <div className="stat-card-label">{s.label}</div>

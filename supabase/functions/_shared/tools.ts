@@ -111,6 +111,73 @@ export const TOOL_DEFINITIONS = [
       required: ['id', 'new_status'],
     },
   },
+  {
+    name: 'list_hosting_clients',
+    description: 'List hosting clients with their monthly/yearly revenue amounts and status.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', enum: ['active', 'cancelled', 'paused'], description: 'Filter by status. Omit for all.' },
+      },
+    },
+  },
+  {
+    name: 'list_domains',
+    description: 'List client domains with expiry dates, yearly billing amounts, and renewal status.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        archived: { type: 'boolean', description: 'Include archived domains. Default false.' },
+        expiring_days: { type: 'number', description: 'Only domains expiring within N days.' },
+      },
+    },
+  },
+  {
+    name: 'list_infrastructure_costs',
+    description: 'List infrastructure costs — what the agency pays providers (servers, hosting platforms).',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'list_maintenances',
+    description: 'List maintenance contracts with monthly retainer amounts.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', enum: ['active', 'inactive'], description: 'Filter by status.' },
+      },
+    },
+  },
+  {
+    name: 'get_monthly_revenue_summary',
+    description: 'Get the complete revenue summary for a specific month. Combines revenue planner entries (project invoices), active hosting clients (recurring monthly fees), and active maintenance retainers. Use this whenever the user asks about revenue, income, or earnings for a month.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        month: { type: 'string', description: 'Month as YYYY-MM-01 e.g. 2026-03-01. Defaults to current month.' },
+      },
+    },
+  },
+  {
+    name: 'get_client_overview',
+    description: 'Get the full value overview for a client: active projects (contract values), maintenance retainer, hosting clients, and domains. Use this when asked about a client\'s value, total revenue, what we earn from them, or their relationship summary.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        client_name: { type: 'string', description: 'Client name or partial name (case-insensitive)' },
+      },
+      required: ['client_name'],
+    },
+  },
+  {
+    name: 'list_pipeline',
+    description: 'List sales pipeline deals with estimated amounts and probabilities.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', description: 'Filter by status (active, won, lost). Omit for active only.' },
+      },
+    },
+  },
 ]
 
 // ── Tool executors ────────────────────────────────────────────────────────────
@@ -273,6 +340,184 @@ export async function executeTool(
         result: { pending: true, plan: current, new_status: input.new_status, actual_amount: input.actual_amount },
         requiresConfirmation: true,
       }
+    }
+
+    case 'list_hosting_clients': {
+      let q = supabase
+        .from('hosting_clients')
+        .select('id, description, provider, cycle, amount, status, billing_since, contract_expiry, client:clients(name)')
+        .order('status')
+      if (input.status) q = q.eq('status', input.status)
+      const { data, error } = await q
+      if (error) return { result: { error: error.message } }
+      return { result: data }
+    }
+
+    case 'list_domains': {
+      let q = supabase
+        .from('domains')
+        .select('id, domain_name, expiry_date, yearly_amount, archived, project_pn, client:clients(name)')
+        .order('expiry_date')
+      if (!input.archived) q = q.eq('archived', false)
+      if (input.expiring_days) {
+        const cutoff = new Date()
+        cutoff.setDate(cutoff.getDate() + (input.expiring_days as number))
+        q = q.lte('expiry_date', cutoff.toISOString().slice(0, 10))
+      }
+      const { data, error } = await q
+      if (error) return { result: { error: error.message } }
+      return { result: data }
+    }
+
+    case 'list_infrastructure_costs': {
+      const { data, error } = await supabase
+        .from('infrastructure_costs')
+        .select('id, provider, description, monthly_cost, billing_cycle, status, cancelled_from')
+        .order('provider')
+      if (error) return { result: { error: error.message } }
+      return { result: data }
+    }
+
+    case 'list_maintenances': {
+      let q = supabase
+        .from('maintenances')
+        .select('id, monthly_retainer, status, project_pn, client:clients(name)')
+        .order('status')
+      if (input.status) q = q.eq('status', input.status)
+      const { data, error } = await q
+      if (error) return { result: { error: error.message } }
+      return { result: data }
+    }
+
+    case 'get_monthly_revenue_summary': {
+      const targetMonth = (input.month as string) || new Date().toISOString().slice(0, 7) + '-01'
+
+      // 1. Revenue planner entries for this month
+      const { data: plannerEntries } = await supabase
+        .from('revenue_planner')
+        .select('id, planned_amount, actual_amount, status, notes, project:projects(pn, name, client:clients(name))')
+        .eq('month', targetMonth)
+
+      // 2. Active hosting clients (monthly revenue)
+      const { data: hostingClients } = await supabase
+        .from('hosting_clients')
+        .select('id, description, amount, cycle, billing_since, client:clients(name)')
+        .eq('status', 'active')
+
+      // Compute monthly amount for each hosting client (yearly = amount/12)
+      const hostingMonthly = (hostingClients ?? []).map((h: Record<string, unknown>) => ({
+        description: h.description,
+        client: h.client,
+        monthly_amount: h.cycle === 'yearly' ? Math.round((h.amount as number) / 12 * 100) / 100 : h.amount,
+        cycle: h.cycle,
+      }))
+      const hostingTotal = hostingMonthly.reduce((sum: number, h: Record<string, unknown>) => sum + (h.monthly_amount as number), 0)
+
+      // 3. Active maintenance retainers
+      const { data: maintenances } = await supabase
+        .from('maintenances')
+        .select('id, monthly_retainer, project_pn, client:clients(name)')
+        .eq('status', 'active')
+
+      const maintenanceTotal = (maintenances ?? []).reduce((sum: number, m: Record<string, unknown>) => sum + (m.monthly_retainer as number), 0)
+
+      // 4. Planner totals by status
+      const plannerByStatus: Record<string, number> = {}
+      for (const e of (plannerEntries ?? [])) {
+        const s = e.status as string
+        const amt = (e.actual_amount ?? e.planned_amount) as number
+        plannerByStatus[s] = (plannerByStatus[s] ?? 0) + amt
+      }
+
+      return {
+        result: {
+          month: targetMonth,
+          planner_entries: plannerEntries ?? [],
+          planner_totals_by_status: plannerByStatus,
+          hosting_clients: hostingMonthly,
+          hosting_total_monthly: hostingTotal,
+          maintenance_retainers: maintenances ?? [],
+          maintenance_total_monthly: maintenanceTotal,
+          grand_total: Object.values(plannerByStatus).reduce((s, v) => s + v, 0) + hostingTotal + maintenanceTotal,
+        },
+      }
+    }
+
+    case 'get_client_overview': {
+      // Find client
+      const { data: clients, error: clientErr } = await supabase
+        .from('clients')
+        .select('id, name, email, phone')
+        .ilike('name', `%${input.client_name}%`)
+        .limit(1)
+      if (clientErr || !clients?.length) return { result: { error: `Client "${input.client_name}" not found` } }
+      const client = clients[0]
+
+      // Active projects
+      const { data: projects } = await supabase
+        .from('projects')
+        .select('pn, name, type, status, contract_value, currency, start_date, end_date')
+        .eq('client_id', client.id)
+        .order('status')
+
+      // Maintenance contracts
+      const { data: maintenances } = await supabase
+        .from('maintenances')
+        .select('id, monthly_retainer, status, project_pn')
+        .eq('client_id', client.id)
+
+      // Hosting clients
+      const { data: hosting } = await supabase
+        .from('hosting_clients')
+        .select('id, description, amount, cycle, status, billing_since')
+        .eq('client_id', client.id)
+
+      // Domains
+      const { data: domains } = await supabase
+        .from('domains')
+        .select('domain_name, expiry_date, yearly_amount, archived')
+        .eq('client_id', client.id)
+        .eq('archived', false)
+
+      const activeProjects = (projects ?? []).filter((p: Record<string, unknown>) => p.status === 'active')
+      const activeMaintenance = (maintenances ?? []).filter((m: Record<string, unknown>) => m.status === 'active')
+      const activeHosting = (hosting ?? []).filter((h: Record<string, unknown>) => h.status === 'active')
+
+      const maintenanceMonthly = activeMaintenance.reduce((s: number, m: Record<string, unknown>) => s + (m.monthly_retainer as number), 0)
+      const hostingMonthly = activeHosting.reduce((s: number, h: Record<string, unknown>) => {
+        const amt = h.amount as number
+        return s + (h.cycle === 'yearly' ? Math.round(amt / 12 * 100) / 100 : amt)
+      }, 0)
+      const totalMonthlyRecurring = maintenanceMonthly + hostingMonthly
+
+      return {
+        result: {
+          client,
+          active_projects: activeProjects,
+          all_projects: projects ?? [],
+          maintenance_contracts: maintenances ?? [],
+          hosting_clients: hosting ?? [],
+          domains: domains ?? [],
+          summary: {
+            maintenance_monthly_retainer: maintenanceMonthly,
+            hosting_monthly: hostingMonthly,
+            total_monthly_recurring: totalMonthlyRecurring,
+            total_monthly_recurring_annual: Math.round(totalMonthlyRecurring * 12 * 100) / 100,
+          },
+        },
+      }
+    }
+
+    case 'list_pipeline': {
+      let q = supabase
+        .from('pipeline')
+        .select('id, title, company_name, estimated_amount, probability, status, expected_month, deal_type, client:clients(name)')
+        .order('expected_month')
+      const filterStatus = (input.status as string) || 'active'
+      if (filterStatus !== 'all') q = q.not('status', 'in', '("won","lost")')
+      const { data, error } = await q
+      if (error) return { result: { error: error.message } }
+      return { result: data }
     }
 
     default:

@@ -1,902 +1,1366 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, PieChart, Pie, Cell,
+  BarChart, Bar, ComposedChart, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, Legend, ResponsiveContainer, ReferenceLine
 } from 'recharts'
 import { useClientsStore } from '../stores/clients'
 import { useProjectsStore } from '../stores/projects'
 import { useMaintenancesStore } from '../stores/maintenances'
-import { useRevenuePlannerStore } from '../stores/revenuePlanner'
 import { useInfraStore } from '../stores/infrastructure'
 import { useDomainsStore } from '../stores/domains'
+import { useRevenuePlannerStore } from '../stores/revenuePlanner'
+import { useChangeRequestsStore } from '../stores/changeRequests'
 import { usePipelineStore } from '../stores/pipeline'
+import { hostingAnnualValue } from '../lib/types'
+import type { RevenuePlanner, PipelineItem, InfrastructureCost } from '../lib/types'
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+const NOW = new Date()
+const CURRENT_YEAR = NOW.getFullYear()
+const CURRENT_MONTH_IDX = NOW.getMonth()
+const CURRENT_MONTH_STR = `${CURRENT_YEAR}-${String(CURRENT_MONTH_IDX + 1).padStart(2, '0')}-01`
+const YTD_PREFIX = `${CURRENT_YEAR}-`
+
+const ALL_MONTHS: string[] = []
+for (let y = CURRENT_YEAR - 1; y <= CURRENT_YEAR + 1; y++) {
+  for (let m = 1; m <= 12; m++) {
+    ALL_MONTHS.push(`${y}-${String(m).padStart(2, '0')}-01`)
+  }
+}
 
 function fmtEur(n: number): string {
   return n.toLocaleString('de-DE', { maximumFractionDigits: 0 }) + ' €'
 }
 
-function fmtMonth(yyyymmdd: string): string {
-  const d = new Date(yyyymmdd + 'T00:00:00')
-  return d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' })
+function fmtMonth(s: string): string {
+  const d = new Date(s + 'T00:00:00')
+  return d.toLocaleString('en', { month: 'short', year: 'numeric' })
 }
 
-/** Build an array of YYYY-MM-DD strings (first of month) relative to today */
-function buildMonthRange(startOffset: number, endOffset: number): string[] {
-  const today = new Date('2026-03-15T00:00:00')
-  const result: string[] = []
-  for (let i = startOffset; i <= endOffset; i++) {
-    const d = new Date(today.getFullYear(), today.getMonth() + i, 1)
-    const y = d.getFullYear()
-    const m = String(d.getMonth() + 1).padStart(2, '0')
-    result.push(`${y}-${m}-01`)
+function shortMonth(s: string): string {
+  const d = new Date(s + 'T00:00:00')
+  return d.toLocaleString('en', { month: 'short' })
+}
+
+function humanK(n: number): string {
+  if (n >= 1000) return Math.round(n / 1000) + 'k'
+  return String(Math.round(n))
+}
+
+function costAnnualValue(c: InfrastructureCost): number {
+  const yearStart = `${CURRENT_YEAR}-01-01`
+  const yearEnd   = `${CURRENT_YEAR}-12-01`
+  if (c.status === 'active') return c.monthly_cost * 12
+  if (c.status === 'inactive' && c.cancelled_from) {
+    if (c.cancelled_from <= yearStart) return 0
+    const effEnd = c.cancelled_from < yearEnd ? c.cancelled_from : yearEnd
+    const [sy, sm] = yearStart.split('-').map(Number)
+    const [ey, em] = effEnd.split('-').map(Number)
+    return Math.max(0, (ey - sy) * 12 + (em - sm)) * c.monthly_cost
   }
-  return result
+  return 0
 }
 
-/** Build all 12 months of a given year as YYYY-MM-DD strings */
-function buildYearMonths(year: number): string[] {
-  const result: string[] = []
-  for (let m = 1; m <= 12; m++) {
-    result.push(`${year}-${String(m).padStart(2, '0')}-01`)
+function dealTotal(item: PipelineItem): number {
+  if (item.deal_type === 'fixed' && item.monthly_schedule?.length) {
+    return item.monthly_schedule.reduce((s, r) => s + r.amount, 0)
   }
-  return result
+  const amt = item.estimated_amount ?? 0
+  if (item.deal_type === 'monthly' && item.expected_month && item.expected_end_month) {
+    const s = new Date(item.expected_month + 'T00:00:00')
+    const e = new Date(item.expected_end_month + 'T00:00:00')
+    const cnt = Math.max(1, (e.getFullYear() - s.getFullYear()) * 12 + e.getMonth() - s.getMonth() + 1)
+    return amt * cnt
+  }
+  return amt
 }
 
-const CURRENT_YEAR = 2026
+// ── Chart components (Recharts) ────────────────────────────────────────────────
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+const CHART_COLORS = { navy: '#1a3a6c', green: '#16a34a', amber: '#d97706', blue: '#2563eb', red: '#dc2626' }
 
-interface StatCardProps {
-  label: string
-  value: string
-  sub?: string
-  color?: string
+function eurFormatter(val: number) {
+  return val >= 1000 ? `${Math.round(val / 1000)}k €` : `${val} €`
 }
 
-function StatCard({ label, value, sub, color = 'var(--navy)' }: StatCardProps) {
+function ForecastChart({ data, currentMonth }: {
+  data: { label: string; actual: number | null; plan: number | null; pipeline: number | null }[]
+  currentMonth: string
+}) {
   return (
-    <div className="stat-card" style={{ '--left-color': color } as React.CSSProperties}>
-      <div className="stat-card-label">{label}</div>
-      <div className="stat-card-value">{value}</div>
-      {sub && <div className="stat-card-sub">{sub}</div>}
+    <ResponsiveContainer width="100%" height={260}>
+      <BarChart data={data} margin={{ top: 10, right: 24, left: 10, bottom: 5 }} barGap={3} barCategoryGap="25%">
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+        <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false} />
+        <YAxis tickFormatter={eurFormatter} tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} width={58} />
+        <Tooltip
+          formatter={(val: number, name: string) => [val > 0 ? `${val.toLocaleString('de-DE')} €` : '—', name]}
+          contentStyle={{ fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+        />
+        <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+        <ReferenceLine x={currentMonth} stroke={CHART_COLORS.navy} strokeDasharray="4 3" strokeOpacity={0.4} strokeWidth={1.5} label={{ value: 'Today', position: 'top', fontSize: 10, fill: CHART_COLORS.navy }} />
+        <Bar dataKey="plan" name="Confirmed Plan" fill={CHART_COLORS.navy} fillOpacity={0.35} radius={[3, 3, 0, 0]} />
+        <Bar dataKey="actual" name="Invoiced" fill={CHART_COLORS.green} fillOpacity={0.85} radius={[3, 3, 0, 0]} />
+        <Bar dataKey="pipeline" name="Pipeline" fill={CHART_COLORS.amber} fillOpacity={0.7} radius={[3, 3, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  )
+}
+
+function MonthlyChart({ data }: { data: { label: string; plan: number; actual: number }[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <BarChart data={data} margin={{ top: 10, right: 24, left: 10, bottom: 5 }} barGap={3} barCategoryGap="25%">
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+        <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false} />
+        <YAxis tickFormatter={eurFormatter} tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} width={58} />
+        <Tooltip
+          formatter={(val: number, name: string) => [`${val.toLocaleString('de-DE')} €`, name]}
+          contentStyle={{ fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+        />
+        <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+        <Bar dataKey="plan" name="Plan" fill={CHART_COLORS.navy} fillOpacity={0.3} radius={[3, 3, 0, 0]} />
+        <Bar dataKey="actual" name="Invoiced" fill={CHART_COLORS.green} fillOpacity={0.85} radius={[3, 3, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  )
+}
+
+function MiniBar({ value, max, color = 'var(--navy)' }: { value: number; max: number; color?: string }) {
+  const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0
+  return (
+    <div style={{ height: 6, background: 'var(--c6)', borderRadius: 3, overflow: 'hidden', minWidth: 80 }}>
+      <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 3, transition: 'width 0.4s ease' }} />
     </div>
   )
 }
 
-function SectionHeader({ title, right }: { title: string; right?: React.ReactNode }) {
-  return (
-    <div className="section-bar" style={{ marginBottom: 12 }}>
-      <h2>{title}</h2>
-      {right && <div style={{ marginLeft: 'auto' }}>{right}</div>}
-    </div>
-  )
-}
+// ── Tab bar ────────────────────────────────────────────────────────────────────
 
-// ── Main view ─────────────────────────────────────────────────────────────────
+type Tab = 'overview' | 'clients' | 'projects' | 'maintenance' | 'hosting' | 'crs' | 'sales'
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'overview',     label: 'Overview' },
+  { id: 'clients',      label: 'Clients' },
+  { id: 'projects',     label: 'Projects' },
+  { id: 'maintenance',  label: 'Maintenance' },
+  { id: 'hosting',      label: 'Hosting & Domains' },
+  { id: 'crs',          label: 'Change Requests' },
+  { id: 'sales',        label: 'Sales' },
+]
+
+// ── Main component ─────────────────────────────────────────────────────────────
 
 export function StatisticsView() {
+  const [tab, setTab] = useState<Tab>('overview')
+
   const clientsStore  = useClientsStore()
   const projectsStore = useProjectsStore()
   const maintStore    = useMaintenancesStore()
-  const revenueStore  = useRevenuePlannerStore()
   const infraStore    = useInfraStore()
   const domainsStore  = useDomainsStore()
-  const pipelineStore = usePipelineStore()
+  const rpStore       = useRevenuePlannerStore()
+  const crStore       = useChangeRequestsStore()
+  const pStore        = usePipelineStore()
 
-  const [chartYear, setChartYear] = useState(CURRENT_YEAR)
-
-  // Fetch on mount: current year months + next 6 months for forecast
   useEffect(() => {
     clientsStore.fetchAll()
     projectsStore.fetchAll()
     maintStore.fetchAll()
     infraStore.fetchAll()
     domainsStore.fetchAll()
-    pipelineStore.fetchAll()
-    const months = buildMonthRange(-11, 6)
-    revenueStore.fetchByMonths(months)
+    rpStore.fetchByMonths(ALL_MONTHS)
+    crStore.fetchAllApproved()
+    pStore.fetchAll()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  // Fetch revenue data when chart year changes
-  useEffect(() => {
-    const months = [
-      ...buildYearMonths(chartYear),
-      ...buildMonthRange(0, 5),
-    ]
-    revenueStore.fetchByMonths(months)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartYear])
 
   const clients      = clientsStore.clients
   const projects     = projectsStore.projects
   const maintenances = maintStore.maintenances
-  const rows         = revenueStore.rows
-  const hostingClients = infraStore.hostingClients
-  const pipelineItems  = pipelineStore.items
-  const yearPrefix     = String(CURRENT_YEAR)
+  const hosting      = infraStore.hostingClients
+  const costs        = infraStore.infraCosts
+  const domains      = domainsStore.domains
+  const rows         = rpStore.rows
+  const approvedCRs  = crStore.approvedCRs
+  const pipeline     = pStore.items
 
-  // ── Section 1: Top KPIs ──────────────────────────────────────────────────
+  // ── Shared derivations ─────────────────────────────────────────────────────
+
+  const ytdRows = useMemo(() => rows.filter(r => r.month.startsWith(YTD_PREFIX)), [rows])
+
+  const totalInvoicedYTD = useMemo(() =>
+    ytdRows.filter(r => r.status === 'issued' || r.status === 'paid').reduce((s, r) => s + (r.actual_amount ?? 0), 0)
+  , [ytdRows])
+
+  const mrrRetainers = useMemo(() =>
+    rows.filter(r => r.month === CURRENT_MONTH_STR && r.status === 'retainer').reduce((s, r) => s + (r.planned_amount ?? 0), 0)
+  , [rows])
+
+  const mrrHosting = useMemo(() =>
+    hosting.filter(h => h.status === 'active' && h.cycle === 'monthly').reduce((s, h) => s + h.amount, 0)
+  , [hosting])
+
+  const mrr = mrrRetainers + mrrHosting
 
   const activeProjects = useMemo(() => projects.filter(p => p.status === 'active'), [projects])
 
-  const activeMaintenances = useMemo(() => maintenances.filter(m => m.status === 'active'), [maintenances])
+  const pipelineWeighted = useMemo(() =>
+    pipeline.filter(p => p.status === 'proposal').reduce((s, p) => s + dealTotal(p) * (p.probability / 100), 0)
+  , [pipeline])
 
-  const totalMaintMRR = useMemo(
-    () => activeMaintenances.reduce((s, m) => s + m.monthly_retainer, 0),
-    [activeMaintenances],
-  )
+  // ── Overview: Year forecast chart (Jan-Dec) ────────────────────────────────
 
-  const hostingMRR = useMemo(
-    () => hostingClients
-      .filter(h => h.status === 'active')
-      .reduce((s, h) => s + (h.cycle === 'monthly' ? h.amount : h.amount / 12), 0),
-    [hostingClients],
-  )
-
-  const activePipelineItems = useMemo(
-    () => pipelineItems.filter(p => p.status === 'proposal'),
-    [pipelineItems],
-  )
-
-  const weightedPipelineValue = useMemo(
-    () => pipelineItems
-      .filter(p => p.status !== 'won' && p.status !== 'lost')
-      .reduce((s, p) => s + ((p.estimated_amount ?? 0) * p.probability) / 100, 0),
-    [pipelineItems],
-  )
-
-  const ytdRows = useMemo(
-    () => rows.filter(r => r.month.startsWith(yearPrefix)),
-    [rows, yearPrefix],
-  )
-
-  const ytdInvoiced = useMemo(
-    () => ytdRows
-      .filter(r => r.status === 'issued' || r.status === 'paid')
-      .reduce((s, r) => s + (r.actual_amount ?? 0), 0),
-    [ytdRows],
-  )
-
-  const ytdPlanned = useMemo(
-    () => ytdRows
-      .filter(r => r.status !== 'cost' && r.status !== 'deferred')
-      .reduce((s, r) => s + (r.planned_amount ?? 0), 0),
-    [ytdRows],
-  )
-
-  // Active clients = unique clients with at least one active project or active maintenance
-  const activeClientIds = useMemo(() => {
-    const ids = new Set<string>()
-    activeProjects.forEach(p => { if (p.client_id) ids.add(p.client_id) })
-    activeMaintenances.forEach(m => { ids.add(m.client_id) })
-    return ids
-  }, [activeProjects, activeMaintenances])
-
-  // ── Section 2: Monthly Revenue Chart ──────────────────────────────────────
-
-  const chartYearMonths = useMemo(() => buildYearMonths(chartYear), [chartYear])
-
-  const monthlyRevenueData = useMemo(() => {
-    return chartYearMonths.map(month => {
-      const monthRows = rows.filter(r => r.month === month)
-      const planned = monthRows
-        .filter(r => r.status !== 'cost' && r.status !== 'deferred')
-        .reduce((s, r) => s + (r.planned_amount ?? 0), 0)
-      const actual = monthRows
-        .filter(r => r.status === 'issued' || r.status === 'paid')
-        .reduce((s, r) => s + (r.actual_amount ?? 0), 0)
-      return { month: fmtMonth(month), planned, actual }
+  const yearForecastData = useMemo(() => {
+    return Array.from({ length: 12 }, (_, i) => {
+      const month = `${CURRENT_YEAR}-${String(i + 1).padStart(2, '0')}-01`
+      const mRows = rows.filter(r => r.month === month && r.status !== 'cost' && r.status !== 'deferred')
+      const actual = mRows.filter(r => r.status === 'issued' || r.status === 'paid').reduce((s, r) => s + (r.actual_amount ?? 0), 0)
+      const plan   = mRows.filter(r => r.status === 'planned' || r.status === 'retainer').reduce((s, r) => s + (r.planned_amount ?? 0), 0)
+      const monthPfx = month.slice(0, 7)
+      let pipelineWeighted = 0
+      let pipelineBest = 0
+      for (const p of pipeline) {
+        if (p.status === 'won' || p.status === 'lost') continue
+        let amt = 0
+        if (p.deal_type === 'fixed' && p.monthly_schedule?.length) {
+          const row = p.monthly_schedule.find(r => r.month === month)
+          amt = row?.amount ?? 0
+        } else if (p.deal_type === 'monthly' && p.expected_month && p.expected_end_month) {
+          if (p.expected_month.slice(0, 7) <= monthPfx && p.expected_end_month.slice(0, 7) >= monthPfx) amt = p.estimated_amount ?? 0
+        } else {
+          if (p.expected_month?.slice(0, 7) === monthPfx) amt = p.estimated_amount ?? 0
+        }
+        pipelineWeighted += amt * (p.probability / 100)
+        pipelineBest += amt
+      }
+      const isPast = month < CURRENT_MONTH_STR
+      const isCurrent = month === CURRENT_MONTH_STR
+      return {
+        month,
+        label: shortMonth(month),
+        actual: isPast ? actual : null,
+        plan: plan > 0 ? plan : null,
+        pipeline: !isPast && pipelineBest > 0 ? pipelineBest : null,
+        pipelineWeighted,
+        pipelineBest,
+        isPast,
+        isCurrent,
+      }
     })
-  }, [rows, chartYearMonths])
+  }, [rows, pipeline])
 
-  // Revenue by project type (from planned rows)
-  const revenueByType = useMemo(() => {
-    const map: Record<string, number> = { fixed: 0, maintenance: 0, variable: 0 }
-    rows
-      .filter(r => r.status !== 'cost' && r.status !== 'deferred' && r.project?.type)
-      .forEach(r => {
-        const t = r.project!.type
-        map[t] = (map[t] ?? 0) + (r.planned_amount ?? 0)
-      })
-    return [
-      { name: 'Fixed',       value: map.fixed,       color: 'var(--blue)' },
-      { name: 'Maintenance', value: map.maintenance,  color: 'var(--amber)' },
-      { name: 'Variable',    value: map.variable,     color: 'var(--green)' },
-    ].filter(d => d.value > 0)
+  const projectionSummary = useMemo(() => {
+    const futureMonths = yearForecastData.filter(d => !d.isPast)
+    const confirmedRemaining    = futureMonths.reduce((s, d) => s + (d.plan ?? 0), 0)
+    const pipelineWeightedTotal = futureMonths.reduce((s, d) => s + d.pipelineWeighted, 0)
+    const pipelineFaceTotal     = futureMonths.reduce((s, d) => s + d.pipelineBest, 0)
+    return {
+      confirmedRemaining,
+      pipelineWeightedTotal,
+      pipelineFaceTotal,
+      projectedYearEnd: totalInvoicedYTD + confirmedRemaining + pipelineFaceTotal,
+    }
+  }, [yearForecastData, totalInvoicedYTD])
+
+  // ── Overview: Plan vs Actual (this year, for MonthlyChart) ─────────────────
+
+  const monthlyChartData = useMemo(() => {
+    return Array.from({ length: 12 }, (_, i) => {
+      const month = `${CURRENT_YEAR}-${String(i + 1).padStart(2, '0')}-01`
+      const mRows = rows.filter(r => r.month === month && r.status !== 'cost' && r.status !== 'deferred')
+      // Plan = all planned amounts (retainer + planned + issued/paid at planned rate)
+      const plan   = mRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0)
+      // Actual = only what was issued/paid (actual billed amount)
+      const actual = mRows.filter(r => r.status === 'issued' || r.status === 'paid').reduce((s, r) => s + (r.actual_amount ?? r.planned_amount ?? 0), 0)
+      return { label: shortMonth(month), plan, actual }
+    })
   }, [rows])
 
-  // ── Section 3: Projects ──────────────────────────────────────────────────
+  // ── Overview: Revenue mix YTD ──────────────────────────────────────────────
 
-  const projectStatusCounts = useMemo(() => {
-    const statuses = ['active', 'paused', 'completed', 'cancelled'] as const
-    return statuses.map(s => ({
-      status: s,
-      count: projects.filter(p => p.status === s).length,
-    }))
-  }, [projects])
+  const revMix = useMemo(() => {
+    // Projects: rpStore rows this year that belong to a project (not maintenance/hosting/domain)
+    const projRows = ytdRows.filter(r => r.project_id && !r.maintenance_id && !r.hosting_client_id && !r.domain_id && r.status !== 'cost' && r.status !== 'deferred')
+    const projects_amt = projRows.reduce((s, r) => s + (r.actual_amount ?? r.planned_amount ?? 0), 0)
 
-  const top10Projects = useMemo(() => {
-    return [...projects]
-      .filter(p => (p.contract_value ?? 0) > 0)
-      .sort((a, b) => (b.contract_value ?? 0) - (a.contract_value ?? 0))
-      .slice(0, 10)
-      .map(p => {
-        const invoiced = rows
-          .filter(r => r.project_id === p.id && (r.status === 'issued' || r.status === 'paid'))
-          .reduce((s, r) => s + (r.actual_amount ?? 0), 0)
-        const left = (p.contract_value ?? 0) - invoiced
-        return { ...p, invoiced, left }
-      })
-  }, [projects, rows])
+    // Maintenance: directly from maintenances store — monthly_retainer × months active this year
+    const yearStart = `${CURRENT_YEAR}-01`
+    const yearEnd   = `${CURRENT_YEAR}-12`
+    const maint_amt = maintenances.filter(m => m.status === 'active').reduce((s, m) => {
+      const cStart = m.contract_start ? m.contract_start.slice(0, 7) : yearStart
+      const cEnd   = m.contract_end   ? m.contract_end.slice(0, 7)   : yearEnd
+      const effStart = cStart > yearStart ? cStart : yearStart
+      const effEnd   = cEnd   < yearEnd   ? cEnd   : yearEnd
+      if (effStart > effEnd) return s
+      const [sy, sm] = effStart.split('-').map(Number)
+      const [ey, em] = effEnd.split('-').map(Number)
+      const months = (ey - sy) * 12 + (em - sm) + 1
+      return s + m.monthly_retainer * months
+    }, 0)
 
-  const projectStatusChartData = useMemo(() => [
-    { name: 'Active',    count: projects.filter(p => p.status === 'active').length },
-    { name: 'Paused',    count: projects.filter(p => p.status === 'paused').length },
-    { name: 'Completed', count: projects.filter(p => p.status === 'completed').length },
-    { name: 'Cancelled', count: projects.filter(p => p.status === 'cancelled').length },
-  ], [projects])
+    // Hosting: directly from hostingClients annual value
+    const host_amt = hosting.filter(h => h.status === 'active').reduce((s, h) => s + hostingAnnualValue(h), 0)
 
-  // ── Section 4: Clients ────────────────────────────────────────────────────
+    // Domains: directly from domains yearly_amount
+    const domain_amt = domains.filter(d => !d.archived && d.status !== 'expired').reduce((s, d) => s + (d.yearly_amount ?? 0), 0)
 
-  // Top 10 clients by YTD planned revenue
-  const clientRevenueData = useMemo(() => {
-    const map = new Map<string, { name: string; value: number }>()
-    ytdRows
-      .filter(r => r.status !== 'cost' && r.status !== 'deferred')
-      .forEach(r => {
-        const clientId =
-          r.project?.client_id ??
-          r.maintenance?.client?.id ??
-          r.hosting?.client?.id ??
-          r.domain?.client?.id ??
-          null
-        const clientName =
-          r.project ? clients.find(c => c.id === r.project!.client_id)?.name :
-          r.maintenance?.client?.name ??
-          r.hosting?.client?.name ??
-          r.domain?.client?.name ?? null
-        if (!clientId || !clientName) return
-        const existing = map.get(clientId)
-        if (existing) {
-          existing.value += (r.planned_amount ?? 0)
-        } else {
-          map.set(clientId, { name: clientName, value: r.planned_amount ?? 0 })
-        }
-      })
-    return [...map.values()]
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 10)
+    const total = projects_amt + maint_amt + host_amt + domain_amt || 1
+    return [
+      { label: 'Projects',    amount: projects_amt, color: 'var(--navy)' },
+      { label: 'Maintenance', amount: maint_amt,    color: 'var(--amber)' },
+      { label: 'Hosting',     amount: host_amt,     color: 'var(--blue)' },
+      { label: 'Domains',     amount: domain_amt,   color: 'var(--green)' },
+    ].map(s => ({ ...s, pct: Math.round((s.amount / total) * 100) }))
+  }, [ytdRows, maintenances, hosting, domains])
+
+  // ── Overview: Top 5 clients by YTD ────────────────────────────────────────
+
+  const top5Clients = useMemo(() => {
+    const map = new Map<string, { name: string; amount: number }>()
+    const invoicedRows = ytdRows.filter(r => r.status === 'issued' || r.status === 'paid')
+    for (const r of invoicedRows) {
+      const clientId =
+        r.project?.client_id ??
+        r.maintenance?.client?.id ??
+        r.hosting?.client?.id ??
+        r.domain?.client?.id
+      if (!clientId) continue
+      const clientName =
+        r.project ? (clients.find(c => c.id === r.project!.client_id)?.name ?? clientId) :
+        r.maintenance?.client?.name ?? r.hosting?.client?.name ?? r.domain?.client?.name ?? clientId
+      const cur = map.get(clientId) ?? { name: clientName, amount: 0 }
+      cur.amount += r.actual_amount ?? 0
+      map.set(clientId, cur)
+    }
+    return [...map.values()].sort((a, b) => b.amount - a.amount).slice(0, 5)
   }, [ytdRows, clients])
 
-  const clientTableData = useMemo(() => {
-    return clients.map(c => {
-      const activeProj = projects.filter(p => p.client_id === c.id && p.status === 'active').length
-      const activeMaint = maintenances.filter(m => m.client_id === c.id && m.status === 'active').length
-      const ytdRev = ytdRows
-        .filter(r => {
-          const cid = r.project?.client_id ?? r.maintenance?.client?.id ?? r.hosting?.client?.id ?? r.domain?.client?.id
-          return cid === c.id && r.status !== 'cost' && r.status !== 'deferred'
-        })
-        .reduce((s, r) => s + (r.planned_amount ?? 0), 0)
-      const pipeVal = pipelineItems
-        .filter(p => p.client_id === c.id && p.status !== 'won' && p.status !== 'lost')
-        .reduce((s, p) => s + ((p.estimated_amount ?? 0) * p.probability) / 100, 0)
-      return { ...c, activeProj, activeMaint, ytdRev, pipeVal }
+  // ── Clients tab ───────────────────────────────────────────────────────────
+
+  const clientRanking = useMemo(() => {
+    const map = new Map<string, { name: string; amount: number; projectCount: number }>()
+    for (const c of clients) {
+      map.set(c.id, { name: c.name, amount: 0, projectCount: 0 })
+    }
+    const invoicedRows = ytdRows.filter(r => r.status === 'issued' || r.status === 'paid')
+    for (const r of invoicedRows) {
+      const clientId =
+        r.project?.client_id ??
+        r.maintenance?.client?.id ??
+        r.hosting?.client?.id ??
+        r.domain?.client?.id
+      if (!clientId || !map.has(clientId)) continue
+      map.get(clientId)!.amount += r.actual_amount ?? 0
+    }
+    for (const p of projects.filter(pr => pr.status === 'active')) {
+      if (p.client_id && map.has(p.client_id)) map.get(p.client_id)!.projectCount++
+    }
+    return [...map.values()].sort((a, b) => b.amount - a.amount)
+  }, [clients, ytdRows, projects])
+
+  const clientsWithActivity = useMemo(() => {
+    const ids = new Set<string>()
+    activeProjects.forEach(p => { if (p.client_id) ids.add(p.client_id) })
+    maintenances.filter(m => m.status === 'active').forEach(m => ids.add(m.client_id))
+    return ids.size
+  }, [activeProjects, maintenances])
+
+  const avgInvoicedPerClient = clientsWithActivity > 0 ? totalInvoicedYTD / clientsWithActivity : 0
+
+  // ── Projects tab ──────────────────────────────────────────────────────────
+
+  const completedThisYear = useMemo(() => projects.filter(p => p.status === 'completed'), [projects])
+  const portfolioValue = useMemo(() => activeProjects.reduce((s, p) => s + (p.initial_contract_value ?? 0), 0), [activeProjects])
+  const avgProjectValue = activeProjects.length > 0 ? portfolioValue / activeProjects.length : 0
+
+  const projectsByType = useMemo(() => {
+    const fixed = activeProjects.filter(p => p.type === 'fixed').length
+    const maint = activeProjects.filter(p => p.type === 'maintenance').length
+    const variable = activeProjects.filter(p => p.type === 'variable').length
+    const total = activeProjects.length || 1
+    return [
+      { label: 'Fixed', count: fixed, pct: Math.round(fixed / total * 100) },
+      { label: 'Recurring', count: maint, pct: Math.round(maint / total * 100) },
+      { label: 'Variable', count: variable, pct: Math.round(variable / total * 100) },
+    ]
+  }, [activeProjects])
+
+  const top10Projects = useMemo(() =>
+    [...activeProjects].sort((a, b) => (b.initial_contract_value ?? 0) - (a.initial_contract_value ?? 0)).slice(0, 10)
+  , [activeProjects])
+
+  const projectStatusBreakdown = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const p of projects) { counts[p.status] = (counts[p.status] ?? 0) + 1 }
+    return Object.entries(counts).map(([status, count]) => ({ status, count, pct: Math.round(count / projects.length * 100) }))
+  }, [projects])
+
+  const projectsEndingSoon = useMemo(() => {
+    const now = Date.now()
+    const in60 = now + 60 * 86_400_000
+    return activeProjects
+      .filter(p => p.end_date)
+      .map(p => ({ ...p, daysLeft: Math.ceil((new Date(p.end_date! + 'T00:00:00').getTime() - now) / 86_400_000) }))
+      .filter(p => p.daysLeft >= 0 && p.daysLeft <= 60)
+      .sort((a, b) => a.daysLeft - b.daysLeft)
+  }, [activeProjects])
+
+  // ── Hosting & Domains tab ─────────────────────────────────────────────────
+
+  const activeHosting = useMemo(() => hosting.filter(h => h.status === 'active'), [hosting])
+  const hostingPerYear = useMemo(() => hosting.reduce((s, h) => s + hostingAnnualValue(h), 0), [hosting])
+
+  const providerStats = useMemo(() => {
+    const map = new Map<string, { clients: number; revenue: number; cost: number }>()
+    hosting.forEach(h => {
+      const key = h.provider || '— Unassigned —'
+      const cur = map.get(key) ?? { clients: 0, revenue: 0, cost: 0 }
+      cur.clients += h.status === 'active' ? 1 : 0
+      cur.revenue += hostingAnnualValue(h)
+      map.set(key, cur)
     })
-      .filter(c => c.activeProj > 0 || c.activeMaint > 0 || c.ytdRev > 0)
-      .sort((a, b) => b.ytdRev - a.ytdRev)
-  }, [clients, projects, maintenances, ytdRows, pipelineItems])
+    costs.forEach(c => {
+      const annual = costAnnualValue(c)
+      if (annual === 0) return
+      const key = c.provider || '— Unassigned —'
+      const cur = map.get(key) ?? { clients: 0, revenue: 0, cost: 0 }
+      cur.cost += annual
+      map.set(key, cur)
+    })
+    return [...map.entries()]
+      .map(([provider, d]) => ({ provider, ...d, margin: d.revenue - d.cost }))
+      .sort((a, b) => b.revenue - a.revenue)
+  }, [hosting, costs])
 
-  // ── Section 6: Pipeline ────────────────────────────────────────────────────
+  const totalHostRevenue = providerStats.reduce((s, p) => s + p.revenue, 0)
+  const totalHostCost    = providerStats.reduce((s, p) => s + p.cost, 0)
+  const totalHostMargin  = totalHostRevenue - totalHostCost
 
-  const pipelineStatusData = useMemo(() => {
-    const statuses = ['proposal', 'won', 'lost'] as const
-    return statuses.map(s => ({
-      name: s.charAt(0).toUpperCase() + s.slice(1),
-      count: pipelineItems.filter(p => p.status === s).length,
+  const activeDomains   = useMemo(() => domains.filter(d => !d.archived && d.status !== 'expired'), [domains])
+  const expiringSoon    = useMemo(() => domains.filter(d => d.status === 'expiring_soon' && !d.archived), [domains])
+  const domainRevenueYr = useMemo(() => {
+    const curYearStr = String(CURRENT_YEAR)
+    const curMonthStr = CURRENT_MONTH_STR
+    return domains.filter(d => {
+      if (d.status === 'expired') return false
+      if (!d.archived) return true
+      const billingMonth = `${curYearStr}-${(d.registered_date ?? d.expiry_date).slice(5, 7)}-01`
+      return billingMonth <= curMonthStr
+    }).reduce((s, d) => s + (d.yearly_amount ?? 0), 0)
+  }, [domains])
+
+  const expiringSoon60 = useMemo(() => {
+    const now = Date.now()
+    return domains
+      .filter(d => !d.archived)
+      .map(d => ({ ...d, daysLeft: Math.ceil((new Date(d.expiry_date + 'T00:00:00').getTime() - now) / 86_400_000) }))
+      .filter(d => d.daysLeft >= 0 && d.daysLeft <= 60)
+      .sort((a, b) => a.daysLeft - b.daysLeft)
+  }, [domains])
+
+  // ── CRs tab ───────────────────────────────────────────────────────────────
+
+  const totalCRValue = useMemo(() => approvedCRs.reduce((s, c) => s + (c.amount ?? 0), 0), [approvedCRs])
+  const avgCRValue   = approvedCRs.length > 0 ? totalCRValue / approvedCRs.length : 0
+  const maxCR        = useMemo(() => approvedCRs.reduce((m, c) => Math.max(m, c.amount ?? 0), 0), [approvedCRs])
+
+  const crsBySource = useMemo(() => {
+    const map = new Map<string, { label: string; count: number; total: number }>()
+    for (const cr of approvedCRs) {
+      const key = cr.project_id ?? cr.maintenance_id ?? 'unknown'
+      const label = cr.project_id
+        ? `${cr.project?.pn ?? ''} ${cr.project?.name ?? key}`.trim()
+        : cr.maintenance_id
+          ? (cr.maintenance?.name ?? key)
+          : key
+      const cur = map.get(key) ?? { label, count: 0, total: 0 }
+      cur.count++
+      cur.total += cr.amount ?? 0
+      map.set(key, cur)
+    }
+    return [...map.values()].sort((a, b) => b.total - a.total)
+  }, [approvedCRs])
+
+  // ── Sales tab ─────────────────────────────────────────────────────────────
+
+  const activeDeals = useMemo(() => pipeline.filter(p => p.status === 'proposal'), [pipeline])
+  const wonThisYear = useMemo(() => pipeline.filter(p => p.status === 'won' && p.created_at.startsWith(YTD_PREFIX)), [pipeline])
+  const lostThisYear = useMemo(() => pipeline.filter(p => p.status === 'lost' && p.created_at.startsWith(YTD_PREFIX)), [pipeline])
+  const closedCount = wonThisYear.length + lostThisYear.length
+  const winRate = closedCount > 0 ? Math.round(wonThisYear.length / closedCount * 100) : 0
+
+  const dealsByStatus = useMemo(() => {
+    const groups: Record<string, PipelineItem[]> = { proposal: [], won: [], lost: [] }
+    for (const p of pipeline) { groups[p.status]?.push(p) }
+    return Object.entries(groups).map(([status, items]) => ({
+      status,
+      count: items.length,
+      value: items.reduce((s, p) => s + dealTotal(p), 0),
     }))
-  }, [pipelineItems])
+  }, [pipeline])
 
-  const activePipelineCount = useMemo(
-    () => pipelineItems.filter(p => p.status !== 'won' && p.status !== 'lost').length,
-    [pipelineItems],
-  )
+  const dealsByType = useMemo(() => {
+    const groups: Record<string, PipelineItem[]> = { one_time: [], monthly: [], fixed: [] }
+    for (const p of activeDeals) { groups[p.deal_type]?.push(p) }
+    return [
+      { type: 'one_time', label: 'One-time', ...groups },
+      { type: 'monthly',  label: 'Monthly',  ...groups },
+      { type: 'fixed',    label: 'Fixed',     ...groups },
+    ].map(t => ({
+      label: t.label,
+      count: (groups[t.type] ?? []).length,
+      value: (groups[t.type] ?? []).reduce((s, p) => s + dealTotal(p), 0),
+    }))
+  }, [activeDeals])
 
-  // ── Section 7: Forecast (next 6 months) ──────────────────────────────────
-
-  const next6Months = useMemo(() => buildMonthRange(0, 5), [])
-
-  const forecastData = useMemo(() => {
-    return next6Months.map(month => {
-      const monthRows = rows.filter(r => r.month === month)
-      const confirmed = monthRows
-        .filter(r =>
-          (r.status === 'issued' || r.status === 'planned' || r.status === 'retainer') &&
-          r.probability === 100,
-        )
-        .reduce((s, r) => s + (r.planned_amount ?? 0), 0)
-      const pipeWeighted = pipelineItems
-        .filter(p => {
-          if (p.status === 'won' || p.status === 'lost') return false
-          if (!p.expected_month) return false
-          const em = p.expected_month.substring(0, 7) + '-01'
-          return em === month
-        })
-        .reduce((s, p) => s + ((p.estimated_amount ?? 0) * p.probability) / 100, 0)
-      return { month: fmtMonth(month), confirmed, pipeline: Math.round(pipeWeighted) }
+  const pipelineForecast = useMemo(() => {
+    const months: string[] = []
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(CURRENT_YEAR, CURRENT_MONTH_IDX + i, 1)
+      months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`)
+    }
+    return months.map(m => {
+      const deals = activeDeals.filter(p => p.expected_month?.slice(0, 7) === m.slice(0, 7))
+      const faceValue = deals.reduce((s, p) => s + dealTotal(p), 0)
+      const likely    = deals.filter(p => p.probability >= 50).reduce((s, p) => s + dealTotal(p), 0)
+      const hopefully = deals.filter(p => p.probability >= 25).reduce((s, p) => s + dealTotal(p), 0)
+      return { month: m, count: deals.length, faceValue, likely, hopefully }
     })
-  }, [rows, next6Months, pipelineItems])
+  }, [activeDeals])
 
-  // ── Status badge helpers ──────────────────────────────────────────────────
+  const topDeals = useMemo(() =>
+    [...activeDeals].sort((a, b) => dealTotal(b) - dealTotal(a)).slice(0, 10)
+  , [activeDeals])
 
-  function projectStatusBadge(status: string) {
-    const map: Record<string, string> = {
-      active: 'badge badge-green',
-      paused: 'badge badge-amber',
-      completed: 'badge badge-navy',
-      cancelled: 'badge badge-gray',
+  const activeDealsFaceValue = useMemo(() => activeDeals.reduce((s, p) => s + dealTotal(p), 0), [activeDeals])
+
+  // ── Maintenance tab ───────────────────────────────────────────────────────
+
+  const activeMaintenances = useMemo(() => maintenances.filter(m => m.status === 'active'), [maintenances])
+  const totalMRR = useMemo(() => activeMaintenances.reduce((s, m) => s + m.monthly_retainer, 0), [activeMaintenances])
+  const avgRetainer = activeMaintenances.length > 0 ? totalMRR / activeMaintenances.length : 0
+
+  const maintEndingSoon = useMemo(() => {
+    const now = Date.now()
+    return activeMaintenances
+      .filter(m => m.contract_end)
+      .map(m => ({ ...m, daysLeft: Math.ceil((new Date(m.contract_end! + 'T00:00:00').getTime() - now) / 86_400_000) }))
+      .filter(m => m.daysLeft >= 0 && m.daysLeft <= 60)
+      .sort((a, b) => a.daysLeft - b.daysLeft)
+  }, [activeMaintenances])
+
+  const maintMonthlyChart = useMemo(() => {
+    return Array.from({ length: 12 }, (_, i) => {
+      const month = `${CURRENT_YEAR}-${String(i + 1).padStart(2, '0')}-01`
+      const mRows = rows.filter(r => r.month === month && r.maintenance_id != null && r.status !== 'cost' && r.status !== 'deferred')
+      const actual  = mRows.filter(r => r.status === 'issued' || r.status === 'paid').reduce((s, r) => s + (r.actual_amount ?? 0), 0)
+      const plan    = mRows.filter(r => r.status === 'planned' || r.status === 'retainer').reduce((s, r) => s + (r.planned_amount ?? 0), 0)
+      return { label: shortMonth(month), plan, actual }
+    })
+  }, [rows])
+
+  const maintByClient = useMemo(() => {
+    const map = new Map<string, { clientName: string; contracts: number; retainer: number }>()
+    for (const m of activeMaintenances) {
+      const clientName = clients.find(c => c.id === m.client_id)?.name ?? m.client_id
+      const cur = map.get(m.client_id) ?? { clientName, contracts: 0, retainer: 0 }
+      cur.contracts++
+      cur.retainer += m.monthly_retainer
+      map.set(m.client_id, cur)
     }
-    return map[status] ?? 'badge badge-gray'
-  }
+    return [...map.values()].sort((a, b) => b.retainer - a.retainer)
+  }, [activeMaintenances, clients])
 
-  function maintStatusBadge(status: string) {
-    const map: Record<string, string> = {
-      active: 'badge badge-green',
-      paused: 'badge badge-amber',
-      cancelled: 'badge badge-gray',
-    }
-    return map[status] ?? 'badge badge-gray'
-  }
+  // ── Domains alerts ────────────────────────────────────────────────────────
 
-  function hostingStatusBadge(status: string) {
-    const map: Record<string, string> = {
-      active: 'badge badge-green',
-      paused: 'badge badge-amber',
-      cancelled: 'badge badge-gray',
-    }
-    return map[status] ?? 'badge badge-gray'
-  }
+  const domainsExpiring30 = useMemo(() => {
+    const now = Date.now()
+    return domains.filter(d => !d.archived && Math.ceil((new Date(d.expiry_date + 'T00:00:00').getTime() - now) / 86_400_000) <= 30 && d.status !== 'expired').length
+  }, [domains])
 
-  function pipelineBadge(status: string) {
-    const map: Record<string, string> = {
-      proposal:    'badge badge-blue',
-      won:         'badge badge-green',
-      lost:        'badge badge-red',
-    }
-    return map[status] ?? 'badge badge-gray'
-  }
+  const pipelineThisMonth = useMemo(() =>
+    activeDeals.filter(p => p.expected_month?.startsWith(CURRENT_MONTH_STR.slice(0, 7))).length
+  , [activeDeals])
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Tab content ───────────────────────────────────────────────────────────
 
-  return (
-    <div>
-      {/* Page header */}
-      <div className="page-header">
-        <div>
-          <h1>Statistics</h1>
-          <p>CEO dashboard — live across all data</p>
-        </div>
-      </div>
-
-      {/* ── Section 1: Top KPI strip ── */}
-      <div className="stats-strip" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-        <StatCard
-          label="Clients"
-          value={String(clients.length)}
-          sub={`${activeClientIds.size} with active projects`}
-          color="var(--navy)"
-        />
-        <StatCard
-          label="Active Projects"
-          value={String(activeProjects.length)}
-          sub={`of ${projects.length} total`}
-          color="var(--blue)"
-        />
-        <StatCard
-          label="Maintenance Contracts"
-          value={String(activeMaintenances.length)}
-          sub={totalMaintMRR > 0 ? `${fmtEur(totalMaintMRR)} /mo` : undefined}
-          color="var(--amber)"
-        />
-        <StatCard
-          label="Hosting MRR"
-          value={hostingMRR > 0 ? fmtEur(hostingMRR) : '—'}
-          sub="active hosting clients"
-          color="var(--green)"
-        />
-      </div>
-      <div className="stats-strip" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginTop: 0 }}>
-        <StatCard
-          label="Pipeline"
-          value={String(activePipelineCount)}
-          sub={weightedPipelineValue > 0 ? `weighted ${fmtEur(weightedPipelineValue)}` : 'open deals'}
-          color="var(--navy)"
-        />
-        <StatCard
-          label="YTD Invoiced"
-          value={ytdInvoiced > 0 ? fmtEur(ytdInvoiced) : '—'}
-          sub={`issued + paid in ${yearPrefix}`}
-          color="var(--green)"
-        />
-        <StatCard
-          label="YTD Planned"
-          value={ytdPlanned > 0 ? fmtEur(ytdPlanned) : '—'}
-          sub={`all planned in ${yearPrefix}`}
-          color="var(--blue)"
-        />
-        <StatCard
-          label="Active Pipeline Items"
-          value={String(activePipelineItems.length)}
-          sub="proposals in progress"
-          color="var(--amber)"
-        />
-      </div>
-
-      <div className="page-content">
-
-        {/* ── Section 2: Revenue Overview ── */}
-        <SectionHeader
-          title={`Revenue Overview — ${chartYear}`}
-          right={
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button
-                className="btn btn-ghost btn-sm"
-                onClick={() => setChartYear(y => y - 1)}
-                style={{ padding: '2px 8px', fontWeight: 700 }}
-              >←</button>
-              <span style={{ fontWeight: 700, fontSize: 14, minWidth: 36, textAlign: 'center' }}>{chartYear}</span>
-              <button
-                className="btn btn-ghost btn-sm"
-                onClick={() => setChartYear(y => y + 1)}
-                style={{ padding: '2px 8px', fontWeight: 700 }}
-              >→</button>
-            </div>
-          }
-        />
-        <div className="card" style={{ marginBottom: 28 }}>
-          <div className="card-body">
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={monthlyRevenueData} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--c6)" />
-                <XAxis dataKey="month" tick={{ fontSize: 11, fill: 'var(--c3)' }} />
-                <YAxis tick={{ fontSize: 11, fill: 'var(--c3)' }} tickFormatter={v => `${Math.round(v / 1000)}k`} />
-                <Tooltip formatter={(v: unknown) => fmtEur(Number(v))} />
-                <Legend />
-                <Bar dataKey="planned" name="Planned" fill="var(--navy)" radius={[2, 2, 0, 0]} />
-                <Bar dataKey="actual"  name="Actual (Invoiced)" fill="var(--green)" radius={[2, 2, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+  function renderOverview() {
+    const maxTop5 = top5Clients[0]?.amount ?? 1
+    return (
+      <>
+        <div className="stats-strip">
+          <div className="stat-card" style={{'--left-color':'var(--green)'} as React.CSSProperties}>
+            <div className="stat-card-label">INVOICED YTD</div>
+            <div className="stat-card-value" style={{color:'var(--green)'}}>{fmtEur(totalInvoicedYTD)}</div>
+            <div className="stat-card-sub">issued + paid {CURRENT_YEAR}</div>
+          </div>
+          <div className="stat-card" style={{'--left-color':'var(--navy)'} as React.CSSProperties}>
+            <div className="stat-card-label">MRR</div>
+            <div className="stat-card-value">{fmtEur(mrr)}</div>
+            <div className="stat-card-sub">retainers + hosting</div>
+          </div>
+          <div className="stat-card" style={{'--left-color':'var(--blue)'} as React.CSSProperties}>
+            <div className="stat-card-label">ACTIVE PROJECTS</div>
+            <div className="stat-card-value">{activeProjects.length}</div>
+            <div className="stat-card-sub">of {projects.length} total</div>
+          </div>
+          <div className="stat-card" style={{'--left-color':'var(--amber)'} as React.CSSProperties}>
+            <div className="stat-card-label">PIPELINE WEIGHTED</div>
+            <div className="stat-card-value">{fmtEur(pipelineWeighted)}</div>
+            <div className="stat-card-sub">{activeDeals.length} active deals</div>
           </div>
         </div>
 
-        {revenueByType.length > 0 && (
-          <>
-            <SectionHeader title="Revenue by Project Type" />
-            <div className="card" style={{ marginBottom: 28 }}>
-              <div className="card-body" style={{ display: 'flex', alignItems: 'center', gap: 40 }}>
-                <ResponsiveContainer width="40%" height={220}>
-                  <PieChart>
-                    <Pie
-                      data={revenueByType}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={55}
-                      outerRadius={90}
-                      dataKey="value"
-                      nameKey="name"
-                      label={({ name, percent }) => `${name} ${Math.round((percent ?? 0) * 100)}%`}
-                      labelLine={false}
-                    >
-                      {revenueByType.map((entry, i) => (
-                        <Cell key={i} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(v: unknown) => fmtEur(Number(v))} />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div style={{ flex: 1 }}>
-                  {revenueByType.map(d => (
-                    <div key={d.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: d.color, display: 'inline-block', flexShrink: 0 }} />
-                        <span style={{ fontSize: 14, fontWeight: 600 }}>{d.name}</span>
-                      </div>
-                      <span className="text-mono" style={{ fontSize: 14, fontWeight: 700 }}>{fmtEur(d.value)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </>
+        {/* Alerts */}
+        {(domainsExpiring30 > 0 || pipelineThisMonth > 0) && (
+          <div style={{ display: 'flex', gap: 8, padding: '0 0 16px 0', flexWrap: 'wrap' }}>
+            {domainsExpiring30 > 0 && (
+              <span className="badge badge-amber">{domainsExpiring30} domain{domainsExpiring30 > 1 ? 's' : ''} expiring ≤30 days</span>
+            )}
+            {pipelineThisMonth > 0 && (
+              <span className="badge badge-blue">{pipelineThisMonth} deal{pipelineThisMonth > 1 ? 's' : ''} expected this month</span>
+            )}
+          </div>
         )}
 
-        {/* ── Section 3: Projects ── */}
-        <SectionHeader title="Projects" />
+        <div className="page-content" style={{paddingTop:0}}>
 
-        <div className="stats-strip" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 16 }}>
-          {projectStatusCounts.map(s => (
-            <StatCard
-              key={s.status}
-              label={s.status.charAt(0).toUpperCase() + s.status.slice(1)}
-              value={String(s.count)}
-              color={
-                s.status === 'active' ? 'var(--green)' :
-                s.status === 'paused' ? 'var(--amber)' :
-                s.status === 'completed' ? 'var(--navy)' : 'var(--c4)'
-              }
-            />
-          ))}
-        </div>
+          {/* Year Forecast Chart */}
+          <div className="section-bar" style={{marginBottom:12}}>
+            <h2>Full Year Forecast — {CURRENT_YEAR}</h2>
+            <span style={{fontSize:12,color:'var(--c3)',fontWeight:400}}>Past: invoiced vs plan · Future: confirmed plan + pipeline</span>
+          </div>
+          <div className="card card-body" style={{marginBottom:16}}>
+            <ForecastChart data={yearForecastData} currentMonth={shortMonth(CURRENT_MONTH_STR)} />
+          </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 28 }}>
-          {/* Projects by status horizontal bar */}
-          <div className="card">
-            <div className="card-body">
-              <div style={{ fontWeight: 700, marginBottom: 12, fontSize: 13, color: 'var(--c2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>By Status</div>
-              <ResponsiveContainer width="100%" height={180}>
-                <BarChart
-                  layout="vertical"
-                  data={projectStatusChartData}
-                  margin={{ top: 0, right: 16, left: 0, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--c6)" horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 11, fill: 'var(--c3)' }} allowDecimals={false} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: 'var(--c2)' }} width={70} />
-                  <Tooltip />
-                  <Bar dataKey="count" name="Projects" fill="var(--navy)" radius={[0, 2, 2, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+          {/* Projection summary cards */}
+          <div className="stats-strip" style={{marginBottom:24}}>
+            <div className="stat-card" style={{'--left-color':'var(--green)'} as React.CSSProperties}>
+              <div className="stat-card-label">INVOICED YTD</div>
+              <div className="stat-card-value" style={{color:'var(--green)'}}>{fmtEur(totalInvoicedYTD)}</div>
+              <div className="stat-card-sub">issued + paid so far</div>
+            </div>
+            <div className="stat-card" style={{'--left-color':'var(--navy)'} as React.CSSProperties}>
+              <div className="stat-card-label">REMAINING CONFIRMED</div>
+              <div className="stat-card-value">{fmtEur(projectionSummary.confirmedRemaining)}</div>
+              <div className="stat-card-sub">planned rows remaining</div>
+            </div>
+            <div className="stat-card" style={{'--left-color':'var(--amber)'} as React.CSSProperties}>
+              <div className="stat-card-label">PIPELINE TOTAL</div>
+              <div className="stat-card-value">{fmtEur(projectionSummary.pipelineFaceTotal)}</div>
+              <div className="stat-card-sub">weighted: {fmtEur(projectionSummary.pipelineWeightedTotal)}</div>
+            </div>
+            <div className="stat-card" style={{'--left-color':'var(--blue)'} as React.CSSProperties}>
+              <div className="stat-card-label">PROJECTED YEAR-END</div>
+              <div className="stat-card-value" style={{color:'var(--blue)'}}>{fmtEur(projectionSummary.projectedYearEnd)}</div>
+              <div className="stat-card-sub">confirmed + all pipeline</div>
             </div>
           </div>
 
-          {/* Top 5 projects by contract value (abbreviated) */}
-          <div className="card">
-            <div className="card-body">
-              <div style={{ fontWeight: 700, marginBottom: 12, fontSize: 13, color: 'var(--c2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Top 5 by Contract Value</div>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                <thead>
-                  <tr>
-                    <th style={{ textAlign: 'left', paddingBottom: 6, color: 'var(--c3)', fontWeight: 600, fontSize: 11 }}>Project</th>
-                    <th style={{ textAlign: 'right', paddingBottom: 6, color: 'var(--c3)', fontWeight: 600, fontSize: 11 }}>Contract</th>
-                    <th style={{ textAlign: 'right', paddingBottom: 6, color: 'var(--c3)', fontWeight: 600, fontSize: 11 }}>Invoiced</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {top10Projects.slice(0, 5).map(p => (
-                    <tr key={p.id} style={{ borderTop: '1px solid var(--c6)' }}>
-                      <td style={{ padding: '6px 0' }}>
-                        <div style={{ fontWeight: 600, color: 'var(--c1)' }}>{p.name}</div>
-                        <div style={{ fontSize: 11, color: 'var(--c3)' }}>{p.client?.name ?? '—'}</div>
-                      </td>
-                      <td className="td-right text-mono" style={{ fontSize: 13 }}>{fmtEur(p.contract_value ?? 0)}</td>
-                      <td className="td-right text-mono" style={{ fontSize: 13, color: p.invoiced > 0 ? 'var(--green)' : 'var(--c4)' }}>{p.invoiced > 0 ? fmtEur(p.invoiced) : '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          {/* Plan vs Actual this year */}
+          <div className="section-bar" style={{marginBottom:12}}><h2>Plan vs Actual — {CURRENT_YEAR}</h2></div>
+          <div className="card card-body" style={{marginBottom:24}}>
+            <MonthlyChart data={monthlyChartData} />
           </div>
-        </div>
 
-        {/* Top 10 projects full table */}
-        <div className="card" style={{ marginBottom: 28 }}>
-          <div className="card-body">
-            <div style={{ fontWeight: 700, marginBottom: 14, fontSize: 13, color: 'var(--c2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Top 10 Projects by Contract Value</div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          {/* Revenue Mix */}
+          <div className="section-bar" style={{marginBottom:12}}><h2>Revenue Mix — Planned {CURRENT_YEAR}</h2></div>
+          <div className="card card-body" style={{marginBottom:24}}>
+            {revMix.map(s => (
+              <div key={s.label} style={{ display: 'grid', gridTemplateColumns: '120px 100px 1fr 48px', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{s.label}</span>
+                <span className="text-mono" style={{ fontSize: 13, color: 'var(--c2)', textAlign: 'right' }}>{fmtEur(s.amount)}</span>
+                <MiniBar value={s.amount} max={totalInvoicedYTD} color={s.color} />
+                <span style={{ fontSize: 12, color: 'var(--c3)', textAlign: 'right' }}>{s.pct}%</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Top 5 clients */}
+          <div className="section-bar" style={{marginBottom:12}}><h2>Top 5 Clients by Invoiced YTD</h2></div>
+          <div className="card" style={{marginBottom:24}}>
+            <table>
               <thead>
                 <tr>
-                  <th style={{ textAlign: 'left', paddingBottom: 8, color: 'var(--c3)', fontWeight: 600, fontSize: 11, borderBottom: '1px solid var(--c5)' }}>Name</th>
-                  <th style={{ textAlign: 'left', paddingBottom: 8, color: 'var(--c3)', fontWeight: 600, fontSize: 11, borderBottom: '1px solid var(--c5)' }}>Client</th>
-                  <th style={{ textAlign: 'left', paddingBottom: 8, color: 'var(--c3)', fontWeight: 600, fontSize: 11, borderBottom: '1px solid var(--c5)' }}>Type</th>
-                  <th style={{ textAlign: 'left', paddingBottom: 8, color: 'var(--c3)', fontWeight: 600, fontSize: 11, borderBottom: '1px solid var(--c5)' }}>Status</th>
-                  <th className="th-right" style={{ paddingBottom: 8, color: 'var(--c3)', fontWeight: 600, fontSize: 11, borderBottom: '1px solid var(--c5)' }}>Contract</th>
-                  <th className="th-right" style={{ paddingBottom: 8, color: 'var(--c3)', fontWeight: 600, fontSize: 11, borderBottom: '1px solid var(--c5)' }}>Invoiced</th>
-                  <th className="th-right" style={{ paddingBottom: 8, color: 'var(--c3)', fontWeight: 600, fontSize: 11, borderBottom: '1px solid var(--c5)' }}>Left</th>
+                  <th style={{width:40}}>RANK</th>
+                  <th>CLIENT</th>
+                  <th className="th-right">INVOICED YTD</th>
+                  <th style={{width:160}}>BAR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {top5Clients.map((c, i) => (
+                  <tr key={c.name}>
+                    <td className="text-mono" style={{color:'var(--c4)',fontWeight:700}}>#{i+1}</td>
+                    <td style={{fontWeight:600}}>{c.name}</td>
+                    <td className="td-right text-mono" style={{color:'var(--green)',fontWeight:700}}>{fmtEur(c.amount)}</td>
+                    <td><MiniBar value={c.amount} max={maxTop5} color="var(--green)" /></td>
+                  </tr>
+                ))}
+                {top5Clients.length === 0 && (
+                  <tr><td colSpan={4} style={{textAlign:'center',color:'var(--c4)',padding:'20px'}}>No invoiced revenue yet</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  function renderClients() {
+    const maxAmount = clientRanking[0]?.amount ?? 1
+    const totalYTD = clientRanking.reduce((s, c) => s + c.amount, 0) || 1
+    return (
+      <>
+        <div className="stats-strip">
+          <div className="stat-card" style={{'--left-color':'var(--navy)'} as React.CSSProperties}>
+            <div className="stat-card-label">TOTAL CLIENTS</div>
+            <div className="stat-card-value">{clients.length}</div>
+            <div className="stat-card-sub">in system</div>
+          </div>
+          <div className="stat-card" style={{'--left-color':'var(--green)'} as React.CSSProperties}>
+            <div className="stat-card-label">ACTIVE CLIENTS</div>
+            <div className="stat-card-value">{clientsWithActivity}</div>
+            <div className="stat-card-sub">with active project or maintenance</div>
+          </div>
+          <div className="stat-card" style={{'--left-color':'var(--blue)'} as React.CSSProperties}>
+            <div className="stat-card-label">AVG INVOICED / ACTIVE</div>
+            <div className="stat-card-value">{fmtEur(avgInvoicedPerClient)}</div>
+            <div className="stat-card-sub">YTD per active client</div>
+          </div>
+        </div>
+        <div className="page-content" style={{paddingTop:0}}>
+          <div className="section-bar" style={{marginBottom:12}}><h2>Client Revenue Ranking — YTD</h2></div>
+          <div className="card">
+            <table>
+              <thead>
+                <tr>
+                  <th style={{width:40}}>RANK</th>
+                  <th>CLIENT</th>
+                  <th className="th-right">PROJECTS</th>
+                  <th className="th-right">INVOICED YTD</th>
+                  <th className="th-right">% OF TOTAL</th>
+                  <th style={{width:120}}>BAR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {clientRanking.map((c, i) => (
+                  <tr key={c.name} style={c.amount === 0 ? {opacity:0.5} : undefined}>
+                    <td className="text-mono" style={{color:'var(--c4)',fontWeight:700}}>#{i+1}</td>
+                    <td style={{fontWeight:600}}>{c.name}</td>
+                    <td className="td-right text-mono">{c.projectCount}</td>
+                    <td className="td-right text-mono" style={{color: c.amount > 0 ? 'var(--green)' : 'var(--c4)',fontWeight: c.amount > 0 ? 700 : 400}}>
+                      {c.amount > 0 ? fmtEur(c.amount) : '—'}
+                    </td>
+                    <td className="td-right text-mono" style={{color:'var(--c3)'}}>
+                      {c.amount > 0 ? Math.round(c.amount / totalYTD * 100) + '%' : '—'}
+                    </td>
+                    <td>
+                      {c.amount > 0 && <MiniBar value={c.amount} max={maxAmount} color="var(--navy)" />}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  function renderProjects() {
+    const maxProjVal = top10Projects[0]?.initial_contract_value ?? 1
+    return (
+      <>
+        <div className="stats-strip">
+          <div className="stat-card" style={{'--left-color':'var(--blue)'} as React.CSSProperties}>
+            <div className="stat-card-label">ACTIVE PROJECTS</div>
+            <div className="stat-card-value">{activeProjects.length}</div>
+            <div className="stat-card-sub">of {projects.length} total</div>
+          </div>
+          <div className="stat-card" style={{'--left-color':'var(--green)'} as React.CSSProperties}>
+            <div className="stat-card-label">COMPLETED THIS YEAR</div>
+            <div className="stat-card-value">{completedThisYear.length}</div>
+            <div className="stat-card-sub">status = completed</div>
+          </div>
+          <div className="stat-card" style={{'--left-color':'var(--navy)'} as React.CSSProperties}>
+            <div className="stat-card-label">PORTFOLIO VALUE</div>
+            <div className="stat-card-value">{fmtEur(portfolioValue)}</div>
+            <div className="stat-card-sub">sum of active contracts</div>
+          </div>
+          <div className="stat-card" style={{'--left-color':'var(--amber)'} as React.CSSProperties}>
+            <div className="stat-card-label">AVG PROJECT VALUE</div>
+            <div className="stat-card-value">{fmtEur(avgProjectValue)}</div>
+            <div className="stat-card-sub">active only</div>
+          </div>
+        </div>
+        <div className="page-content" style={{paddingTop:0}}>
+          {/* Type breakdown */}
+          <div className="section-bar" style={{marginBottom:12}}><h2>Project Type Breakdown</h2></div>
+          <div className="stats-strip" style={{marginBottom:24}}>
+            {projectsByType.map(t => (
+              <div key={t.label} className="stat-card card-body" style={{'--left-color':'var(--navy)'} as React.CSSProperties}>
+                <div className="stat-card-label">{t.label.toUpperCase()}</div>
+                <div className="stat-card-value">{t.count}</div>
+                <div style={{marginTop:6}}><MiniBar value={t.count} max={activeProjects.length} color="var(--navy)" /></div>
+                <div className="stat-card-sub" style={{marginTop:4}}>{t.pct}%</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Top 10 by value */}
+          <div className="section-bar" style={{marginBottom:12}}><h2>Top 10 Active Projects by Value</h2></div>
+          <div className="card" style={{marginBottom:24}}>
+            <table>
+              <thead>
+                <tr>
+                  <th>PROJECT</th>
+                  <th>CLIENT</th>
+                  <th className="th-right">VALUE</th>
+                  <th style={{width:160}}>BAR</th>
                 </tr>
               </thead>
               <tbody>
                 {top10Projects.map(p => (
-                  <tr key={p.id} style={{ borderBottom: '1px solid var(--c6)' }}>
-                    <td style={{ padding: '8px 8px 8px 0', fontWeight: 600 }}>{p.name}</td>
-                    <td style={{ padding: '8px 8px 8px 0', color: 'var(--c3)', fontSize: 12 }}>{p.client?.name ?? '—'}</td>
-                    <td style={{ padding: '8px 8px 8px 0' }}>
-                      <span className={`badge ${p.type === 'fixed' ? 'badge-navy' : p.type === 'maintenance' ? 'badge-amber' : 'badge-blue'}`}>
-                        {p.type}
-                      </span>
-                    </td>
-                    <td style={{ padding: '8px 8px 8px 0' }}>
-                      <span className={projectStatusBadge(p.status)}>{p.status}</span>
-                    </td>
-                    <td className="td-right text-mono">{fmtEur(p.contract_value ?? 0)}</td>
-                    <td className="td-right text-mono" style={{ color: p.invoiced > 0 ? 'var(--green)' : 'var(--c4)' }}>{p.invoiced > 0 ? fmtEur(p.invoiced) : '—'}</td>
-                    <td className="td-right text-mono" style={{ color: p.left > 0 ? 'var(--c1)' : 'var(--c4)' }}>{p.left > 0 ? fmtEur(p.left) : '—'}</td>
+                  <tr key={p.id}>
+                    <td><span className="badge badge-gray" style={{marginRight:6}}>{p.pn}</span>{p.name}</td>
+                    <td style={{color:'var(--c3)',fontSize:13}}>{p.client?.name ?? '—'}</td>
+                    <td className="td-right text-mono" style={{fontWeight:700,color:'var(--navy)'}}>{fmtEur(p.initial_contract_value ?? 0)}</td>
+                    <td><MiniBar value={p.initial_contract_value ?? 0} max={maxProjVal} color="var(--navy)" /></td>
+                  </tr>
+                ))}
+                {top10Projects.length === 0 && (
+                  <tr><td colSpan={4} style={{textAlign:'center',color:'var(--c4)',padding:'20px'}}>No active projects</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Status overview */}
+          <div className="section-bar" style={{marginBottom:12}}><h2>Status Overview</h2></div>
+          <div className="card" style={{marginBottom:24}}>
+            <table>
+              <thead><tr><th>STATUS</th><th className="th-right">COUNT</th><th className="th-right">%</th></tr></thead>
+              <tbody>
+                {projectStatusBreakdown.map(s => (
+                  <tr key={s.status}>
+                    <td><span className={`badge badge-${s.status === 'active' ? 'green' : s.status === 'completed' ? 'blue' : s.status === 'paused' ? 'amber' : 'gray'}`}>{s.status}</span></td>
+                    <td className="td-right text-mono">{s.count}</td>
+                    <td className="td-right text-mono" style={{color:'var(--c3)'}}>{s.pct}%</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+
+          {/* Ending soon */}
+          {projectsEndingSoon.length > 0 && (
+            <>
+              <div className="section-bar" style={{marginBottom:12}}><h2>Ending Within 60 Days</h2></div>
+              <div className="card">
+                <table>
+                  <thead><tr><th>PROJECT</th><th>CLIENT</th><th className="th-right">END DATE</th><th className="th-right">DAYS LEFT</th></tr></thead>
+                  <tbody>
+                    {projectsEndingSoon.map(p => (
+                      <tr key={p.id}>
+                        <td><span className="badge badge-gray" style={{marginRight:6}}>{p.pn}</span>{p.name}</td>
+                        <td style={{color:'var(--c3)',fontSize:13}}>{p.client?.name ?? '—'}</td>
+                        <td className="td-right text-mono">{new Date(p.end_date! + 'T00:00:00').toLocaleDateString('sl-SI')}</td>
+                        <td className="td-right"><span className={`badge badge-${p.daysLeft <= 14 ? 'red' : 'amber'}`}>{p.daysLeft}d</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      </>
+    )
+  }
+
+  function renderHosting() {
+    return (
+      <>
+        <div className="stats-strip">
+          <div className="stat-card" style={{'--left-color':'var(--green)'} as React.CSSProperties}>
+            <div className="stat-card-label">ACTIVE HOSTING CLIENTS</div>
+            <div className="stat-card-value">{activeHosting.length}</div>
+            <div className="stat-card-sub">{hosting.filter(h=>h.status==='cancelled').length} cancelled</div>
+          </div>
+          <div className="stat-card" style={{'--left-color':'var(--green)'} as React.CSSProperties}>
+            <div className="stat-card-label">HOSTING REVENUE / YR</div>
+            <div className="stat-card-value">{fmtEur(hostingPerYear)}</div>
+            <div className="stat-card-sub">across all providers</div>
+          </div>
+          <div className="stat-card" style={{'--left-color':'var(--red)'} as React.CSSProperties}>
+            <div className="stat-card-label">HOSTING COST / YR</div>
+            <div className="stat-card-value" style={{color:'var(--red)'}}>{fmtEur(totalHostCost)}</div>
+            <div className="stat-card-sub">active infra costs</div>
+          </div>
+          <div className="stat-card" style={{'--left-color': totalHostMargin >= 0 ? 'var(--green)' : 'var(--red)'} as React.CSSProperties}>
+            <div className="stat-card-label">MARGIN / YR</div>
+            <div className="stat-card-value" style={{color: totalHostMargin >= 0 ? 'var(--green)' : 'var(--red)'}}>{fmtEur(totalHostMargin)}</div>
+            <div className="stat-card-sub">{totalHostRevenue > 0 ? Math.round(totalHostMargin / totalHostRevenue * 100) : 0}% margin</div>
+          </div>
         </div>
 
-        {/* ── Section 4: Clients ── */}
-        <SectionHeader title="Clients" />
+        <div className="page-content" style={{paddingTop:0}}>
+          <div className="section-bar" style={{marginBottom:12}}><h2>Hosting Revenue vs Cost by Provider</h2></div>
+          <div className="card" style={{marginBottom:24}}>
+            {providerStats.length === 0 ? (
+              <div style={{padding:'28px',textAlign:'center',color:'var(--c4)',fontSize:13}}>No hosting data yet.</div>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>PROVIDER</th>
+                    <th className="th-right">CLIENTS</th>
+                    <th className="th-right">REVENUE / YR</th>
+                    <th className="th-right">COST / YR</th>
+                    <th className="th-right">MARGIN / YR</th>
+                    <th className="th-right">MARGIN %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {providerStats.map(p => {
+                    const marginPct = p.revenue > 0 ? Math.round(p.margin / p.revenue * 100) : 0
+                    return (
+                      <tr key={p.provider}>
+                        <td style={{fontWeight:700}}>{p.provider}</td>
+                        <td className="td-right text-mono">{p.clients}</td>
+                        <td className="td-right text-mono" style={{color:'var(--green)',fontWeight:600}}>{fmtEur(p.revenue)}</td>
+                        <td className="td-right text-mono" style={{color:'var(--red)'}}>{fmtEur(p.cost)}</td>
+                        <td className="td-right text-mono" style={{color: p.margin >= 0 ? 'var(--green)' : 'var(--red)',fontWeight:600}}>{fmtEur(p.margin)}</td>
+                        <td className="td-right">
+                          <span className={`badge badge-${marginPct >= 50 ? 'green' : marginPct >= 0 ? 'amber' : 'red'}`}>{marginPct}%</span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr style={{background:'var(--c6)'}}>
+                    <td style={{fontWeight:700}}>Total</td>
+                    <td className="td-right text-mono" style={{color:'var(--c3)'}}>{activeHosting.length}</td>
+                    <td className="td-right text-mono" style={{color:'var(--green)',fontWeight:800}}>{fmtEur(totalHostRevenue)}</td>
+                    <td className="td-right text-mono" style={{color:'var(--red)',fontWeight:700}}>{fmtEur(totalHostCost)}</td>
+                    <td className="td-right text-mono" style={{color: totalHostMargin >= 0 ? 'var(--green)' : 'var(--red)',fontWeight:800}}>{fmtEur(totalHostMargin)}</td>
+                    <td className="td-right">
+                      <span className={`badge badge-${totalHostRevenue > 0 && Math.round(totalHostMargin/totalHostRevenue*100) >= 50 ? 'green' : totalHostRevenue > 0 && Math.round(totalHostMargin/totalHostRevenue*100) >= 0 ? 'amber' : 'red'}`}>
+                        {totalHostRevenue > 0 ? Math.round(totalHostMargin / totalHostRevenue * 100) : 0}%
+                      </span>
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            )}
+          </div>
 
-        {clientRevenueData.length > 0 && (
-          <div className="card" style={{ marginBottom: 16 }}>
-            <div className="card-body">
-              <div style={{ fontWeight: 700, marginBottom: 12, fontSize: 13, color: 'var(--c2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Top Clients by YTD Planned Revenue</div>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={clientRevenueData} margin={{ top: 4, right: 16, left: 0, bottom: 40 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--c6)" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--c3)' }} angle={-35} textAnchor="end" interval={0} />
-                  <YAxis tick={{ fontSize: 11, fill: 'var(--c3)' }} tickFormatter={v => `${Math.round(v / 1000)}k`} />
-                  <Tooltip formatter={(v: unknown) => fmtEur(Number(v))} />
-                  <Bar dataKey="value" name="YTD Revenue" fill="var(--navy)" radius={[2, 2, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+          {/* Domain stats */}
+          <div className="section-bar" style={{marginBottom:12}}><h2>Domain Statistics</h2></div>
+          <div className="stats-strip" style={{marginBottom:24}}>
+            <div className="stat-card" style={{'--left-color':'var(--navy)'} as React.CSSProperties}>
+              <div className="stat-card-label">TOTAL DOMAINS</div>
+              <div className="stat-card-value">{activeDomains.length}</div>
+              <div className="stat-card-sub">{domains.filter(d=>d.archived).length} archived</div>
             </div>
+            <div className="stat-card" style={{'--left-color': expiringSoon.length > 0 ? 'var(--amber)' : 'var(--green)'} as React.CSSProperties}>
+              <div className="stat-card-label">EXPIRING SOON</div>
+              <div className="stat-card-value" style={{color: expiringSoon.length > 0 ? 'var(--amber)' : undefined}}>{expiringSoon.length}</div>
+              <div className="stat-card-sub">within 30 days</div>
+            </div>
+            <div className="stat-card" style={{'--left-color': expiringSoon60.length > 0 ? 'var(--amber)' : 'var(--blue)'} as React.CSSProperties}>
+              <div className="stat-card-label">EXPIRING ≤60 DAYS</div>
+              <div className="stat-card-value" style={{color: expiringSoon60.length > 0 ? 'var(--amber)' : undefined}}>{expiringSoon60.length}</div>
+              <div className="stat-card-sub">{expiringSoon60.filter(d=>d.daysLeft<=7).length} critical (≤7d)</div>
+            </div>
+            <div className="stat-card" style={{'--left-color':'var(--green)'} as React.CSSProperties}>
+              <div className="stat-card-label">DOMAIN REVENUE / YR</div>
+              <div className="stat-card-value">{fmtEur(domainRevenueYr)}</div>
+              <div className="stat-card-sub">billable domains</div>
+            </div>
+          </div>
+
+          {expiringSoon60.length > 0 && (
+            <>
+              <div className="section-bar" style={{marginBottom:8}}><h2 style={{fontSize:14}}>Expiring Within 60 Days</h2></div>
+              <div className="card">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>DOMAIN</th>
+                      <th>CLIENT</th>
+                      <th className="th-right">EXPIRY</th>
+                      <th className="th-right">DAYS LEFT</th>
+                      <th className="th-right">AUTO-RENEW</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {expiringSoon60.map(d => (
+                      <tr key={d.id}>
+                        <td style={{fontWeight:600}}>{d.domain_name}</td>
+                        <td style={{color:'var(--c3)'}}>{d.client?.name ?? '—'}</td>
+                        <td className="td-right text-mono">{new Date(d.expiry_date + 'T00:00:00').toLocaleDateString('sl-SI')}</td>
+                        <td className="td-right"><span className={`badge badge-${d.daysLeft <= 7 ? 'red' : d.daysLeft <= 30 ? 'amber' : 'blue'}`}>{d.daysLeft}d</span></td>
+                        <td className="td-right"><span className={`badge badge-${d.auto_renew ? 'green' : 'gray'}`}>{d.auto_renew ? 'Yes' : 'No'}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      </>
+    )
+  }
+
+  function renderCRs() {
+    return (
+      <>
+        <div className="stats-strip">
+          <div className="stat-card" style={{'--left-color':'var(--navy)'} as React.CSSProperties}>
+            <div className="stat-card-label">TOTAL APPROVED CRs</div>
+            <div className="stat-card-value">{approvedCRs.length}</div>
+            <div className="stat-card-sub">status = approved</div>
+          </div>
+          <div className="stat-card" style={{'--left-color':'var(--green)'} as React.CSSProperties}>
+            <div className="stat-card-label">TOTAL CR VALUE</div>
+            <div className="stat-card-value">{fmtEur(totalCRValue)}</div>
+            <div className="stat-card-sub">approved CRs</div>
+          </div>
+          <div className="stat-card" style={{'--left-color':'var(--blue)'} as React.CSSProperties}>
+            <div className="stat-card-label">AVG CR VALUE</div>
+            <div className="stat-card-value">{fmtEur(avgCRValue)}</div>
+            <div className="stat-card-sub">per approved CR</div>
+          </div>
+          <div className="stat-card" style={{'--left-color':'var(--amber)'} as React.CSSProperties}>
+            <div className="stat-card-label">LARGEST CR</div>
+            <div className="stat-card-value">{fmtEur(maxCR)}</div>
+            <div className="stat-card-sub">single CR value</div>
+          </div>
+        </div>
+        <div className="page-content" style={{paddingTop:0}}>
+          <div className="section-bar" style={{marginBottom:12}}><h2>CRs by Project / Maintenance</h2></div>
+          <div className="card">
+            {crsBySource.length === 0 ? (
+              <div style={{padding:'28px',textAlign:'center',color:'var(--c4)',fontSize:13}}>No approved CRs yet.</div>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>SOURCE</th>
+                    <th className="th-right"># CRs</th>
+                    <th className="th-right">TOTAL VALUE</th>
+                    <th className="th-right">AVG VALUE</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {crsBySource.map(s => (
+                    <tr key={s.label}>
+                      <td style={{fontWeight:600}}>{s.label}</td>
+                      <td className="td-right text-mono">{s.count}</td>
+                      <td className="td-right text-mono" style={{color:'var(--green)',fontWeight:700}}>{fmtEur(s.total)}</td>
+                      <td className="td-right text-mono" style={{color:'var(--c3)'}}>{fmtEur(s.count > 0 ? s.total / s.count : 0)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  function renderSales() {
+    const maxDealVal = topDeals[0] ? dealTotal(topDeals[0]) : 1
+    const maxForecast = Math.max(...pipelineForecast.map(m => m.faceValue), 1)
+    return (
+      <>
+        <div className="stats-strip">
+          <div className="stat-card" style={{'--left-color':'var(--blue)'} as React.CSSProperties}>
+            <div className="stat-card-label">ACTIVE DEALS</div>
+            <div className="stat-card-value">{activeDeals.length}</div>
+            <div className="stat-card-sub">{fmtEur(activeDealsFaceValue)} face value</div>
+          </div>
+          <div className="stat-card" style={{'--left-color':'var(--green)'} as React.CSSProperties}>
+            <div className="stat-card-label">WON THIS YEAR</div>
+            <div className="stat-card-value" style={{color:'var(--green)'}}>{wonThisYear.length}</div>
+            <div className="stat-card-sub">{fmtEur(wonThisYear.reduce((s,p) => s + dealTotal(p), 0))}</div>
+          </div>
+          <div className="stat-card" style={{'--left-color':'var(--red)'} as React.CSSProperties}>
+            <div className="stat-card-label">LOST THIS YEAR</div>
+            <div className="stat-card-value" style={{color:'var(--red)'}}>{lostThisYear.length}</div>
+            <div className="stat-card-sub">{fmtEur(lostThisYear.reduce((s,p) => s + dealTotal(p), 0))}</div>
+          </div>
+          <div className="stat-card" style={{'--left-color': winRate >= 50 ? 'var(--green)' : 'var(--amber)'} as React.CSSProperties}>
+            <div className="stat-card-label">WIN RATE</div>
+            <div className="stat-card-value" style={{color: winRate >= 50 ? 'var(--green)' : 'var(--amber)'}}>{winRate}%</div>
+            <div className="stat-card-sub">{closedCount} closed deals</div>
+          </div>
+        </div>
+        <div className="page-content" style={{paddingTop:0}}>
+          {/* Pipeline by stage */}
+          <div className="section-bar" style={{marginBottom:12}}><h2>Pipeline by Stage</h2></div>
+          <div className="card card-body" style={{marginBottom:24}}>
+            {dealsByStatus.map(s => (
+              <div key={s.status} style={{ display: 'grid', gridTemplateColumns: '100px 60px 120px 1fr', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                <span className={`badge badge-${s.status === 'won' ? 'green' : s.status === 'lost' ? 'red' : 'amber'}`}>{s.status}</span>
+                <span className="text-mono" style={{fontSize:13,fontWeight:700}}>{s.count}</span>
+                <span className="text-mono" style={{fontSize:13,color:'var(--c2)'}}>{fmtEur(s.value)}</span>
+                <MiniBar value={s.count} max={pipeline.length || 1} color={s.status === 'won' ? 'var(--green)' : s.status === 'lost' ? 'var(--red)' : 'var(--amber)'} />
+              </div>
+            ))}
+          </div>
+
+          {/* Deal type breakdown */}
+          <div className="section-bar" style={{marginBottom:12}}><h2>Deal Type Breakdown (Active)</h2></div>
+          <div className="stats-strip" style={{marginBottom:24}}>
+            {dealsByType.map(t => (
+              <div key={t.label} className="stat-card" style={{'--left-color':'var(--navy)'} as React.CSSProperties}>
+                <div className="stat-card-label">{t.label.toUpperCase()}</div>
+                <div className="stat-card-value">{t.count}</div>
+                <div className="stat-card-sub">{fmtEur(t.value)}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Forecast by month */}
+          <div className="section-bar" style={{marginBottom:12}}><h2>Pipeline Forecast — Next 6 Months</h2></div>
+          <div className="card" style={{marginBottom:24}}>
+            <table>
+              <thead>
+                <tr>
+                  <th>MONTH</th>
+                  <th className="th-right">DEALS</th>
+                  <th className="th-right">FACE VALUE</th>
+                  <th className="th-right">LIKELY (≥50%)</th>
+                  <th className="th-right">HOPEFULLY (≥25%)</th>
+                  <th style={{width:120}}>BAR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pipelineForecast.map(m => (
+                  <tr key={m.month}>
+                    <td style={{fontWeight:600}}>{fmtMonth(m.month)}</td>
+                    <td className="td-right text-mono">{m.count}</td>
+                    <td className="td-right text-mono" style={{fontWeight:700}}>{m.faceValue > 0 ? fmtEur(m.faceValue) : '—'}</td>
+                    <td className="td-right text-mono" style={{color:'var(--green)'}}>{m.likely > 0 ? fmtEur(m.likely) : '—'}</td>
+                    <td className="td-right text-mono" style={{color:'var(--blue)'}}>{m.hopefully > 0 ? fmtEur(m.hopefully) : '—'}</td>
+                    <td><MiniBar value={m.faceValue} max={maxForecast} color="var(--navy)" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Top deals */}
+          <div className="section-bar" style={{marginBottom:12}}><h2>Top Active Deals</h2></div>
+          <div className="card">
+            {topDeals.length === 0 ? (
+              <div style={{padding:'28px',textAlign:'center',color:'var(--c4)',fontSize:13}}>No active deals.</div>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>COMPANY</th>
+                    <th>TITLE</th>
+                    <th>TYPE</th>
+                    <th className="th-right">AMOUNT</th>
+                    <th className="th-right">PROB.</th>
+                    <th>EXPECTED</th>
+                    <th style={{width:100}}>BAR</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topDeals.map(p => (
+                    <tr key={p.id}>
+                      <td style={{fontWeight:600}}>{p.company_name ?? p.client?.name ?? '—'}</td>
+                      <td style={{fontSize:13}}>{p.title}</td>
+                      <td><span className="badge badge-gray">{p.deal_type}</span></td>
+                      <td className="td-right text-mono" style={{fontWeight:700}}>{fmtEur(dealTotal(p))}</td>
+                      <td className="td-right"><span className={`badge badge-${p.probability >= 75 ? 'green' : p.probability >= 50 ? 'blue' : p.probability >= 25 ? 'amber' : 'gray'}`}>{p.probability}%</span></td>
+                      <td style={{fontSize:13,color:'var(--c3)'}}>{p.expected_month ? fmtMonth(p.expected_month) : '—'}</td>
+                      <td><MiniBar value={dealTotal(p)} max={maxDealVal} color="var(--navy)" /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  function renderMaintenance() {
+    const maxRetainer = maintByClient[0]?.retainer ?? 1
+    return (
+      <>
+        <div className="stats-strip">
+          <div className="stat-card" style={{'--left-color':'var(--navy)'} as React.CSSProperties}>
+            <div className="stat-card-label">ACTIVE CONTRACTS</div>
+            <div className="stat-card-value">{activeMaintenances.length}</div>
+            <div className="stat-card-sub">of {maintenances.length} total</div>
+          </div>
+          <div className="stat-card" style={{'--left-color':'var(--amber)'} as React.CSSProperties}>
+            <div className="stat-card-label">TOTAL MRR</div>
+            <div className="stat-card-value" style={{color:'var(--amber)'}}>{fmtEur(totalMRR)}</div>
+            <div className="stat-card-sub">monthly retainers</div>
+          </div>
+          <div className="stat-card" style={{'--left-color':'var(--green)'} as React.CSSProperties}>
+            <div className="stat-card-label">ANNUAL RETAINER VALUE</div>
+            <div className="stat-card-value">{fmtEur(totalMRR * 12)}</div>
+            <div className="stat-card-sub">if all contracts run full year</div>
+          </div>
+          <div className="stat-card" style={{'--left-color':'var(--blue)'} as React.CSSProperties}>
+            <div className="stat-card-label">AVG RETAINER</div>
+            <div className="stat-card-value">{fmtEur(avgRetainer)}</div>
+            <div className="stat-card-sub">per active contract / mo</div>
+          </div>
+        </div>
+
+        {maintEndingSoon.length > 0 && (
+          <div style={{ padding: '0 0 16px 0' }}>
+            {maintEndingSoon.map(m => (
+              <div key={m.id} className="alert alert-amber" style={{ marginBottom: 6 }}>
+                <strong>{m.name}</strong> — contract ends in {m.daysLeft} day{m.daysLeft !== 1 ? 's' : ''} ({m.contract_end})
+              </div>
+            ))}
           </div>
         )}
 
-        <div className="card" style={{ marginBottom: 28 }}>
-          <div className="card-body">
-            <div style={{ fontWeight: 700, marginBottom: 14, fontSize: 13, color: 'var(--c2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Client Overview</div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <div className="page-content" style={{paddingTop:0}}>
+          <div className="section-bar" style={{marginBottom:12}}><h2>Monthly Maintenance Revenue — {CURRENT_YEAR}</h2></div>
+          <div className="card card-body" style={{marginBottom:24}}>
+            <MonthlyChart data={maintMonthlyChart} />
+          </div>
+
+          <div className="section-bar" style={{marginBottom:12}}><h2>Retainer by Client</h2></div>
+          <div className="card" style={{marginBottom:24}}>
+            <table>
               <thead>
                 <tr>
-                  <th style={{ textAlign: 'left', paddingBottom: 8, color: 'var(--c3)', fontWeight: 600, fontSize: 11, borderBottom: '1px solid var(--c5)' }}>Client</th>
-                  <th className="th-right" style={{ paddingBottom: 8, color: 'var(--c3)', fontWeight: 600, fontSize: 11, borderBottom: '1px solid var(--c5)' }}>Active Projects</th>
-                  <th className="th-right" style={{ paddingBottom: 8, color: 'var(--c3)', fontWeight: 600, fontSize: 11, borderBottom: '1px solid var(--c5)' }}>Maintenance</th>
-                  <th className="th-right" style={{ paddingBottom: 8, color: 'var(--c3)', fontWeight: 600, fontSize: 11, borderBottom: '1px solid var(--c5)' }}>YTD Revenue</th>
-                  <th className="th-right" style={{ paddingBottom: 8, color: 'var(--c3)', fontWeight: 600, fontSize: 11, borderBottom: '1px solid var(--c5)' }}>Pipeline Value</th>
+                  <th>CLIENT</th>
+                  <th className="th-right">CONTRACTS</th>
+                  <th className="th-right">MONTHLY RETAINER</th>
+                  <th className="th-right">ANNUAL</th>
+                  <th style={{width:160}}>BAR</th>
                 </tr>
               </thead>
               <tbody>
-                {clientTableData.map(c => (
-                  <tr key={c.id} style={{ borderBottom: '1px solid var(--c6)' }}>
-                    <td style={{ padding: '8px 0', fontWeight: 600 }}>{c.name}</td>
-                    <td className="td-right">{c.activeProj > 0 ? c.activeProj : <span style={{ color: 'var(--c4)' }}>—</span>}</td>
-                    <td className="td-right">{c.activeMaint > 0 ? c.activeMaint : <span style={{ color: 'var(--c4)' }}>—</span>}</td>
-                    <td className="td-right text-mono" style={{ color: c.ytdRev > 0 ? 'var(--c1)' : 'var(--c4)' }}>{c.ytdRev > 0 ? fmtEur(c.ytdRev) : '—'}</td>
-                    <td className="td-right text-mono" style={{ color: c.pipeVal > 0 ? 'var(--blue)' : 'var(--c4)' }}>{c.pipeVal > 0 ? fmtEur(c.pipeVal) : '—'}</td>
+                {maintByClient.map(c => (
+                  <tr key={c.clientName}>
+                    <td style={{fontWeight:600}}>{c.clientName}</td>
+                    <td className="td-right text-mono">{c.contracts}</td>
+                    <td className="td-right text-mono" style={{color:'var(--amber)',fontWeight:700}}>{fmtEur(c.retainer)}</td>
+                    <td className="td-right text-mono" style={{color:'var(--c2)'}}>{fmtEur(c.retainer * 12)}</td>
+                    <td><MiniBar value={c.retainer} max={maxRetainer} color="var(--amber)" /></td>
                   </tr>
                 ))}
-                {clientTableData.length === 0 && (
-                  <tr>
-                    <td colSpan={5} style={{ textAlign: 'center', color: 'var(--c4)', padding: '20px 0' }}>No client data yet</td>
+                {maintByClient.length === 0 && (
+                  <tr><td colSpan={5} style={{textAlign:'center',color:'var(--c4)',padding:'20px'}}>No active maintenance contracts</td></tr>
+                )}
+              </tbody>
+              {maintByClient.length > 0 && (
+                <tfoot>
+                  <tr style={{background:'var(--c7)',borderTop:'2px solid var(--c6)'}}>
+                    <td colSpan={2} style={{fontSize:10,fontWeight:700,color:'var(--c3)',textTransform:'uppercase',letterSpacing:'0.05em'}}>Total</td>
+                    <td className="td-right text-mono" style={{fontWeight:700,color:'var(--amber)'}}>{fmtEur(totalMRR)}</td>
+                    <td className="td-right text-mono" style={{fontWeight:700,color:'var(--c2)'}}>{fmtEur(totalMRR * 12)}</td>
+                    <td />
                   </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+
+          <div className="section-bar" style={{marginBottom:12}}><h2>Active Contracts</h2></div>
+          <div className="card">
+            <table>
+              <thead>
+                <tr>
+                  <th>NAME</th>
+                  <th>CLIENT</th>
+                  <th className="th-right">RETAINER / MO</th>
+                  <th className="th-right">HRS / MO</th>
+                  <th>CONTRACT</th>
+                  <th>STATUS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activeMaintenances.map(m => {
+                  const clientName = clients.find(c => c.id === m.client_id)?.name ?? '—'
+                  const now = Date.now()
+                  const daysLeft = m.contract_end ? Math.ceil((new Date(m.contract_end + 'T00:00:00').getTime() - now) / 86_400_000) : null
+                  return (
+                    <tr key={m.id}>
+                      <td style={{fontWeight:600}}>{m.name}</td>
+                      <td style={{color:'var(--c3)',fontSize:13}}>{clientName}</td>
+                      <td className="td-right text-mono" style={{fontWeight:700,color:'var(--amber)'}}>{fmtEur(m.monthly_retainer)}</td>
+                      <td className="td-right text-mono">{m.monthly_hours ?? '—'}</td>
+                      <td style={{fontSize:12,color: daysLeft !== null && daysLeft <= 30 ? 'var(--red)' : 'var(--c3)'}}>
+                        {m.contract_start ? m.contract_start.slice(0,7) : '—'} → {m.contract_end ? m.contract_end.slice(0,7) : '∞'}
+                        {daysLeft !== null && daysLeft <= 60 && <span className="badge badge-amber" style={{marginLeft:6}}>{daysLeft}d left</span>}
+                      </td>
+                      <td><span className="badge badge-green">Active</span></td>
+                    </tr>
+                  )
+                })}
+                {activeMaintenances.length === 0 && (
+                  <tr><td colSpan={6} style={{textAlign:'center',color:'var(--c4)',padding:'20px'}}>No active contracts</td></tr>
                 )}
               </tbody>
             </table>
           </div>
         </div>
+      </>
+    )
+  }
 
-        {/* ── Section 5: Maintenance & Hosting ── */}
-        <SectionHeader title="Maintenance & Hosting" />
-
-        <div className="stats-strip" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 16 }}>
-          <StatCard
-            label="Active Maintenances"
-            value={String(activeMaintenances.length)}
-            color="var(--amber)"
-          />
-          <StatCard
-            label="Total Monthly Retainer"
-            value={totalMaintMRR > 0 ? fmtEur(totalMaintMRR) : '—'}
-            sub="per month"
-            color="var(--amber)"
-          />
-          <StatCard
-            label="Active Hosting Clients"
-            value={String(hostingClients.filter(h => h.status === 'active').length)}
-            color="var(--blue)"
-          />
-          <StatCard
-            label="Hosting MRR"
-            value={hostingMRR > 0 ? fmtEur(hostingMRR) : '—'}
-            sub="monthly equivalent"
-            color="var(--green)"
-          />
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <h1>Statistics</h1>
+          <p className="text-sm" style={{color:'var(--c3)',marginTop:2}}>Agency intelligence overview</p>
         </div>
+      </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 28 }}>
-          {/* Maintenance table */}
-          <div className="card">
-            <div className="card-body">
-              <div style={{ fontWeight: 700, marginBottom: 12, fontSize: 13, color: 'var(--c2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Maintenance Portfolio</div>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                <thead>
-                  <tr>
-                    <th style={{ textAlign: 'left', paddingBottom: 6, color: 'var(--c3)', fontWeight: 600, fontSize: 11 }}>Name / Client</th>
-                    <th className="th-right" style={{ paddingBottom: 6, color: 'var(--c3)', fontWeight: 600, fontSize: 11 }}>Retainer/mo</th>
-                    <th style={{ paddingBottom: 6, color: 'var(--c3)', fontWeight: 600, fontSize: 11, textAlign: 'center' }}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {maintenances.map(m => (
-                    <tr key={m.id} style={{ borderTop: '1px solid var(--c6)' }}>
-                      <td style={{ padding: '6px 0' }}>
-                        <div style={{ fontWeight: 600, color: 'var(--c1)' }}>{m.name}</div>
-                        <div style={{ fontSize: 11, color: 'var(--c3)' }}>{m.client?.name ?? '—'}</div>
-                      </td>
-                      <td className="td-right text-mono" style={{ fontSize: 12 }}>{fmtEur(m.monthly_retainer)}</td>
-                      <td style={{ textAlign: 'center', padding: '6px 0' }}>
-                        <span className={maintStatusBadge(m.status)}>{m.status}</span>
-                      </td>
-                    </tr>
-                  ))}
-                  {maintenances.length === 0 && (
-                    <tr>
-                      <td colSpan={3} style={{ textAlign: 'center', color: 'var(--c4)', padding: '12px 0' }}>No maintenance contracts</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+      {/* Tab bar */}
+      <div style={{ borderBottom: '2px solid var(--c6)', display: 'flex', padding: '0 20px', gap: 2, background: '#fff' }}>
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{
+            padding: '10px 20px',
+            fontWeight: tab === t.id ? 700 : 500,
+            fontSize: 13,
+            background: tab === t.id ? 'var(--navy)' : 'transparent',
+            border: 'none',
+            borderRadius: '8px 8px 0 0',
+            color: tab === t.id ? '#fff' : 'var(--c3)',
+            cursor: 'pointer',
+            marginBottom: -2,
+            letterSpacing: tab === t.id ? '-0.01em' : undefined,
+            transition: 'background 0.15s, color 0.15s',
+          }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-          {/* Hosting table */}
-          <div className="card">
-            <div className="card-body">
-              <div style={{ fontWeight: 700, marginBottom: 12, fontSize: 13, color: 'var(--c2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Hosting Revenue</div>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                <thead>
-                  <tr>
-                    <th style={{ textAlign: 'left', paddingBottom: 6, color: 'var(--c3)', fontWeight: 600, fontSize: 11 }}>Client / Description</th>
-                    <th className="th-right" style={{ paddingBottom: 6, color: 'var(--c3)', fontWeight: 600, fontSize: 11 }}>Amount</th>
-                    <th style={{ paddingBottom: 6, color: 'var(--c3)', fontWeight: 600, fontSize: 11, textAlign: 'center' }}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {hostingClients.map(h => (
-                    <tr key={h.id} style={{ borderTop: '1px solid var(--c6)' }}>
-                      <td style={{ padding: '6px 0' }}>
-                        <div style={{ fontWeight: 600, color: 'var(--c1)' }}>{h.client?.name ?? '—'}</div>
-                        <div style={{ fontSize: 11, color: 'var(--c3)' }}>{h.description ?? h.project_pn}</div>
-                      </td>
-                      <td className="td-right text-mono" style={{ fontSize: 12 }}>
-                        {fmtEur(h.amount)}<span style={{ fontSize: 10, color: 'var(--c3)', marginLeft: 3 }}>/{h.cycle === 'monthly' ? 'mo' : 'yr'}</span>
-                      </td>
-                      <td style={{ textAlign: 'center', padding: '6px 0' }}>
-                        <span className={hostingStatusBadge(h.status)}>{h.status}</span>
-                      </td>
-                    </tr>
-                  ))}
-                  {hostingClients.length === 0 && (
-                    <tr>
-                      <td colSpan={3} style={{ textAlign: 'center', color: 'var(--c4)', padding: '12px 0' }}>No hosting clients</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        {/* ── Section 6: Pipeline ── */}
-        <SectionHeader title="Pipeline" />
-
-        <div className="stats-strip" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: 16 }}>
-          {pipelineStatusData.map(s => (
-            <StatCard
-              key={s.name}
-              label={s.name}
-              value={String(s.count)}
-              color={s.name === 'Won' ? 'var(--green)' : s.name === 'Lost' ? 'var(--red)' : 'var(--blue)'}
-            />
-          ))}
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 16 }}>
-          <div className="card">
-            <div className="card-body">
-              <div style={{ fontWeight: 700, marginBottom: 12, fontSize: 13, color: 'var(--c2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Pipeline by Status</div>
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart
-                  layout="vertical"
-                  data={pipelineStatusData}
-                  margin={{ top: 0, right: 16, left: 0, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--c6)" horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 11, fill: 'var(--c3)' }} allowDecimals={false} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: 'var(--c2)' }} width={80} />
-                  <Tooltip />
-                  <Bar dataKey="count" name="Items" fill="var(--blue)" radius={[0, 2, 2, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card-body">
-              <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 13, color: 'var(--c2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Weighted Pipeline Summary</div>
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--navy)', fontVariantNumeric: 'tabular-nums' }}>
-                  {weightedPipelineValue > 0 ? fmtEur(weightedPipelineValue) : '—'}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--c3)', marginTop: 2 }}>Weighted by probability</div>
-              </div>
-              <div style={{ borderTop: '1px solid var(--c6)', paddingTop: 12 }}>
-                {pipelineItems
-                  .filter(p => p.status !== 'won' && p.status !== 'lost')
-                  .slice(0, 5)
-                  .map(p => (
-                    <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                      <span style={{ fontSize: 12, color: 'var(--c2)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '60%' }}>{p.title}</span>
-                      <span className="text-mono" style={{ fontSize: 12, color: 'var(--blue)' }}>
-                        {fmtEur(((p.estimated_amount ?? 0) * p.probability) / 100)}
-                      </span>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Pipeline items table */}
-        <div className="card" style={{ marginBottom: 28 }}>
-          <div className="card-body">
-            <div style={{ fontWeight: 700, marginBottom: 14, fontSize: 13, color: 'var(--c2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Pipeline Items</div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: 'left', paddingBottom: 8, color: 'var(--c3)', fontWeight: 600, fontSize: 11, borderBottom: '1px solid var(--c5)' }}>Title</th>
-                  <th style={{ textAlign: 'left', paddingBottom: 8, color: 'var(--c3)', fontWeight: 600, fontSize: 11, borderBottom: '1px solid var(--c5)' }}>Client</th>
-                  <th style={{ textAlign: 'left', paddingBottom: 8, color: 'var(--c3)', fontWeight: 600, fontSize: 11, borderBottom: '1px solid var(--c5)' }}>Status</th>
-                  <th className="th-right" style={{ paddingBottom: 8, color: 'var(--c3)', fontWeight: 600, fontSize: 11, borderBottom: '1px solid var(--c5)' }}>Amount</th>
-                  <th className="th-right" style={{ paddingBottom: 8, color: 'var(--c3)', fontWeight: 600, fontSize: 11, borderBottom: '1px solid var(--c5)' }}>Prob.</th>
-                  <th className="th-right" style={{ paddingBottom: 8, color: 'var(--c3)', fontWeight: 600, fontSize: 11, borderBottom: '1px solid var(--c5)' }}>Weighted</th>
-                  <th style={{ textAlign: 'left', paddingBottom: 8, color: 'var(--c3)', fontWeight: 600, fontSize: 11, borderBottom: '1px solid var(--c5)' }}>Expected</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pipelineItems.map(p => (
-                  <tr key={p.id} style={{ borderBottom: '1px solid var(--c6)' }}>
-                    <td style={{ padding: '8px 0', fontWeight: 600 }}>{p.title}</td>
-                    <td style={{ padding: '8px 8px 8px 0', color: 'var(--c3)', fontSize: 12 }}>{p.client?.name ?? p.company_name ?? '—'}</td>
-                    <td style={{ padding: '8px 8px 8px 0' }}>
-                      <span className={pipelineBadge(p.status)}>{p.status}</span>
-                    </td>
-                    <td className="td-right text-mono">{p.estimated_amount ? fmtEur(p.estimated_amount) : '—'}</td>
-                    <td className="td-right">{p.probability}%</td>
-                    <td className="td-right text-mono" style={{ color: 'var(--blue)' }}>
-                      {p.estimated_amount ? fmtEur((p.estimated_amount * p.probability) / 100) : '—'}
-                    </td>
-                    <td style={{ padding: '8px 0', fontSize: 12, color: 'var(--c3)' }}>
-                      {p.expected_month ? fmtMonth(p.expected_month.substring(0, 7) + '-01') : '—'}
-                    </td>
-                  </tr>
-                ))}
-                {pipelineItems.length === 0 && (
-                  <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', color: 'var(--c4)', padding: '20px 0' }}>No pipeline items</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* ── Section 7: Forecast ── */}
-        <SectionHeader title="Forecast — Next 6 Months" />
-        <div className="card" style={{ marginBottom: 28 }}>
-          <div className="card-body">
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={forecastData} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--c6)" />
-                <XAxis dataKey="month" tick={{ fontSize: 12, fill: 'var(--c3)' }} />
-                <YAxis tick={{ fontSize: 11, fill: 'var(--c3)' }} tickFormatter={v => `${Math.round(v / 1000)}k`} />
-                <Tooltip formatter={(v: unknown) => fmtEur(Number(v))} />
-                <Legend />
-                <Bar dataKey="confirmed" name="Confirmed (100%)" fill="var(--navy)" radius={[2, 2, 0, 0]} stackId="a" />
-                <Bar dataKey="pipeline"  name="Pipeline (weighted)" fill="var(--amber)" radius={[2, 2, 0, 0]} stackId="a" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
+      <div style={{paddingTop: 8}}>
+        {tab === 'overview'     && renderOverview()}
+        {tab === 'clients'      && renderClients()}
+        {tab === 'projects'     && renderProjects()}
+        {tab === 'maintenance'  && renderMaintenance()}
+        {tab === 'hosting'      && renderHosting()}
+        {tab === 'crs'          && renderCRs()}
+        {tab === 'sales'        && renderSales()}
       </div>
     </div>
   )

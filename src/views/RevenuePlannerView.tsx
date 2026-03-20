@@ -4,6 +4,7 @@ import { useRevenuePlannerStore } from '../stores/revenuePlanner'
 import { useInfraStore } from '../stores/infrastructure'
 import { useDomainsStore } from '../stores/domains'
 import type { Project, RevenuePlanner } from '../lib/types'
+import { hostingActiveInMonth } from '../lib/types'
 
 // ── Half-year helpers ──────────────────────────────────────────────────────────
 
@@ -149,10 +150,14 @@ export function RevenuePlannerView() {
     }
   }
 
-  // Maintenance retainer rows for this half
-  const retainerRows = rpStore.rows.filter(r => r.maintenance_id != null)
+  // Maintenance retainer rows for this half — exclude CR add-on rows
+  const retainerRows = rpStore.rows.filter(r => r.maintenance_id != null && !r.notes?.startsWith('CR:'))
   // Group by maintenance_id
   const retainerByMaint = new Map<string, { name: string; clientName: string; rows: RevenuePlanner[] }>()
+
+  // CR rows — group by maintenance
+  const crRows = rpStore.rows.filter(r => r.maintenance_id != null && r.notes?.startsWith('CR:'))
+  const crByMaint = new Map<string, { maintName: string; clientName: string; crs: { title: string; rowByMonth: Map<string, RevenuePlanner> }[] }>()
   for (const r of retainerRows) {
     const mid = r.maintenance_id!
     if (!retainerByMaint.has(mid)) {
@@ -163,6 +168,23 @@ export function RevenuePlannerView() {
       })
     }
     retainerByMaint.get(mid)!.rows.push(r)
+  }
+
+  // Build CR lookup: group by maintenance, then by CR title
+  for (const r of crRows) {
+    const mid = r.maintenance_id!
+    const title = r.notes?.startsWith('CR:') ? r.notes.slice(3).trim() : r.notes ?? '—'
+    if (!crByMaint.has(mid)) {
+      crByMaint.set(mid, {
+        maintName: r.maintenance?.name ?? 'Maintenance',
+        clientName: r.maintenance?.client?.name ?? '—',
+        crs: [],
+      })
+    }
+    const entry = crByMaint.get(mid)!
+    let crEntry = entry.crs.find(c => c.title === title)
+    if (!crEntry) { crEntry = { title, rowByMonth: new Map() }; entry.crs.push(crEntry) }
+    crEntry.rowByMonth.set(r.month, r)
   }
 
   // Effective display amount for a cell
@@ -213,6 +235,25 @@ export function RevenuePlannerView() {
   const totalPlanned   = bestCaseTotal
   const actualSum      = actualIssuedTotal()
 
+  // Recurring revenue totals (hosting + retainers + domains) — always confirmed
+  // These are computed after hostingGrandTotal / domainsGrandTotal / retainerByMaint are available,
+  // so we inline them as lazy references resolved after those are declared.
+  function recurringTotal(): number {
+    const hosting  = months.reduce((s, m) => s + hostingMonthTotal(m), 0)
+    const retainer = months.reduce((s, m) =>
+      s + [...retainerByMaint.entries()].reduce((rs, [mid, { rows }]) => {
+        const r = rows.find(r => r.month === m)
+        if (!r) return rs
+        const hAmt = infraStore.hostingClients.find(h => h.maintenance_id === mid && h.cycle === 'monthly')?.amount ?? 0
+        if (r.status === 'issued' || r.status === 'paid') {
+          return rs + Math.max(0, (r.actual_amount ?? r.planned_amount ?? 0) - hAmt)
+        }
+        return rs + (r.planned_amount ?? 0)
+      }, 0), 0)
+    const domain = months.reduce((s, m) => s + domainMonthTotal(m), 0)
+    return hosting + retainer + domain
+  }
+
   // ── Monthly column totals ──────────────────────────────────────────────────
   function monthPlannedTotal(month: string): number {
     return activeProjects.reduce((sum, p) => {
@@ -240,18 +281,21 @@ export function RevenuePlannerView() {
   }
 
   // ── Hosting revenue helpers ────────────────────────────────────────────────
-  const activeHostingClients = infraStore.hostingClients.filter(h => h.status === 'active')
+  const activeHostingClients = infraStore.hostingClients.filter(
+    h => h.status === 'active' || (h.status === 'cancelled' && h.cancelled_from != null)
+  )
 
   function hostingCellAmount(hostingId: string, month: string): number | null {
     const h = activeHostingClients.find(hc => hc.id === hostingId)
     if (!h) return null
+    // Stop showing after cancellation
+    if (!hostingActiveInMonth(h, month)) return null
     // Stop showing after contract expiry
     if (h.contract_expiry && month > h.contract_expiry) return null
     if (h.cycle === 'monthly') return h.amount
-    // Yearly: show amount only in the month matching next_invoice_date
-    if (h.cycle === 'yearly' && h.next_invoice_date) {
-      const invoiceMonth = h.next_invoice_date.slice(0, 7) + '-01'
-      if (invoiceMonth === month) return h.amount
+    // Yearly: show amount only in the billing_month
+    if (h.cycle === 'yearly' && h.billing_month) {
+      if (parseInt(month.slice(5, 7)) === h.billing_month) return h.amount
     }
     return null
   }
@@ -268,7 +312,8 @@ export function RevenuePlannerView() {
 
   // ── Domain helpers ──────────────────────────────────────────────────────────
   function domainInvoiceMonth(d: { registered_date?: string | null; expiry_date: string }) {
-    return (d.registered_date ?? d.expiry_date).slice(0, 7) + '-01'
+    const monthNum = (d.registered_date ?? d.expiry_date).slice(5, 7)
+    return `${year}-${monthNum}-01`
   }
 
   const domainsInHalf = domainsStore.domains.filter(d => months.includes(domainInvoiceMonth(d)))
@@ -354,18 +399,18 @@ export function RevenuePlannerView() {
       <div className="stats-strip" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
         <div className="stat-card" style={{ '--left-color': '#15803d' } as React.CSSProperties}>
           <div className="stat-card-label">Confirmed</div>
-          <div className="stat-card-value">{fmtAmt(confirmedTotal)}</div>
-          <div className="stat-card-sub">100% — will issue</div>
+          <div className="stat-card-value">{fmtAmt(confirmedTotal + recurringTotal())}</div>
+          <div className="stat-card-sub">projects + hosting + retainers</div>
         </div>
         <div className="stat-card" style={{ '--left-color': '#92400e' } as React.CSSProperties}>
           <div className="stat-card-label">Likely</div>
-          <div className="stat-card-value">{fmtAmt(likelyTotal)}</div>
-          <div className="stat-card-sub">100% + 50% invoices</div>
+          <div className="stat-card-value">{fmtAmt(likelyTotal + recurringTotal())}</div>
+          <div className="stat-card-sub">confirmed + 50% invoices</div>
         </div>
         <div className="stat-card" style={{ '--left-color': 'var(--navy)' } as React.CSSProperties}>
           <div className="stat-card-label">Best Case</div>
-          <div className="stat-card-value">{fmtAmt(bestCaseTotal)}</div>
-          <div className="stat-card-sub">100% + 50% + 25%</div>
+          <div className="stat-card-value">{fmtAmt(bestCaseTotal + recurringTotal())}</div>
+          <div className="stat-card-sub">confirmed + 50% + 25%</div>
         </div>
         <div className="stat-card" style={{ '--left-color': '#4338ca' } as React.CSSProperties}>
           <div className="stat-card-label">Actual Issued</div>
@@ -655,6 +700,441 @@ export function RevenuePlannerView() {
                   <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 500 }}>{item.label}</span>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Maintenance Retainers ── */}
+        {retainerByMaint.size > 0 && (
+          <div style={{ marginTop: 24 }}>
+            <div className="section-bar">
+              <h2>Maintenance Retainers</h2>
+            </div>
+
+            <div className="card" style={{ overflow: 'hidden' }}>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{
+                  width: '100%',
+                  borderCollapse: 'collapse',
+                  tableLayout: 'fixed',
+                  minWidth: 800,
+                }}>
+                  <colgroup>
+                    <col style={{ width: 220 }} />
+                    {months.map(m => (
+                      <React.Fragment key={m}>
+                        <col />
+                        <col />
+                      </React.Fragment>
+                    ))}
+                    <col style={{ width: 100 }} />
+                  </colgroup>
+
+                  <thead>
+                    <tr style={{ background: '#f9fafb' }}>
+                      <th rowSpan={2} style={{
+                        padding: '10px 16px', textAlign: 'left', fontSize: 10, fontWeight: 700,
+                        textTransform: 'uppercase', letterSpacing: '0.7px', color: '#6b7280',
+                        background: '#f9fafb', position: 'sticky', left: 0, zIndex: 2,
+                        borderRight: '2px solid #e5e7eb', borderBottom: '2px solid #e5e7eb', verticalAlign: 'bottom',
+                      }}>
+                        Contract
+                      </th>
+                      {months.map(m => (
+                        <th key={m} colSpan={2} style={{
+                          padding: '6px 8px', textAlign: 'center', fontSize: 10, fontWeight: 700,
+                          textTransform: 'uppercase', letterSpacing: '0.7px', color: '#6b7280',
+                          background: '#f9fafb', borderLeft: '2px solid #e5e7eb', whiteSpace: 'nowrap',
+                          borderBottom: '1px solid #e5e7eb',
+                        }}>
+                          {fmtMonthShort(m)}
+                        </th>
+                      ))}
+                      <th rowSpan={2} style={{
+                        padding: '10px 10px', textAlign: 'right', fontSize: 10, fontWeight: 700,
+                        textTransform: 'uppercase', letterSpacing: '0.7px', color: '#6b7280',
+                        background: '#f9fafb', borderLeft: '2px solid #d1d5db', borderBottom: '2px solid #e5e7eb',
+                        whiteSpace: 'nowrap', verticalAlign: 'bottom',
+                      }}>
+                        Total
+                      </th>
+                    </tr>
+                    <tr style={{ borderBottom: '2px solid #e5e7eb', background: '#f9fafb' }}>
+                      {months.map(m => (
+                        <React.Fragment key={m}>
+                          <th style={{
+                            padding: '4px 6px', textAlign: 'right', fontSize: 9, fontWeight: 600,
+                            color: '#9ca3af', background: '#f9fafb', borderLeft: '2px solid #e5e7eb',
+                            whiteSpace: 'nowrap', letterSpacing: '0.3px',
+                          }}>Plan</th>
+                          <th style={{
+                            padding: '4px 6px', textAlign: 'right', fontSize: 9, fontWeight: 600,
+                            color: '#9ca3af', background: '#f9fafb', borderLeft: '1px solid #e5e7eb',
+                            whiteSpace: 'nowrap', letterSpacing: '0.3px',
+                          }}>Actual</th>
+                        </React.Fragment>
+                      ))}
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {[...retainerByMaint.entries()].map(([mid, { name, clientName, rows }], rowIdx) => {
+                      const linkedHosting = infraStore.hostingClients.find(
+                        h => h.maintenance_id === mid && h.cycle === 'monthly'
+                      )
+                      const hostingAmt = linkedHosting?.amount ?? 0
+                      const rowByMonth = new Map(rows.map(r => [r.month, r]))
+                      const rowBg = rowIdx % 2 === 0 ? '#fff' : '#fafafa'
+                      const rowTotal = months.reduce((s, m) => {
+                        const r = rowByMonth.get(m)
+                        const isIssued = r?.status === 'issued' || r?.status === 'paid'
+                        if (isIssued && r?.actual_amount != null) {
+                          return s + Math.max(0, r.actual_amount - hostingAmt)
+                        }
+                        return s + (r?.planned_amount ?? 0)
+                      }, 0)
+
+                      return (
+                        <tr key={name} style={{ background: rowBg, borderBottom: '1px solid #f3f4f6' }}>
+                          <td style={{
+                            padding: '10px 16px', position: 'sticky', left: 0, zIndex: 1,
+                            background: rowBg, borderRight: '2px solid #e5e7eb', verticalAlign: 'middle',
+                          }}>
+                            <div style={{ fontWeight: 700, fontSize: 13, color: '#111827', lineHeight: 1.3, marginBottom: 2 }}>
+                              {name}
+                            </div>
+                            <div style={{ fontSize: 11, color: '#6b7280' }}>{clientName}</div>
+                          </td>
+
+                          {months.map(m => {
+                            const r = rowByMonth.get(m)
+                            const planned = r?.planned_amount ?? null
+                            const isIssued = r?.status === 'issued' || r?.status === 'paid'
+                            const rawActual = isIssued ? (r?.actual_amount ?? null) : null
+                            // Show retainer portion only: subtract linked hosting amount
+                            const actual = rawActual != null ? Math.max(0, rawActual - hostingAmt) : null
+                            // Show 0 only when explicitly marked not invoiced (deferred/retainer)
+                            const isExplicitlyNotIssued = r != null && (r.status === 'deferred' || r.status === 'retainer')
+                            const isUnissued = planned != null && !isIssued && isExplicitlyNotIssued
+                            const hasActual = actual != null
+                            const showPlan = planned != null
+                            const planCellBg = showPlan && !isIssued ? '#fffbeb' : rowBg
+                            const actualCellBg = hasActual
+                              ? actual! >= (planned ?? 0) ? '#f0fdf4' : '#fef2f2'
+                              : isUnissued ? '#fef2f2' : rowBg
+
+                            return (
+                              <React.Fragment key={m}>
+                                {/* Plan cell */}
+                                <td style={{
+                                  padding: '6px 6px', borderLeft: '2px solid #e5e7eb',
+                                  background: planCellBg, verticalAlign: 'middle', textAlign: 'right',
+                                }}>
+                                  {showPlan ? (
+                                    <span style={{
+                                      fontWeight: 600, fontSize: 11, color: '#92400e',
+                                      fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
+                                    }}>
+                                      {fmtAmt(planned!)}
+                                    </span>
+                                  ) : (
+                                    <span style={{ color: '#d1d5db', fontSize: 11 }}>—</span>
+                                  )}
+                                </td>
+                                {/* Actual cell */}
+                                <td style={{
+                                  padding: '6px 6px', borderLeft: '1px solid #e5e7eb',
+                                  background: hasActual ? actualCellBg : isUnissued ? '#fef2f2' : rowBg,
+                                  verticalAlign: 'middle', textAlign: 'right',
+                                }}>
+                                  {hasActual ? (
+                                    <span style={{
+                                      fontWeight: 700, fontSize: 11,
+                                      color: actual! >= (planned ?? 0) ? 'var(--green)' : '#dc2626',
+                                      fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
+                                    }}>
+                                      {fmtAmt(actual!)}
+                                    </span>
+                                  ) : isUnissued ? (
+                                    <span style={{ fontWeight: 700, fontSize: 11, color: '#dc2626', fontVariantNumeric: 'tabular-nums' }}>{fmtAmt(0)}</span>
+                                  ) : (
+                                    <span style={{ color: '#d1d5db', fontSize: 11 }}>—</span>
+                                  )}
+                                </td>
+                              </React.Fragment>
+                            )
+                          })}
+
+                          <td style={{
+                            padding: '8px 10px', textAlign: 'right', borderLeft: '2px solid #d1d5db',
+                            fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 12,
+                            color: rowTotal > 0 ? 'var(--navy)' : '#d1d5db',
+                            whiteSpace: 'nowrap', background: rowBg,
+                          }}>
+                            {rowTotal > 0 ? fmtAmt(rowTotal) : '—'}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+
+                  <tfoot>
+                    {/* Total Plan row */}
+                    <tr style={{ borderTop: '2px solid #d1d5db', background: '#f0f4ff' }}>
+                      <td style={{
+                        padding: '10px 16px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
+                        letterSpacing: '0.7px', color: 'var(--navy)', position: 'sticky', left: 0,
+                        background: '#f0f4ff', borderRight: '2px solid #e5e7eb', zIndex: 1,
+                      }}>
+                        Total Plan
+                      </td>
+                      {months.map(m => {
+                        const planned = [...retainerByMaint.values()].reduce((s, { rows }) => {
+                          const r = rows.find(r => r.month === m)
+                          return s + (r?.planned_amount ?? 0)
+                        }, 0)
+                        return (
+                          <React.Fragment key={m}>
+                            <td style={{
+                              padding: '10px 6px', textAlign: 'right', borderLeft: '2px solid #e5e7eb',
+                              fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+                              color: planned > 0 ? 'var(--navy)' : '#d1d5db', whiteSpace: 'nowrap',
+                            }}>
+                              {planned > 0 ? fmtAmt(planned) : '—'}
+                            </td>
+                            <td style={{ borderLeft: '1px solid #e5e7eb' }} />
+                          </React.Fragment>
+                        )
+                      })}
+                      <td style={{
+                        padding: '10px 10px', textAlign: 'right', borderLeft: '2px solid #d1d5db',
+                        fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 14,
+                        color: 'var(--navy)', whiteSpace: 'nowrap',
+                      }}>
+                        {fmtAmt(months.reduce((s, m) =>
+                          s + [...retainerByMaint.values()].reduce((rs, { rows }) => {
+                            const r = rows.find(r => r.month === m)
+                            return rs + (r?.planned_amount ?? 0)
+                          }, 0), 0))}
+                      </td>
+                    </tr>
+                    {/* Total Actual row */}
+                    <tr style={{ background: '#f0f4ff' }}>
+                      <td style={{
+                        padding: '10px 16px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
+                        letterSpacing: '0.7px', color: 'var(--navy)', position: 'sticky', left: 0,
+                        background: '#f0f4ff', borderRight: '2px solid #e5e7eb', zIndex: 1,
+                      }}>
+                        Total Actual
+                      </td>
+                      {months.map(m => {
+                        const planned = [...retainerByMaint.values()].reduce((s, { rows }) => {
+                          const r = rows.find(r => r.month === m)
+                          return s + (r?.planned_amount ?? 0)
+                        }, 0)
+                        const actual = [...retainerByMaint.entries()].reduce((s, [mid, { rows }]) => {
+                          const r = rows.find(r => r.month === m)
+                          const isIssued = r?.status === 'issued' || r?.status === 'paid'
+                          const rawA = isIssued ? (r?.actual_amount ?? 0) : 0
+                          const hAmt = infraStore.hostingClients.find(
+                            h => h.maintenance_id === mid && h.cycle === 'monthly'
+                          )?.amount ?? 0
+                          return s + Math.max(0, rawA - hAmt)
+                        }, 0)
+                        const hasActual = actual > 0
+                        return (
+                          <React.Fragment key={m}>
+                            <td style={{ borderLeft: '2px solid #e5e7eb' }} />
+                            <td style={{
+                              padding: '10px 6px', textAlign: 'right', borderLeft: '1px solid #e5e7eb',
+                              fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+                              color: hasActual ? (actual >= planned ? 'var(--green)' : '#dc2626') : '#d1d5db',
+                              whiteSpace: 'nowrap',
+                            }}>
+                              {hasActual ? fmtAmt(actual) : '—'}
+                            </td>
+                          </React.Fragment>
+                        )
+                      })}
+                      <td style={{
+                        padding: '10px 10px', textAlign: 'right', borderLeft: '2px solid #d1d5db',
+                        fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 14,
+                        color: 'var(--green)', whiteSpace: 'nowrap',
+                      }}>
+                        {fmtAmt(months.reduce((s, m) =>
+                          s + [...retainerByMaint.entries()].reduce((rs, [mid, { rows }]) => {
+                            const r = rows.find(r => r.month === m)
+                            const isIssued = r?.status === 'issued' || r?.status === 'paid'
+                            const hAmt = infraStore.hostingClients.find(h => h.maintenance_id === mid && h.cycle === 'monthly')?.amount ?? 0
+                            if (isIssued && r?.actual_amount != null) return rs + Math.max(0, r.actual_amount - hAmt)
+                            return rs
+                          }, 0), 0))}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Change Requests */}
+        {crByMaint.size > 0 && (
+          <div style={{ marginTop: 24 }}>
+            <div className="section-bar">
+              <h2>Change Requests</h2>
+            </div>
+
+            <div className="card" style={{ overflow: 'hidden' }}>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: 800 }}>
+                  <colgroup>
+                    <col style={{ width: 220 }} />
+                    {months.map(m => (
+                      <React.Fragment key={m}>
+                        <col />
+                        <col />
+                      </React.Fragment>
+                    ))}
+                    <col style={{ width: 100 }} />
+                  </colgroup>
+
+                  <thead>
+                    <tr style={{ background: '#f9fafb' }}>
+                      <th rowSpan={2} style={{
+                        padding: '10px 16px', textAlign: 'left', fontSize: 10, fontWeight: 700,
+                        textTransform: 'uppercase', letterSpacing: '0.7px', color: '#6b7280',
+                        background: '#f9fafb', position: 'sticky', left: 0, zIndex: 2,
+                        borderRight: '2px solid #e5e7eb', borderBottom: '2px solid #e5e7eb', verticalAlign: 'bottom',
+                      }}>
+                        Change Request
+                      </th>
+                      {months.map(m => (
+                        <th key={m} colSpan={2} style={{
+                          padding: '6px 8px', textAlign: 'center', fontSize: 10, fontWeight: 700,
+                          textTransform: 'uppercase', letterSpacing: '0.7px', color: '#6b7280',
+                          background: '#f9fafb', borderLeft: '2px solid #e5e7eb', whiteSpace: 'nowrap',
+                          borderBottom: '1px solid #e5e7eb',
+                        }}>
+                          {fmtMonthShort(m)}
+                        </th>
+                      ))}
+                      <th rowSpan={2} style={{
+                        padding: '10px 10px', textAlign: 'right', fontSize: 10, fontWeight: 700,
+                        textTransform: 'uppercase', letterSpacing: '0.7px', color: '#6b7280',
+                        background: '#f9fafb', borderLeft: '2px solid #d1d5db', borderBottom: '2px solid #e5e7eb',
+                        whiteSpace: 'nowrap', verticalAlign: 'bottom',
+                      }}>
+                        Total
+                      </th>
+                    </tr>
+                    <tr style={{ borderBottom: '2px solid #e5e7eb', background: '#f9fafb' }}>
+                      {months.map(m => (
+                        <React.Fragment key={m}>
+                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: 9, fontWeight: 600, color: '#9ca3af', background: '#f9fafb', borderLeft: '2px solid #e5e7eb', whiteSpace: 'nowrap', letterSpacing: '0.3px' }}>Plan</th>
+                          <th style={{ padding: '4px 6px', textAlign: 'right', fontSize: 9, fontWeight: 600, color: '#9ca3af', background: '#f9fafb', borderLeft: '1px solid #e5e7eb', whiteSpace: 'nowrap', letterSpacing: '0.3px' }}>Actual</th>
+                        </React.Fragment>
+                      ))}
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {[...crByMaint.entries()].map(([, { maintName, clientName, crs }]) =>
+                      crs.map((cr, crIdx) => {
+                        const rowBg = crIdx % 2 === 0 ? '#fff' : '#fafafa'
+                        const rowTotal = months.reduce((s, m) => {
+                          const r = cr.rowByMonth.get(m)
+                          const isIssued = r?.status === 'issued' || r?.status === 'paid'
+                          if (isIssued && r?.actual_amount != null) return s + r.actual_amount
+                          return s + (r?.planned_amount ?? 0)
+                        }, 0)
+
+                        return (
+                          <tr key={`${maintName}-${cr.title}`} style={{ background: rowBg, borderBottom: '1px solid #f3f4f6' }}>
+                            <td style={{
+                              padding: '10px 16px', position: 'sticky', left: 0, zIndex: 1,
+                              background: rowBg, borderRight: '2px solid #e5e7eb', verticalAlign: 'middle',
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
+                                <span className="badge badge-navy" style={{ fontSize: 9 }}>CR</span>
+                              </div>
+                              <div style={{ fontWeight: 700, fontSize: 13, color: '#111827', lineHeight: 1.3, marginBottom: 2 }}>{cr.title}</div>
+                              <div style={{ fontSize: 11, color: '#6b7280' }}>{maintName} · {clientName}</div>
+                            </td>
+
+                            {months.map(m => {
+                              const r = cr.rowByMonth.get(m)
+                              const planned = r?.planned_amount ?? null
+                              const isIssued = r?.status === 'issued' || r?.status === 'paid'
+                              const actual = isIssued ? (r?.actual_amount ?? null) : null
+                              const planCellBg = planned != null && !isIssued ? '#fffbeb' : rowBg
+
+                              return (
+                                <React.Fragment key={m}>
+                                  <td style={{ padding: '6px 6px', borderLeft: '2px solid #e5e7eb', background: planCellBg, verticalAlign: 'middle', textAlign: 'right' }}>
+                                    {planned != null ? (
+                                      <span style={{ fontWeight: 600, fontSize: 11, color: '#92400e', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                                        {fmtAmt(planned)}
+                                      </span>
+                                    ) : <span style={{ color: '#d1d5db', fontSize: 11 }}>—</span>}
+                                  </td>
+                                  <td style={{ padding: '6px 6px', borderLeft: '1px solid #e5e7eb', background: actual != null ? '#eff6ff' : rowBg, verticalAlign: 'middle', textAlign: 'right' }}>
+                                    {actual != null ? (
+                                      <span style={{ fontWeight: 700, fontSize: 11, color: '#1d4ed8', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                                        {fmtAmt(actual)}
+                                      </span>
+                                    ) : <span style={{ color: '#d1d5db', fontSize: 11 }}>—</span>}
+                                  </td>
+                                </React.Fragment>
+                              )
+                            })}
+
+                            <td style={{
+                              padding: '8px 10px', textAlign: 'right', borderLeft: '2px solid #d1d5db',
+                              fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 12,
+                              color: rowTotal > 0 ? 'var(--navy)' : '#d1d5db', whiteSpace: 'nowrap', background: rowBg,
+                            }}>
+                              {rowTotal > 0 ? fmtAmt(rowTotal) : '—'}
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+
+                  <tfoot>
+                    <tr style={{ borderTop: '2px solid #d1d5db', background: '#f0f4ff' }}>
+                      <td style={{
+                        padding: '10px 16px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
+                        letterSpacing: '0.7px', color: 'var(--navy)', position: 'sticky', left: 0,
+                        background: '#f0f4ff', borderRight: '2px solid #e5e7eb', zIndex: 1,
+                      }}>
+                        CR Total
+                      </td>
+                      {months.map(m => {
+                        const planned = crRows.filter(r => r.month === m).reduce((s, r) => s + (r.planned_amount ?? 0), 0)
+                        const actual = crRows.filter(r => r.month === m && (r.status === 'issued' || r.status === 'paid')).reduce((s, r) => s + (r.actual_amount ?? 0), 0)
+                        return (
+                          <React.Fragment key={m}>
+                            <td style={{ padding: '10px 6px', textAlign: 'right', borderLeft: '2px solid #e5e7eb', fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: planned > 0 ? 'var(--navy)' : '#d1d5db', whiteSpace: 'nowrap' }}>
+                              {planned > 0 ? fmtAmt(planned) : '—'}
+                            </td>
+                            <td style={{ padding: '10px 6px', textAlign: 'right', borderLeft: '1px solid #e5e7eb', fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: actual > 0 ? '#1d4ed8' : '#d1d5db', whiteSpace: 'nowrap', background: actual > 0 ? '#eff6ff' : undefined }}>
+                              {actual > 0 ? fmtAmt(actual) : '—'}
+                            </td>
+                          </React.Fragment>
+                        )
+                      })}
+                      <td style={{ padding: '10px 10px', textAlign: 'right', borderLeft: '2px solid #d1d5db', fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: 14, color: 'var(--navy)', whiteSpace: 'nowrap' }}>
+                        {fmtAmt(crRows.reduce((s, r) => {
+                          if (r.status === 'issued' || r.status === 'paid') return s + (r.actual_amount ?? 0)
+                          return s + (r.planned_amount ?? 0)
+                        }, 0))}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -1056,81 +1536,6 @@ export function RevenuePlannerView() {
             </div>
           </div>
         )}
-      {/* ── Maintenance retainers ── */}
-      {retainerByMaint.size > 0 && (
-        <div style={{ marginTop: 32 }}>
-          <div className="section-bar"><h2>Maintenance Retainers</h2></div>
-          <div className="card" style={{ overflowX: 'auto' }}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Contract</th>
-                  <th style={{ fontSize: 11, color: 'var(--c4)' }}>Client</th>
-                  {months.map(m => (
-                    <th key={m} className="th-right" style={{ minWidth: 90 }}>
-                      {new Date(m + 'T00:00:00').toLocaleString('default', { month: 'short', year: '2-digit' })}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {[...retainerByMaint.values()].map(({ name, clientName, rows }) => {
-                  const rowByMonth = new Map(rows.map(r => [r.month, r]))
-                  const hasExtra = rows.some(r => (r.actual_amount ?? 0) > (r.planned_amount ?? 0))
-                  return (
-                    <React.Fragment key={name}>
-                      <tr>
-                        <td style={{ fontWeight: 700, fontSize: 14 }}>{name}</td>
-                        <td style={{ fontSize: 12, color: 'var(--c3)' }}>{clientName}</td>
-                        {months.map(m => {
-                          const r = rowByMonth.get(m)
-                          return (
-                            <td key={m} className="td-right text-mono" style={{ fontSize: 13 }}>
-                              {r ? <span style={{ color: 'var(--amber)', fontWeight: 600 }}>{r.planned_amount} €</span> : <span style={{ color: 'var(--c5)' }}>—</span>}
-                            </td>
-                          )
-                        })}
-                      </tr>
-                      {hasExtra && (
-                        <tr style={{ background: '#f0fdf4' }}>
-                          <td style={{ paddingLeft: 20, fontSize: 11, fontStyle: 'italic', color: 'var(--green)', fontWeight: 600 }}>↳ Extra</td>
-                          <td />
-                          {months.map(m => {
-                            const r = rowByMonth.get(m)
-                            const extra = r ? (r.actual_amount ?? 0) - (r.planned_amount ?? 0) : 0
-                            return (
-                              <td key={m} className="td-right text-mono" style={{ fontSize: 12 }}>
-                                {extra > 0 ? <span style={{ color: 'var(--green)', fontWeight: 700 }}>+{extra} €</span> : <span style={{ color: 'var(--c5)' }}>—</span>}
-                              </td>
-                            )
-                          })}
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  )
-                })}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td colSpan={2} style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total retainers</td>
-                  {months.map(m => {
-                    const total = [...retainerByMaint.values()].reduce((s, { rows }) => {
-                      const r = rows.find(r => r.month === m)
-                      return s + (r?.planned_amount ?? 0)
-                    }, 0)
-                    return (
-                      <td key={m} className="td-right text-mono" style={{ fontWeight: 800, fontSize: 14, color: 'var(--navy)' }}>
-                        {total > 0 ? `${total} €` : '—'}
-                      </td>
-                    )
-                  })}
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </div>
-      )}
-
       </div>
     </div>
   )

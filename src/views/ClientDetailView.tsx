@@ -17,6 +17,23 @@ import { Select } from '../components/Select'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
+function monthCount(start: string, end: string): number {
+  const s = new Date(start + 'T00:00:00')
+  const e = new Date(end + 'T00:00:00')
+  return Math.max(1, (e.getFullYear() - s.getFullYear()) * 12 + e.getMonth() - s.getMonth() + 1)
+}
+
+function dealTotal(item: PipelineItem): number {
+  if (item.deal_type === 'fixed' && item.monthly_schedule?.length) {
+    return item.monthly_schedule.reduce((s, r) => s + r.amount, 0)
+  }
+  const amt = item.estimated_amount ?? 0
+  if (item.deal_type === 'monthly' && item.expected_month && item.expected_end_month) {
+    return amt * monthCount(item.expected_month, item.expected_end_month)
+  }
+  return amt
+}
+
 function safeUrl(url: string | null | undefined): string | undefined {
   if (!url) return undefined
   return /^https?:\/\//i.test(url) ? url : undefined
@@ -378,16 +395,30 @@ export function ClientDetailView() {
 
   // ── stats ────────────────────────────────────────────────────────────────
   const activeProjects = projects.filter(p => p.status === 'active')
-  const hostingAnnual = hostingRows.reduce((s, h) => s + hostingContractValue(h), 0)
+  // Standalone hosting only — maintenance-linked hosting is counted inside maintAnnual
+  const hostingAnnual = hostingRows.filter(h => !h.maintenance_id).reduce((s, h) => s + hostingContractValue(h), 0)
   const domainsAnnual = clientDomains.filter(d => !d.archived).reduce((s, d) => s + (d.yearly_amount ?? 0), 0)
-  const maintAnnual = maintenances.filter(m => m.status === 'active').reduce((s, m) => s + m.monthly_retainer * maintMonthsThisYear(m), 0)
+  // Maintenance annual = retainer × months + linked hosting annual value
+  const maintAnnual = maintenances.filter(m => m.status === 'active').reduce((s, m) => {
+    const linkedHosting = infraStore.hostingClients.find(h => h.maintenance_id === m.id)
+    const hostingExtra = linkedHosting ? hostingContractValue(linkedHosting) : 0
+    return s + m.monthly_retainer * maintMonthsThisYear(m) + hostingExtra
+  }, 0)
   const projectRegularRpSum = allClientRpRows
     .filter(r => r.project_id != null && projectIds.has(r.project_id) && r.status !== 'cost' && !r.notes?.startsWith('CR:'))
     .reduce((s, r) => s + (r.planned_amount ?? 0), 0)
   const projectApprovedCRSum = crStore.approvedCRs
     .filter(cr => projectIds.has(cr.project_id))
     .reduce((s, cr) => s + (cr.amount ?? 0), 0)
-  const totalValue = projectRegularRpSum + projectApprovedCRSum + hostingAnnual + domainsAnnual + maintAnnual
+  // Extra invoiced above retainer + linked hosting (overages on confirmed maintenance invoices)
+  const maintOverages = allClientRpRows
+    .filter(r => r.maintenance_id != null && (r.status === 'issued' || r.status === 'paid'))
+    .reduce((s, r) => {
+      const linkedHosting = infraStore.hostingClients.find(h => h.maintenance_id === r.maintenance_id)
+      const hostingAmt = linkedHosting?.amount ?? 0
+      return s + Math.max(0, (r.actual_amount ?? 0) - (r.planned_amount ?? 0) - hostingAmt)
+    }, 0)
+  const totalValue = projectRegularRpSum + projectApprovedCRSum + hostingAnnual + domainsAnnual + maintAnnual + maintOverages
 
   const invoicedYTD = allClientRpRows
     .filter(r => yearMonths.some(m => m === r.month) && (r.status === 'issued' || r.status === 'paid'))
@@ -411,7 +442,7 @@ export function ClientDetailView() {
 
   // ── pipeline stats ───────────────────────────────────────────────────────
   const activePipelineItems = pipelineItems.filter(i => i.status !== 'won' && i.status !== 'lost')
-  const pipelineWeighted = activePipelineItems.reduce((s, i) => s + ((i.estimated_amount ?? 0) * i.probability / 100), 0)
+  const pipelineWeighted = activePipelineItems.reduce((s, i) => s + dealTotal(i) * i.probability / 100, 0)
 
   // ── expiry alerts ────────────────────────────────────────────────────────
   const expiringDomains = clientDomains.filter(d => daysUntil(d.expiry_date) <= 30 && daysUntil(d.expiry_date) >= 0)
@@ -423,14 +454,36 @@ export function ClientDetailView() {
   // ── pipeline forecast grouping ────────────────────────────────────────────
   const pipelineForecast = useMemo(() => {
     const groups = new Map<string, { items: PipelineItem[]; total: number; weighted: number }>()
-    for (const item of activePipelineItems) {
-      const key = item.expected_month ?? 'unscheduled'
+
+    const addToMonth = (key: string, item: PipelineItem, amt: number) => {
       if (!groups.has(key)) groups.set(key, { items: [], total: 0, weighted: 0 })
       const g = groups.get(key)!
-      g.items.push(item)
-      g.total += item.estimated_amount ?? 0
-      g.weighted += (item.estimated_amount ?? 0) * item.probability / 100
+      if (!g.items.includes(item)) g.items.push(item)
+      g.total += amt
+      g.weighted += amt * item.probability / 100
     }
+
+    for (const item of activePipelineItems) {
+      if (item.deal_type === 'fixed' && item.monthly_schedule?.length) {
+        for (const row of item.monthly_schedule) {
+          const key = row.month.length === 7 ? row.month + '-01' : row.month
+          addToMonth(key, item, row.amount)
+        }
+      } else if (item.deal_type === 'monthly' && item.expected_month && item.expected_end_month) {
+        const amt = item.estimated_amount ?? 0
+        const cur = new Date(item.expected_month + 'T00:00:00')
+        const end = new Date(item.expected_end_month + 'T00:00:00')
+        while (cur <= end) {
+          const key = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-01`
+          addToMonth(key, item, amt)
+          cur.setMonth(cur.getMonth() + 1)
+        }
+      } else {
+        const key = item.expected_month ?? 'unscheduled'
+        addToMonth(key, item, item.estimated_amount ?? 0)
+      }
+    }
+
     return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))
   }, [activePipelineItems])
 
@@ -980,8 +1033,8 @@ export function ClientDetailView() {
         <div className="section-bar" style={{ marginBottom: 10 }}>
           <h2>Domains &amp; Hosting</h2>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowAddHosting(true)}>+ Add hosting</button>
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowAddDomain(true)}>+ Add domains</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => navigate('/infrastructure')}>Go to Hosting</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => navigate('/domains')}>Go to Domains</button>
           </div>
         </div>
         <div className="card">
@@ -1046,7 +1099,7 @@ export function ClientDetailView() {
                 {(hostingRows.length > 0 || clientDomains.length > 0) && (
                   <tr style={{ background: 'var(--c7)', borderTop: '2px solid var(--c6)' }}>
                     <td colSpan={5} style={{ fontWeight: 700, fontSize: 12, color: 'var(--c3)', letterSpacing: '0.05em' }}>TOTAL VALUE / YEAR</td>
-                    <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)', fontSize: 14 }}>{fmtEuro(hostingAnnual + domainsAnnual)}</td>
+                    <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)', fontSize: 14 }}>{fmtEuro(hostingRows.reduce((s, h) => s + hostingContractValue(h), 0) + domainsAnnual)}</td>
                     <td colSpan={3} />
                   </tr>
                 )}
@@ -1059,17 +1112,49 @@ export function ClientDetailView() {
   }
 
   function renderMaintenances() {
-    const activeRetainer = maintenances.filter(m => m.status === 'active').reduce((s, m) => s + m.monthly_retainer, 0)
+    const retainerValue = maintenances.filter(m => m.status === 'active').reduce((s, m) => s + m.monthly_retainer * maintMonthsThisYear(m), 0)
+    const hostingValue = maintenances.filter(m => m.status === 'active').reduce((s, m) => {
+      const linked = infraStore.hostingClients.find(h => h.maintenance_id === m.id)
+      return s + (linked ? hostingContractValue(linked) : 0)
+    }, 0)
+    const extraBilled = allClientRpRows
+      .filter(r => r.maintenance_id != null && (r.status === 'issued' || r.status === 'paid'))
+      .reduce((s, r) => {
+        const linked = infraStore.hostingClients.find(h => h.maintenance_id === r.maintenance_id)
+        return s + Math.max(0, (r.actual_amount ?? 0) - (r.planned_amount ?? 0) - (linked?.amount ?? 0))
+      }, 0)
+    const totalMaintValue = retainerValue + hostingValue + extraBilled
+    const hasLinkedHosting = maintenances.some(m => infraStore.hostingClients.some(h => h.maintenance_id === m.id))
     return (
       <div>
         <div className="section-bar" style={{ marginBottom: 10 }}>
           <h2>Maintenance Contracts</h2>
         </div>
-        {activeRetainer > 0 && (
-          <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
-            <div style={{ background: 'var(--navy-light)', border: '1px solid var(--navy)', borderRadius: 8, padding: '10px 18px', fontSize: 13 }}>
-              <span style={{ color: 'var(--c3)', marginRight: 8 }}>Active monthly retainer:</span>
-              <strong style={{ color: 'var(--navy)' }}>{fmtEuro(activeRetainer)}/mo</strong>
+        {maintenances.length > 0 && (
+          <div className="stats-strip" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 16 }}>
+            <div className="stat-card" style={{ '--left-color': 'var(--navy)' } as React.CSSProperties}>
+              <div className="stat-card-label">TOTAL VALUE {CURRENT_YEAR}</div>
+              <div className="stat-card-value text-mono" style={{ color: 'var(--navy)' }}>{totalMaintValue > 0 ? fmtEuro(totalMaintValue) : '—'}</div>
+              <div className="stat-card-sub">retainer + hosting + extra</div>
+            </div>
+            <div className="stat-card" style={{ '--left-color': 'var(--c4)' } as React.CSSProperties}>
+              <div className="stat-card-label">RETAINER VALUE</div>
+              <div className="stat-card-value text-mono">{retainerValue > 0 ? fmtEuro(retainerValue) : '—'}</div>
+              <div className="stat-card-sub">base retainer × months</div>
+            </div>
+            <div className="stat-card" style={{ '--left-color': hasLinkedHosting ? 'var(--blue)' : 'var(--c5)' } as React.CSSProperties}>
+              <div className="stat-card-label">HOSTING</div>
+              <div className="stat-card-value text-mono" style={{ color: hasLinkedHosting ? 'var(--blue)' : 'var(--c4)', fontSize: 18 }}>
+                {hasLinkedHosting ? fmtEuro(hostingValue) : 'No'}
+              </div>
+              <div className="stat-card-sub">{hasLinkedHosting ? 'linked hosting / year' : 'no linked hosting'}</div>
+            </div>
+            <div className="stat-card" style={{ '--left-color': extraBilled > 0 ? 'var(--green)' : 'var(--c5)' } as React.CSSProperties}>
+              <div className="stat-card-label">EXTRA BILLED</div>
+              <div className="stat-card-value text-mono" style={{ color: extraBilled > 0 ? 'var(--green)' : 'var(--c4)', fontSize: extraBilled === 0 ? 18 : undefined }}>
+                {extraBilled > 0 ? fmtEuro(extraBilled) : '—'}
+              </div>
+              <div className="stat-card-sub">above retainer + hosting</div>
             </div>
           </div>
         )}
@@ -1087,6 +1172,7 @@ export function ClientDetailView() {
                 <tr>
                   <th>NAME</th>
                   <th className="th-right" style={{ width: 120 }}>RETAINER/MO</th>
+                  <th className="th-right" style={{ width: 110 }}>HOSTING/MO</th>
                   <th className="th-right" style={{ width: 100 }}>HOURS/MO</th>
                   <th className="th-right" style={{ width: 110 }}>REQUESTS/MO</th>
                   <th style={{ width: 200 }}>CONTRACT</th>
@@ -1097,6 +1183,7 @@ export function ClientDetailView() {
               <tbody>
                 {maintenances.map((m: Maintenance) => {
                   const ending = m.contract_end && daysUntil(m.contract_end) <= 30 && daysUntil(m.contract_end) >= 0
+                  const linkedHosting = infraStore.hostingClients.find(h => h.maintenance_id === m.id)
                   return (
                     <tr key={m.id}>
                       <td>
@@ -1104,6 +1191,13 @@ export function ClientDetailView() {
                         {m.notes && <div style={{ fontSize: 12, color: 'var(--c3)', marginTop: 2 }}>{m.notes}</div>}
                       </td>
                       <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)' }}>{fmtEuro(m.monthly_retainer)}</td>
+                      <td className="td-right">
+                        {linkedHosting ? (
+                          <span className="text-mono" style={{ fontWeight: 600, color: 'var(--blue)' }}>{fmtEuro(linkedHosting.amount)}</span>
+                        ) : (
+                          <span className="badge badge-gray" style={{ fontSize: 10 }}>No</span>
+                        )}
+                      </td>
                       <td className="td-right text-mono">{m.hours_included}h</td>
                       <td className="td-right text-mono">{m.help_requests_included}</td>
                       <td>
@@ -1132,7 +1226,7 @@ export function ClientDetailView() {
                   <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)', fontSize: 14 }}>
                     {fmtEuro(maintenances.reduce((s, m) => s + m.monthly_retainer * maintMonthsThisYear(m), 0))}
                   </td>
-                  <td colSpan={5} />
+                  <td colSpan={6} />
                 </tr>
               </tfoot>
             </table>
@@ -1194,7 +1288,7 @@ export function ClientDetailView() {
   }
 
   function renderPipeline() {
-    const totalWeighted = activePipelineItems.reduce((s, i) => s + ((i.estimated_amount ?? 0) * i.probability / 100), 0)
+    const totalWeighted = activePipelineItems.reduce((s, i) => s + dealTotal(i) * i.probability / 100, 0)
     return (
       <div>
         <div className="section-bar" style={{ marginBottom: 10 }}>
@@ -1226,7 +1320,10 @@ export function ClientDetailView() {
                       <div style={{ fontWeight: 600 }}>{item.title}</div>
                       {item.description && <div style={{ fontSize: 12, color: 'var(--c3)', marginTop: 2 }}>{item.description}</div>}
                     </td>
-                    <td className="td-right text-mono" style={{ fontWeight: 600 }}>{fmtEuro(item.estimated_amount)}</td>
+                    <td className="td-right text-mono" style={{ fontWeight: 600 }}>
+                      {fmtEuro(dealTotal(item))}
+                      {item.deal_type === 'monthly' && <span style={{ fontSize: 11, color: 'var(--c3)', marginLeft: 3 }}>/mo</span>}
+                    </td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <div style={{ flex: 1, height: 4, background: 'var(--c6)', borderRadius: 2 }}>

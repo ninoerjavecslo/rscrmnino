@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { usePipelineStore } from '../stores/pipeline'
+import { useProjectsStore } from '../stores/projects'
+import { useClientsStore } from '../stores/clients'
+import { useSettingsStore } from '../stores/settings'
+import { supabase } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import type { PipelineItem } from '../lib/types'
 import { Select } from '../components/Select'
@@ -61,6 +66,60 @@ const STATUS_BADGE: Record<string, string> = {
   lost:     'badge-red',
 }
 
+function dealToProjectType(dealType: string): 'fixed' | 'maintenance' | 'variable' {
+  if (dealType === 'monthly') return 'maintenance'
+  return 'fixed'
+}
+
+interface VarRow { month: string; amount: string; probability: string }
+interface WonForm {
+  pn: string; name: string; client_id: string; type: string; pm: string; value: string
+  starting_from: string; num_months: string; start_month: string; end_month: string; probability: string
+}
+const WON_EMPTY: WonForm = { pn: '', name: '', client_id: '', type: 'fixed', pm: 'Nino', value: '', starting_from: '', num_months: '12', start_month: '', end_month: '', probability: '50' }
+
+function buildVarRows(startMonth: string, endMonth: string, amt: string, prob: string): VarRow[] {
+  const [sy, sm] = startMonth.split('-').map(Number)
+  const [ey, em] = endMonth.split('-').map(Number)
+  const rows: VarRow[] = []
+  let y = sy, m = sm
+  while ((y < ey || (y === ey && m <= em)) && rows.length < 60) {
+    rows.push({ month: `${y}-${String(m).padStart(2, '0')}`, amount: amt, probability: prob })
+    m++; if (m > 12) { m = 1; y++ }
+  }
+  return rows
+}
+
+function nextPn(projects: { pn: string }[]): string {
+  const year = new Date().getFullYear()
+  const prefix = `RS-${year}-`
+  const nums = projects.map(p => p.pn).filter(pn => pn.startsWith(prefix)).map(pn => parseInt(pn.slice(prefix.length), 10)).filter(n => !isNaN(n))
+  const max = nums.length > 0 ? Math.max(...nums) : 0
+  return `${prefix}${String(max + 1).padStart(3, '0')}`
+}
+
+function TypePills({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const types = [
+    { key: 'fixed',       label: 'Fixed',      sub: 'Known total' },
+    { key: 'maintenance', label: 'Recurring',   sub: 'Monthly recurring' },
+    { key: 'variable',    label: 'Variable',    sub: 'Estimate per month' },
+  ]
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div className="form-label" style={{ marginBottom: 8 }}>Project type</div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        {types.map(t => (
+          <div key={t.key} onClick={() => onChange(t.key)}
+            style={{ flex: 1, border: `2px solid ${value === t.key ? 'var(--navy)' : 'var(--c6)'}`, borderRadius: 'var(--r)', padding: '10px', cursor: 'pointer', background: value === t.key ? 'var(--navy-light)' : '#fff', textAlign: 'center', transition: 'all .12s' }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: value === t.key ? 'var(--navy)' : 'var(--c1)' }}>{t.label}</div>
+            <div style={{ fontSize: 11, color: 'var(--c4)', marginTop: 2 }}>{t.sub}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function Modal({ open, title, onClose, children, footer }: {
   open: boolean; title: string
   onClose: () => void; children: React.ReactNode; footer?: React.ReactNode
@@ -105,7 +164,11 @@ const EMPTY: FormState = {
 }
 
 export function SalesView() {
-  const store = usePipelineStore()
+  const store    = usePipelineStore()
+  const pStore   = useProjectsStore()
+  const cStore   = useClientsStore()
+  const settings = useSettingsStore()
+  const navigate = useNavigate()
 
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<PipelineItem | null>(null)
@@ -114,8 +177,23 @@ export function SalesView() {
   const [filter, setFilter] = useState('active')
   const [deleteTarget, setDeleteTarget] = useState<PipelineItem | null>(null)
 
+  // Won / Lost state
+  const [wonTarget, setWonTarget] = useState<PipelineItem | null>(null)
+  const [wonCreateProject, setWonCreateProject] = useState(true)
+  const [wonForm, setWonForm] = useState<WonForm>({ ...WON_EMPTY })
+  const [wonVarRows, setWonVarRows] = useState<VarRow[]>([])
+  const [wonShowNewClient, setWonShowNewClient] = useState(false)
+  const [wonNewClientName, setWonNewClientName] = useState('')
+  const [wonSaving, setWonSaving] = useState(false)
+  const [lostTarget, setLostTarget] = useState<PipelineItem | null>(null)
+
+  const pmOptions = settings.projectManagers.map(m => ({ value: m, label: m }))
+
   useEffect(() => {
     store.fetchAll()
+    pStore.fetchAll()
+    cStore.fetchAll()
+    settings.fetch()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function openAdd() {
@@ -212,6 +290,126 @@ export function SalesView() {
       toast('error', (err as Error).message)
     }
     setDeleteTarget(null)
+  }
+
+  function setWonF(k: keyof WonForm, v: string) {
+    setWonForm(f => {
+      const next = { ...f, [k]: v }
+      if (next.type === 'variable' && next.start_month && next.end_month &&
+          (k === 'start_month' || k === 'end_month' || k === 'type')) {
+        setWonVarRows(buildVarRows(next.start_month, next.end_month, next.value, next.probability))
+      }
+      return next
+    })
+  }
+
+  function openWon(item: PipelineItem) {
+    const type = dealToProjectType(item.deal_type ?? 'one_time')
+    const value = item.deal_type === 'monthly'
+      ? String(item.estimated_amount ?? '')
+      : String(dealTotal(item) || item.estimated_amount || '')
+    const startMonth = item.expected_month ? item.expected_month.slice(0, 7) : ''
+    const endMonth = item.expected_end_month ? item.expected_end_month.slice(0, 7) : ''
+    setWonTarget(item)
+    setWonCreateProject(true)
+    setWonShowNewClient(false)
+    setWonNewClientName('')
+    setWonVarRows([])
+    setWonForm({
+      pn: nextPn(pStore.projects),
+      name: item.title,
+      client_id: item.client_id ?? '',
+      type,
+      pm: 'Nino',
+      value,
+      starting_from: startMonth,
+      num_months: item.deal_type === 'monthly' && startMonth && endMonth
+        ? String(monthCount(startMonth + '-01', endMonth + '-01'))
+        : '12',
+      start_month: startMonth,
+      end_month: endMonth,
+      probability: String(item.probability ?? 50),
+    })
+  }
+
+  async function confirmWon() {
+    if (!wonTarget) return
+    setWonSaving(true)
+    try {
+      await store.update(wonTarget.id, { status: 'won' })
+
+      if (wonCreateProject && wonForm.name.trim()) {
+        let clientId = wonForm.client_id || null
+        if (wonShowNewClient && wonNewClientName.trim()) {
+          const { data: nc, error: ce } = await supabase.from('clients').insert({ name: wonNewClientName.trim() }).select('id').single()
+          if (ce) throw ce
+          clientId = nc.id
+          await cStore.fetchAll()
+        }
+
+        const pn = wonForm.pn.trim() || nextPn(pStore.projects)
+        const val = wonForm.type === 'variable'
+          ? (wonVarRows.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0) || null)
+          : wonForm.value ? parseFloat(wonForm.value) : null
+        const initialVal = wonForm.type === 'maintenance' && wonForm.value
+          ? parseFloat(wonForm.value) * Math.max(1, Math.min(60, parseInt(wonForm.num_months) || 12))
+          : val
+
+        const { data: proj, error: pe } = await supabase.from('projects').insert({
+          pn,
+          name: wonForm.name.trim(),
+          client_id: clientId,
+          type: wonForm.type,
+          status: 'active',
+          pm: wonForm.pm || null,
+          contract_value: val,
+          initial_contract_value: initialVal,
+          currency: 'EUR',
+          start_date: wonForm.start_month ? wonForm.start_month + '-01' : null,
+          end_date: wonForm.end_month ? wonForm.end_month + '-01' : null,
+        }).select('id').single()
+        if (pe) throw pe
+
+        // Auto-generate invoice plan rows
+        if (wonForm.type === 'maintenance' && wonForm.starting_from && wonForm.value) {
+          const numMonths = Math.max(1, Math.min(60, parseInt(wonForm.num_months) || 12))
+          const [y, m] = wonForm.starting_from.split('-').map(Number)
+          const rows = Array.from({ length: numMonths }, (_, i) => {
+            const d = new Date(y, m - 1 + i, 1)
+            return { project_id: proj.id, month: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`, planned_amount: parseFloat(wonForm.value), actual_amount: null, status: 'planned', probability: 100, notes: wonForm.name.trim() || null }
+          })
+          await supabase.from('revenue_planner').insert(rows)
+        } else if (wonForm.type === 'variable' && wonVarRows.length > 0) {
+          const rows = wonVarRows.filter(r => r.amount && parseFloat(r.amount) > 0).map(r => ({
+            project_id: proj.id, month: r.month + '-01', planned_amount: parseFloat(r.amount), actual_amount: null, status: 'planned', probability: Math.max(0, Math.min(100, parseInt(r.probability) || 50)), notes: null,
+          }))
+          if (rows.length > 0) await supabase.from('revenue_planner').insert(rows)
+        }
+
+        await pStore.fetchAll()
+        toast('success', 'Deal won! Project created.')
+        setWonTarget(null)
+        navigate(`/projects/${proj.id}`)
+      } else {
+        toast('success', 'Deal marked as won')
+        setWonTarget(null)
+      }
+    } catch (err) {
+      toast('error', (err as Error).message)
+    } finally {
+      setWonSaving(false)
+    }
+  }
+
+  async function confirmLost() {
+    if (!lostTarget) return
+    try {
+      await store.update(lostTarget.id, { status: 'lost' })
+      toast('success', 'Deal marked as lost')
+    } catch (err) {
+      toast('error', (err as Error).message)
+    }
+    setLostTarget(null)
   }
 
   const items = store.items
@@ -408,7 +606,21 @@ export function SalesView() {
                           : '—'}
                       </td>
                       <td>
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'nowrap' }}>
+                          {item.status !== 'won' && item.status !== 'lost' && (
+                            <>
+                              <button
+                                className="btn btn-xs"
+                                style={{ color: 'var(--green)', border: '1px solid var(--green)', borderRadius: 6, padding: '2px 8px', fontWeight: 700, fontSize: 11 }}
+                                onClick={() => openWon(item)}
+                              >Won ✓</button>
+                              <button
+                                className="btn btn-xs"
+                                style={{ color: 'var(--red)', border: '1px solid var(--red)', borderRadius: 6, padding: '2px 8px', fontWeight: 700, fontSize: 11 }}
+                                onClick={() => setLostTarget(item)}
+                              >Lost ✗</button>
+                            </>
+                          )}
                           <button className="btn btn-secondary btn-xs" onClick={() => openEdit(item)}>Edit</button>
                           <button
                             className="btn btn-xs"
@@ -474,30 +686,16 @@ export function SalesView() {
         open={showModal}
         title={editing ? 'Edit deal' : 'Add deal'}
         onClose={() => setShowModal(false)}
-        footer={
-          <>
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowModal(false)}>Cancel</button>
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={save}
-              disabled={saving || !form.company_name || !form.title}
-            >
-              {saving ? 'Saving…' : editing ? 'Save changes' : 'Add deal'}
-            </button>
-          </>
-        }
       >
-        <div className="form-group" style={{ marginBottom: 14 }}>
-          <label className="form-label">Company / Prospect *</label>
-          <input value={form.company_name} onChange={f('company_name')} placeholder="e.g. Acme Corp" autoFocus={!editing} />
-        </div>
-        <div className="form-group" style={{ marginBottom: 14 }}>
-          <label className="form-label">Title *</label>
-          <input value={form.title} onChange={f('title')} placeholder="e.g. Website redesign" />
-        </div>
-        <div className="form-group" style={{ marginBottom: 14 }}>
-          <label className="form-label">Description</label>
-          <input value={form.description} onChange={f('description')} placeholder="Short description" />
+        <div className="form-row" style={{ marginBottom: 14 }}>
+          <div className="form-group">
+            <label className="form-label">Company / Prospect <span style={{ color: 'var(--red)' }}>*</span></label>
+            <input value={form.company_name} onChange={f('company_name')} placeholder="e.g. Acme Corp" autoFocus={!editing} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Title <span style={{ color: 'var(--red)' }}>*</span></label>
+            <input value={form.title} onChange={f('title')} placeholder="e.g. Website redesign" />
+          </div>
         </div>
 
         <div className="form-row" style={{ marginBottom: 14 }}>
@@ -603,9 +801,15 @@ export function SalesView() {
           </div>
         )}
 
-        <div className="form-group" style={{ marginBottom: 0 }}>
-          <label className="form-label">Notes</label>
-          <textarea value={form.notes} onChange={f('notes')} rows={2} placeholder="Any context or details…" />
+        <div className="form-group" style={{ marginBottom: 14 }}>
+          <label className="form-label">Notes <span className="form-hint" style={{ display: 'inline' }}>optional</span></label>
+          <textarea value={form.notes} onChange={f('notes')} rows={2} style={{ resize: 'vertical' }} />
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowModal(false)}>Cancel</button>
+          <button className="btn btn-primary btn-sm" onClick={save} disabled={saving || !form.company_name || !form.title}>
+            {saving ? 'Saving…' : editing ? 'Save changes' : 'Add deal'}
+          </button>
         </div>
       </Modal>
 
@@ -628,6 +832,199 @@ export function SalesView() {
         }
       >
         <p>Remove <strong>{deleteTarget?.title}</strong>? This cannot be undone.</p>
+      </Modal>
+
+      {/* Won modal */}
+      {wonTarget && (
+        <Modal open title={`Mark "${wonTarget.title}" as won`} onClose={() => setWonTarget(null)}>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+              <input type="checkbox" checked={wonCreateProject} onChange={e => setWonCreateProject(e.target.checked)} style={{ width: 15, height: 15 }} />
+              Create a project from this deal
+            </label>
+          </div>
+
+          {wonCreateProject && (
+            <>
+              <TypePills value={wonForm.type} onChange={v => setWonF('type', v)} />
+
+              <div className="form-row" style={{ marginBottom: 14 }}>
+                <div className="form-group" style={{ maxWidth: 160 }}>
+                  <label className="form-label">Project #</label>
+                  <input value={wonForm.pn} onChange={e => setWonF('pn', e.target.value)} className="text-mono" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Project name</label>
+                  <input value={wonForm.name} onChange={e => setWonF('name', e.target.value)} autoFocus />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Client</label>
+                  <Select
+                    value={wonShowNewClient ? '__new__' : wonForm.client_id}
+                    onChange={v => { if (v === '__new__') { setWonShowNewClient(true); setWonF('client_id', '') } else { setWonShowNewClient(false); setWonNewClientName(''); setWonF('client_id', v) } }}
+                    placeholder="— Select client —"
+                    options={[...cStore.clients.map(c => ({ value: c.id, label: c.name })), { value: '__new__', label: '+ New client…' }]}
+                  />
+                  {wonShowNewClient && <input style={{ marginTop: 8 }} value={wonNewClientName} onChange={e => setWonNewClientName(e.target.value)} placeholder="New client name…" />}
+                </div>
+              </div>
+
+              <div className="form-row" style={{ marginBottom: 14 }}>
+                <div className="form-group">
+                  <label className="form-label">Project Manager</label>
+                  <Select value={wonForm.pm} onChange={v => setWonF('pm', v)} options={pmOptions} />
+                </div>
+                {wonForm.type !== 'variable' && (
+                  <div className="form-group">
+                    <label className="form-label">{wonForm.type === 'maintenance' ? 'Monthly amount (€)' : 'Project value (€)'}</label>
+                    <input type="number" value={wonForm.value} onChange={e => setWonF('value', e.target.value)} placeholder={wonForm.type === 'maintenance' ? '2000' : '45000'} />
+                  </div>
+                )}
+              </div>
+
+              {wonForm.type === 'maintenance' && (
+                <>
+                  <div className="form-row" style={{ marginBottom: 14 }}>
+                    <div className="form-group">
+                      <label className="form-label">Starting from</label>
+                      <input type="month" value={wonForm.starting_from} onChange={e => setWonF('starting_from', e.target.value)} />
+                    </div>
+                    <div className="form-group" style={{ maxWidth: 140 }}>
+                      <label className="form-label">Number of months</label>
+                      <input type="number" min="1" max="60" value={wonForm.num_months} onChange={e => setWonF('num_months', e.target.value)} placeholder="12" />
+                    </div>
+                  </div>
+                  {wonForm.value && wonForm.num_months && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, padding: '8px 12px', background: 'var(--c7)', borderRadius: 6 }}>
+                      <span style={{ fontSize: 12, color: 'var(--c3)' }}>Initial value:</span>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--navy)' }}>
+                        {(parseFloat(wonForm.value) * Math.max(1, Math.min(60, parseInt(wonForm.num_months) || 12))).toLocaleString()} €
+                      </span>
+                      <span style={{ fontSize: 11, color: 'var(--c4)' }}>({wonForm.value} €/mo × {wonForm.num_months} mo)</span>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {wonForm.type === 'variable' && (
+                <>
+                  <div className="form-row" style={{ marginBottom: 12 }}>
+                    <div className="form-group">
+                      <label className="form-label">Start month</label>
+                      <input type="month" value={wonForm.start_month} onChange={e => setWonF('start_month', e.target.value)} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">End month</label>
+                      <input type="month" value={wonForm.end_month} onChange={e => setWonF('end_month', e.target.value)} />
+                    </div>
+                    <div className="form-group" style={{ maxWidth: 140 }}>
+                      <label className="form-label">Default amount (€)</label>
+                      <input type="number" value={wonForm.value} onChange={e => { setWonF('value', e.target.value); setWonVarRows(rows => rows.map(r => ({ ...r, amount: e.target.value }))) }} placeholder="0" />
+                    </div>
+                    <div className="form-group" style={{ maxWidth: 200 }}>
+                      <label className="form-label">Set all rows to</label>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <select value={wonForm.probability} onChange={e => setWonF('probability', e.target.value)}
+                          style={{ flex: 1, height: 42, border: '1px solid var(--c6)', borderRadius: 10, padding: '0 10px', fontSize: 14, background: '#fff', fontFamily: 'inherit' }}>
+                          <option value="25">25%</option>
+                          <option value="50">50%</option>
+                          <option value="100">100%</option>
+                        </select>
+                        <button type="button" className="btn btn-secondary btn-sm"
+                          onClick={() => setWonVarRows(rows => rows.map(r => ({ ...r, probability: wonForm.probability })))}>
+                          Apply
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  {wonVarRows.length > 0 && wonForm.start_month && wonForm.end_month && (
+                    <div style={{ marginBottom: 4, fontSize: 12, color: 'var(--c3)', textAlign: 'right' }}>
+                      {(() => {
+                        const total = wonVarRows.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0)
+                        const weighted = wonVarRows.reduce((s, r) => s + (parseFloat(r.amount) || 0) * (parseInt(r.probability) || 0) / 100, 0)
+                        return total > 0 ? `Total ${total.toLocaleString()} € · Expected cash ${weighted.toLocaleString(undefined, { maximumFractionDigits: 0 })} €` : ''
+                      })()}
+                    </div>
+                  )}
+                  {wonVarRows.length > 0 && (
+                    <div style={{ marginBottom: 12, border: '1px solid var(--c6)', borderRadius: 'var(--r)', overflow: 'hidden' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ background: 'var(--c7)', borderBottom: '1px solid var(--c6)' }}>
+                            <th style={{ padding: '8px 14px', fontWeight: 600, fontSize: 11, textAlign: 'left', color: 'var(--c3)' }}>MONTH</th>
+                            <th style={{ padding: '8px 14px', fontWeight: 600, fontSize: 11, textAlign: 'right', color: 'var(--c3)' }}>AMOUNT (€)</th>
+                            <th style={{ padding: '8px 14px', fontWeight: 600, fontSize: 11, textAlign: 'right', color: 'var(--c3)' }}>LIKELIHOOD</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {wonVarRows.map((r, i) => (
+                            <tr key={r.month} style={{ borderBottom: i < wonVarRows.length - 1 ? '1px solid var(--c6)' : undefined }}>
+                              <td style={{ padding: '8px 14px', fontWeight: 600, fontSize: 13 }}>{new Date(r.month + '-01T00:00:00').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}</td>
+                              <td style={{ padding: '6px 8px' }}>
+                                <input type="number" value={r.amount} onChange={e => setWonVarRows(rows => rows.map((row, idx) => idx === i ? { ...row, amount: e.target.value } : row))} placeholder="0" style={{ width: '100%', textAlign: 'right', padding: '6px 10px', fontSize: 13, border: '1px solid var(--c6)', borderRadius: 4 }} />
+                              </td>
+                              <td style={{ padding: '6px 8px', minWidth: 110 }}>
+                                <select value={r.probability} onChange={e => setWonVarRows(rows => rows.map((row, idx) => idx === i ? { ...row, probability: e.target.value } : row))} style={{ width: '100%', height: 36, border: '1px solid var(--c6)', borderRadius: 6, padding: '0 8px', fontSize: 13, background: '#fff', fontFamily: 'inherit' }}>
+                                  <option value="25">25%</option><option value="50">50%</option><option value="100">100%</option>
+                                </select>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {(!wonForm.start_month || !wonForm.end_month) && (
+                    <div className="info-box">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                      Set start and end months to generate the per-month plan table.
+                    </div>
+                  )}
+                </>
+              )}
+
+              {wonForm.type === 'maintenance' && wonForm.num_months && wonForm.starting_from && (
+                <div className="info-box">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  {wonForm.num_months} monthly invoice plans will be created from {wonForm.starting_from}.
+                </div>
+              )}
+            </>
+          )}
+
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => setWonTarget(null)}>Cancel</button>
+            <button
+              className="btn btn-primary btn-sm"
+              style={{ background: 'var(--green)', borderColor: 'var(--green)' }}
+              onClick={confirmWon}
+              disabled={wonSaving || (wonCreateProject && !wonForm.name.trim())}
+            >
+              {wonSaving ? 'Saving…' : wonCreateProject ? 'Won + Create Project' : 'Mark as Won'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Lost confirm */}
+      <Modal
+        open={!!lostTarget}
+        title="Mark as lost"
+        onClose={() => setLostTarget(null)}
+        footer={
+          <>
+            <button className="btn btn-secondary btn-sm" onClick={() => setLostTarget(null)}>Cancel</button>
+            <button
+              className="btn btn-primary btn-sm"
+              style={{ background: 'var(--red)', borderColor: 'var(--red)' }}
+              onClick={confirmLost}
+            >
+              Mark as Lost
+            </button>
+          </>
+        }
+      >
+        <p>Mark <strong>{lostTarget?.title}</strong> as lost?</p>
       </Modal>
     </div>
   )

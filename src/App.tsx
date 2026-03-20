@@ -17,10 +17,13 @@ import { DomainsView } from './views/DomainsView'
 import { TimesheetView } from './views/TimesheetView'
 import { ThisMonthView } from './views/ThisMonthView'
 import { EmailToolView } from './views/EmailToolView'
-import { CeoSummaryView } from './views/CeoSummaryView'
 import { ForecastView } from './views/ForecastView'
 import { SalesView } from './views/SalesView'
 import { SettingsView } from './views/SettingsView'
+import { ResourcePlanningView } from './views/ResourcePlanningView'
+import { AutomationsView } from './views/AutomationsView'
+import { AutomationFormView } from './views/AutomationFormView'
+import { PixelView } from './views/PixelView'
 import { Toaster } from './components/Toaster'
 
 function App() {
@@ -29,8 +32,6 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* ── Standalone (no sidebar) ── */}
-        <Route path="/ceo" element={<CeoSummaryView />} />
 
         {/* ── Main app layout ── */}
         <Route path="*" element={
@@ -67,6 +68,9 @@ function App() {
                 <Route path="/"                element={<Navigate to="/dashboard" replace />} />
                 <Route path="/dashboard"       element={<DashboardView />} />
                 <Route path="/this-month"      element={<ThisMonthView />} />
+                <Route path="/automations"           element={<AutomationsView />} />
+                <Route path="/automations/new"       element={<AutomationFormView />} />
+                <Route path="/automations/:id/edit"  element={<AutomationFormView />} />
                 <Route path="/planning"        element={<RevenuePlannerView />} />
                 <Route path="/forecast"        element={<ForecastView />} />
                 <Route path="/clients"         element={<ClientsView />} />
@@ -79,10 +83,12 @@ function App() {
                 <Route path="/stats"           element={<StatisticsView />} />
                 <Route path="/infrastructure"  element={<InfrastructureView />} />
                 <Route path="/domains"         element={<DomainsView />} />
+                <Route path="/resources"       element={<ResourcePlanningView />} />
                 <Route path="/tools"           element={<ToolsView />} />
                 <Route path="/tools/timesheet" element={<TimesheetView />} />
                 <Route path="/email-tool"      element={<EmailToolView />} />
                 <Route path="/settings"        element={<SettingsView />} />
+                <Route path="/pixel"           element={<PixelView />} />
               </Routes>
             </main>
           </div>

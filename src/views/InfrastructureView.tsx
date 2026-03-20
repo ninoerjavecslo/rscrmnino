@@ -5,7 +5,7 @@ import { useProjectsStore } from '../stores/projects'
 import { supabase } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import type { HostingClient } from '../lib/types'
-import { hostingContractValue } from '../lib/types'
+import { hostingAnnualValue } from '../lib/types'
 import { Select } from '../components/Select'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -37,7 +37,7 @@ function Modal({ open, title, maxWidth = 540, onClose, children, footer }: {
 
 function useHostingForm() {
   const [form, setForm] = useState({
-    client_id: '', project_pn: '', description: '',
+    client_id: '', project_pn: '', description: '', provider: '',
     cycle: 'monthly' as 'monthly' | 'yearly',
     amount: '', billing_since: '', next_invoice_date: '',
     invoice_month: '', already_billed: false, contract_id: '', contract_expiry: '',
@@ -45,7 +45,7 @@ function useHostingForm() {
   function set(field: string, val: string | boolean) { setForm(f => ({ ...f, [field]: val })) }
   function reset() {
     setForm({
-      client_id: '', project_pn: '', description: '',
+      client_id: '', project_pn: '', description: '', provider: '',
       cycle: 'monthly', amount: '', billing_since: '', next_invoice_date: '',
       invoice_month: '', already_billed: false, contract_id: '', contract_expiry: '',
     })
@@ -83,11 +83,16 @@ export function InfrastructureView() {
   const [addingClient, setAddingClient] = useState(false)
 
   const [billingStatus, setBillingStatus] = useState<Map<string, BillingEntry>>(new Map())
+  const [showAddCost, setShowAddCost] = useState(false)
+  const [costForm, setCostForm] = useState({ provider: '', description: '', amount: '', cycle: 'monthly' as 'monthly' | 'yearly' })
   const [cancelTarget, setCancelTarget] = useState<HostingClient | null>(null)
   const [cancelFromMonth, setCancelFromMonth] = useState('')
   const [cancelling, setCancelling] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<HostingClient | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [cancelCostTarget, setCancelCostTarget] = useState<import('../lib/types').InfrastructureCost | null>(null)
+  const [cancelCostMonth, setCancelCostMonth] = useState('')
+  const [cancellingCost, setCancellingCost] = useState(false)
 
   useEffect(() => { store.fetchAll(); cStore.fetchAll(); pStore.fetchAll() }, [])
 
@@ -97,48 +102,24 @@ export function InfrastructureView() {
   }, [store.hostingClients, pStore.projects])
 
   async function fetchBillingStatus() {
-    const today = new Date()
-    const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
-    const projectMap = new Map(pStore.projects.map(p => [p.pn, p.id]))
+    // Billing status only matters for yearly clients — check their next_invoice_date month
+    const yearlyClients = store.hostingClients.filter(
+      h => h.status === 'active' && h.cycle === 'yearly' && h.next_invoice_date
+    )
+    if (yearlyClients.length === 0) { setBillingStatus(new Map()); return }
 
-    // Rows linked by hosting_client_id (new way)
-    const { data: byId } = await supabase
+    const months = [...new Set(yearlyClients.map(h => h.next_invoice_date!.slice(0, 7) + '-01'))]
+
+    const { data: rows } = await supabase
       .from('revenue_planner')
-      .select('id, hosting_client_id, status')
+      .select('id, hosting_client_id, status, month')
       .not('hosting_client_id', 'is', null)
-      .eq('month', currentMonth)
-
-    // Rows linked by project_id (old way fallback)
-    const hostingProjectIds = store.hostingClients
-      .filter(h => h.status === 'active')
-      .map(h => projectMap.get(h.project_pn))
-      .filter(Boolean) as string[]
-
-    const { data: byProject } = hostingProjectIds.length > 0
-      ? await supabase
-          .from('revenue_planner')
-          .select('id, project_id, status')
-          .in('project_id', hostingProjectIds)
-          .is('hosting_client_id', null)
-          .eq('month', currentMonth)
-      : { data: [] as { id: string; project_id: string | null; status: string }[] }
+      .in('month', months)
 
     const map = new Map<string, BillingEntry>()
-
-    for (const r of byId ?? []) {
-      if (!r.hosting_client_id) continue
-      map.set(r.hosting_client_id, {
-        status: r.status === 'paid' || r.status === 'issued' ? 'billed' : 'planned',
-        rowId: r.id,
-      })
-    }
-
-    // Fallback for old rows linked only via project
-    for (const h of store.hostingClients) {
-      if (map.has(h.id)) continue
-      const projectId = projectMap.get(h.project_pn)
-      if (!projectId) continue
-      const row = (byProject ?? []).find(r => r.project_id === projectId)
+    for (const h of yearlyClients) {
+      const invoiceMonth = h.next_invoice_date!.slice(0, 7) + '-01'
+      const row = (rows ?? []).find(r => r.hosting_client_id === h.id && r.month === invoiceMonth)
       if (row) {
         map.set(h.id, {
           status: row.status === 'paid' || row.status === 'issued' ? 'billed' : 'planned',
@@ -146,7 +127,6 @@ export function InfrastructureView() {
         })
       }
     }
-
     setBillingStatus(map)
   }
 
@@ -172,10 +152,30 @@ export function InfrastructureView() {
   }
 
   const totalRevenue = store.monthlyRevenueEquiv()
+  const totalRevenuePerYear = store.hostingClients.reduce((s, h) => s + hostingAnnualValue(h), 0)
   const yearlyDueSoon = store.yearlyDueSoon()
-  const cancelledMonthly = store.hostingClients
-    .filter(h => h.status === 'cancelled')
-    .reduce((s, h) => s + (h.cycle === 'monthly' ? h.amount : h.amount / 12), 0)
+
+  // A cost counts in totals if active, OR if cancelled but cancelled_from is in the future
+  const today = new Date()
+  const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
+  function costCountsNow(c: import('../lib/types').InfrastructureCost) {
+    return c.status === 'active' || (c.status === 'inactive' && !!c.cancelled_from && currentMonth < c.cancelled_from)
+  }
+  // Prorated annual cost for the current year
+  function costAnnualValue(c: import('../lib/types').InfrastructureCost): number {
+    const year = today.getFullYear()
+    const yearStart = `${year}-01-01`
+    const yearEnd   = `${year}-12-01`
+    if (c.status === 'active') return c.monthly_cost * 12
+    if (c.status === 'inactive' && c.cancelled_from) {
+      if (c.cancelled_from <= yearStart) return 0
+      const effEnd = c.cancelled_from < yearEnd ? c.cancelled_from : yearEnd
+      const [sy, sm] = yearStart.split('-').map(Number)
+      const [ey, em] = effEnd.split('-').map(Number)
+      return Math.max(0, (ey - sy) * 12 + (em - sm)) * c.monthly_cost
+    }
+    return 0
+  }
 
   async function handleAddHosting() {
     if (!hosting.form.client_id || !hosting.form.project_pn || !hosting.form.amount) return
@@ -187,6 +187,7 @@ export function InfrastructureView() {
           client_id:         hosting.form.client_id,
           project_pn:        hosting.form.project_pn,
           description:       hosting.form.description || null,
+          provider:          hosting.form.provider || null,
           cycle:             hosting.form.cycle,
           amount:            parseFloat(hosting.form.amount),
           billing_since:     hosting.form.billing_since || null,
@@ -293,6 +294,30 @@ export function InfrastructureView() {
     }
   }
 
+  async function handleAddCost() {
+    if (!costForm.provider || !costForm.amount) return
+    setSaving(true)
+    try {
+      const raw = parseFloat(costForm.amount)
+      const monthly_cost = costForm.cycle === 'yearly' ? raw / 12 : raw
+      await store.addInfraCost({
+        provider: costForm.provider.trim(),
+        description: costForm.description.trim() || null,
+        monthly_cost,
+        billing_cycle: costForm.cycle === 'yearly' ? 'annual' : 'monthly',
+        status: 'active',
+        notes: null,
+      })
+      toast('success', 'Cost added')
+      setCostForm({ provider: '', description: '', amount: '', cycle: 'monthly' })
+      setShowAddCost(false)
+    } catch (e) {
+      toast('error', (e as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function handleSaveEditHosting() {
     const h = editHosting.form
     if (!h) return
@@ -302,10 +327,12 @@ export function InfrastructureView() {
         client_id:         h.client_id,
         project_pn:        h.project_pn,
         description:       h.description,
+        provider:          h.provider || null,
         cycle:             h.cycle,
         amount:            h.amount,
         billing_since:     h.billing_since,
         next_invoice_date: h.cycle === 'yearly' ? h.next_invoice_date : null,
+        billing_month:     h.cycle === 'yearly' ? (h.billing_month ?? null) : null,
         status:            h.status,
         accounting_email:  h.accounting_email,
         contract_id:       h.contract_id || null,
@@ -338,21 +365,21 @@ export function InfrastructureView() {
 
       <div className="stats-strip" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
         <div className="stat-card" style={{ '--left-color': 'var(--green)' } as React.CSSProperties}>
-          <div className="stat-card-label">MONTHLY REVENUE</div>
-          <div className="stat-card-value" style={{ color: 'var(--green)' }}>{totalRevenue.toFixed(0)} €</div>
-          <div className="stat-card-sub">from active clients</div>
+          <div className="stat-card-label">TOTAL REVENUE / YEAR</div>
+          <div className="stat-card-value" style={{ color: 'var(--green)' }}>{totalRevenuePerYear.toLocaleString('en-EU', { maximumFractionDigits: 2 })} €</div>
+          <div className="stat-card-sub">all clients this year</div>
+        </div>
+        <div className="stat-card" style={{ '--left-color': 'var(--red)' } as React.CSSProperties}>
+          <div className="stat-card-label">TOTAL COST / YEAR</div>
+          <div className="stat-card-value" style={{ color: 'var(--red)' }}>
+            {store.infraCosts.reduce((s,c) => s + costAnnualValue(c), 0).toLocaleString('en-EU', { maximumFractionDigits: 2 })} €
+          </div>
+          <div className="stat-card-sub">active infra costs</div>
         </div>
         <div className="stat-card" style={{ '--left-color': 'var(--amber)' } as React.CSSProperties}>
           <div className="stat-card-label">YEARLY RENEWING SOON</div>
           <div className="stat-card-value" style={{ color: yearlyDueSoon.length > 0 ? 'var(--amber)' : undefined }}>{yearlyDueSoon.length}</div>
           <div className="stat-card-sub">within 60 days</div>
-        </div>
-        <div className="stat-card" style={{ '--left-color': cancelledMonthly > 0 ? 'var(--red)' : 'var(--c5)' } as React.CSSProperties}>
-          <div className="stat-card-label">LOST REVENUE</div>
-          <div className="stat-card-value" style={{ color: cancelledMonthly > 0 ? 'var(--red)' : 'var(--c4)' }}>
-            {cancelledMonthly > 0 ? `${cancelledMonthly.toFixed(0)} €` : '—'}
-          </div>
-          <div className="stat-card-sub">cancelled clients /mo</div>
         </div>
       </div>
 
@@ -389,26 +416,27 @@ export function InfrastructureView() {
                   <th>Project #</th>
                   <th>Contract ID</th>
                   <th>Description</th>
+                  <th>Provider</th>
                   <th>Type</th>
                   <th className="th-right">Amount</th>
                   <th>Occurrence</th>
                   <th className="th-right">Total / yr</th>
-                  <th>Billing status</th>
+                  <th>Contract Expiry</th>
                   <th>Status</th>
                   <th style={{width:110}}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {store.hostingClients.map((h: HostingClient) => {
-                  const annualTotal = hostingContractValue(h)
+                  const annualTotal = hostingAnnualValue(h)
                   const isStandalone = !h.maintenance_id
-                  const entry = h.status === 'active' ? billingStatus.get(h.id) : undefined
                   return (
                     <tr key={h.id}>
                       <td style={{fontWeight:700}}>{h.client?.name ?? h.client_id}</td>
                       <td><span className="badge badge-gray">{h.project_pn}</span></td>
                       <td className="text-sm" style={{color:'var(--c3)'}}>{h.contract_id ?? '—'}</td>
                       <td className="text-sm">{h.description ?? '—'}</td>
+                      <td className="text-sm" style={{color:'var(--c3)'}}>{h.provider ?? '—'}</td>
                       <td style={{fontSize:12, fontWeight:600, color: isStandalone ? 'var(--c1)' : 'var(--blue)'}}>
                         {isStandalone ? 'Standalone' : 'In contract'}
                       </td>
@@ -421,20 +449,12 @@ export function InfrastructureView() {
                         </span>
                       </td>
                       <td className="td-right text-mono" style={{color:'var(--c2)'}}>
-                        {annualTotal.toFixed(0)} €
+                        {annualTotal % 1 === 0 ? annualTotal.toFixed(0) : annualTotal.toFixed(2)} €
                       </td>
-                      <td>
-                        {!isStandalone ? (
-                          <span style={{fontSize:12,color:'var(--c3)'}}>Via contract</span>
-                        ) : h.status !== 'active' ? (
-                          <span style={{color:'var(--c4)',fontSize:12}}>—</span>
-                        ) : entry?.status === 'billed' ? (
-                          <span className="badge badge-green">Billed</span>
-                        ) : entry?.status === 'planned' ? (
-                          <span className="badge badge-amber">Planned</span>
-                        ) : (
-                          <span className="badge badge-gray">Not planned</span>
-                        )}
+                      <td className="text-sm" style={{color: h.contract_expiry ? 'var(--c2)' : 'var(--c4)'}}>
+                        {h.contract_expiry
+                          ? new Date(h.contract_expiry + 'T00:00:00').toLocaleDateString('sl-SI', {month:'short', year:'numeric'})
+                          : '—'}
                       </td>
                       <td>
                         {h.status === 'cancelled' && h.cancelled_from ? (
@@ -450,7 +470,9 @@ export function InfrastructureView() {
                       </td>
                       <td>
                         <div style={{display:'flex',gap:4,alignItems:'center'}}>
-                          <button className="btn btn-secondary btn-xs" onClick={() => editHosting.open(h)}>Edit</button>
+                          {h.status !== 'cancelled' && (
+                            <button className="btn btn-secondary btn-xs" onClick={() => editHosting.open(h)}>Edit</button>
+                          )}
                           {h.status === 'active' && (
                             <button className="btn btn-xs" style={{background:'var(--red)',color:'#fff',border:'none'}}
                               onClick={() => { setCancelTarget(h); setCancelFromMonth('') }}>
@@ -468,9 +490,9 @@ export function InfrastructureView() {
               </tbody>
               <tfoot>
                 <tr>
-                  <td colSpan={9}></td>
-                  <td style={{textAlign:'right',fontSize:10,fontWeight:700,color:'var(--c3)',textTransform:'uppercase',letterSpacing:'0.6px',whiteSpace:'nowrap'}}>Monthly revenue</td>
-                  <td className="td-right text-mono" style={{fontSize:15,fontWeight:800,color:'var(--green)',whiteSpace:'nowrap'}}>{totalRevenue.toFixed(0)} €<span className="text-xs">/mo</span></td>
+                  <td colSpan={10}></td>
+                  <td style={{textAlign:'right',fontSize:10,fontWeight:700,color:'var(--c3)',textTransform:'uppercase',letterSpacing:'0.6px',whiteSpace:'nowrap'}}>Total revenue / year</td>
+                  <td className="td-right text-mono" style={{fontSize:15,fontWeight:800,color:'var(--green)',whiteSpace:'nowrap'}}>{totalRevenuePerYear.toLocaleString('en-EU', {maximumFractionDigits:2})} €<span className="text-xs">/yr</span></td>
                 </tr>
               </tfoot>
             </table>
@@ -480,6 +502,104 @@ export function InfrastructureView() {
         <div className="info-box" style={{marginTop: 16}}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
           Active hosting clients auto-generate monthly invoice rows in the Revenue Planner under their linked Project #.
+        </div>
+
+        {/* ── Costs ───────────────────────────────────────── */}
+        <div className="section-bar" style={{marginTop: 32, marginBottom: 10}}>
+          <h2>Costs <span className="text-xs" style={{fontWeight:400,textTransform:'none',letterSpacing:0}}>· what you pay providers</span></h2>
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowAddCost(true)}>+ Add Cost</button>
+        </div>
+        <div className="card">
+          {store.infraCosts.length === 0 ? (
+            <div style={{padding:'28px 20px',textAlign:'center',color:'var(--c4)',fontSize:13}}>No infrastructure costs recorded yet.</div>
+          ) : (
+            <table style={{tableLayout:'fixed'}}>
+              <colgroup>
+                <col style={{width:'160px'}} />
+                <col />
+                <col style={{width:'130px'}} />
+                <col style={{width:'110px'}} />
+                <col style={{width:'120px'}} />
+                <col style={{width:'100px'}} />
+                <col style={{width:'100px'}} />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>Provider</th>
+                  <th>Description</th>
+                  <th className="th-right">Amount</th>
+                  <th>Cycle</th>
+                  <th className="th-right">Total / yr</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {store.infraCosts.map(c => {
+                  const isYearly = c.billing_cycle === 'annual'
+                  const displayAmt = isYearly ? c.monthly_cost * 12 : c.monthly_cost
+                  const isCancelled = c.status === 'inactive'
+                  const stillCounting = costCountsNow(c)
+                  const annualCost = costAnnualValue(c)
+                  return (
+                    <tr key={c.id} style={isCancelled && !stillCounting ? {opacity:0.5} : undefined}>
+                      <td style={{fontWeight:700}}>{c.provider}</td>
+                      <td className="text-sm" style={{color:'var(--c2)'}}>{c.description ?? '—'}</td>
+                      <td className="td-right text-mono" style={{color: isCancelled ? 'var(--c4)' : 'var(--red)',fontWeight:600}}>
+                        {displayAmt.toLocaleString('en-EU', {maximumFractionDigits:2})} €
+                      </td>
+                      <td><span className={`badge badge-${isYearly ? 'amber' : 'green'}`}>{isYearly ? 'Yearly' : 'Monthly'}</span></td>
+                      <td className="td-right text-mono" style={{color: annualCost === 0 ? 'var(--c4)' : 'var(--red)',fontSize:13}}>
+                        {annualCost === 0 ? '—' : `${annualCost.toLocaleString('en-EU', {maximumFractionDigits:2})} €`}
+                      </td>
+                      <td>
+                        {isCancelled ? (
+                          <div>
+                            <span className="badge badge-gray">Cancelled</span>
+                            {c.cancelled_from && (
+                              <div style={{fontSize:11,color:'var(--c3)',marginTop:2}}>
+                                from {new Date(c.cancelled_from + 'T00:00:00').toLocaleString('en', {month:'short',year:'numeric'})}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="badge badge-green">Active</span>
+                        )}
+                      </td>
+                      <td>
+                        <div style={{display:'flex',gap:4,alignItems:'center'}}>
+                          {!isCancelled && (
+                            <button className="btn btn-xs" style={{background:'var(--red)',color:'#fff',border:'none'}}
+                              onClick={() => { setCancelCostTarget(c); setCancelCostMonth('') }}>
+                              Cancel
+                            </button>
+                          )}
+                          <button className="btn btn-ghost btn-xs" style={{color:'var(--red)'}} title="Delete"
+                            onClick={async () => {
+                              if (!confirm(`Delete cost "${c.provider}"?`)) return
+                              try { await store.removeCost(c.id); toast('success', 'Cost deleted') }
+                              catch (e) { toast('error', (e as Error).message) }
+                            }}>
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan={3}></td>
+                  <td className="td-right" style={{fontSize:10,fontWeight:700,color:'var(--c3)',textTransform:'uppercase',letterSpacing:'0.6px'}}>Total / yr</td>
+                  <td className="td-right text-mono" style={{fontSize:15,fontWeight:800,color:'var(--red)'}}>
+                    {store.infraCosts.reduce((s,c) => s + costAnnualValue(c), 0).toLocaleString('en-EU', {maximumFractionDigits:2})} €
+                  </td>
+                  <td colSpan={2}></td>
+                </tr>
+              </tfoot>
+            </table>
+          )}
         </div>
       </div>
 
@@ -525,9 +645,20 @@ export function InfrastructureView() {
             <input placeholder="RS-2026-001" value={hosting.form.project_pn} onChange={e => hosting.set('project_pn', e.target.value)} />
           </div>
         </div>
-        <div className="form-group" style={{marginBottom:14}}>
-          <label className="form-label">Service description</label>
-          <input placeholder="VPS + cPanel hosting" value={hosting.form.description} onChange={e => hosting.set('description', e.target.value)} />
+        <div className="form-row" style={{marginBottom:14}}>
+          <div className="form-group" style={{flex:2}}>
+            <label className="form-label">Service description</label>
+            <input placeholder="VPS + cPanel hosting" value={hosting.form.description} onChange={e => hosting.set('description', e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Provider <span className="form-hint" style={{display:'inline',marginLeft:4}}>optional</span></label>
+            <Select
+              value={hosting.form.provider}
+              onChange={val => hosting.set('provider', val)}
+              placeholder="— Select provider —"
+              options={[...new Set(store.infraCosts.map(c => c.provider))].map(p => ({ value: p, label: p }))}
+            />
+          </div>
         </div>
         <div className="form-row" style={{marginBottom:14}}>
           <div className="form-group">
@@ -657,6 +788,76 @@ export function InfrastructureView() {
         </Modal>
       )}
 
+      {/* Add Infrastructure Cost modal */}
+      <Modal open={showAddCost} title="Add Infrastructure Cost" maxWidth={460} onClose={() => setShowAddCost(false)}
+        footer={<>
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowAddCost(false)}>Cancel</button>
+          <button className="btn btn-primary btn-sm" onClick={handleAddCost} disabled={saving || !costForm.provider || !costForm.amount}>
+            {saving ? <span className="spinner"/> : null} Add cost
+          </button>
+        </>}>
+        <div className="form-row" style={{marginBottom:14}}>
+          <div className="form-group">
+            <label className="form-label">Provider <span style={{color:'var(--red)'}}>*</span></label>
+            <input placeholder="e.g. Hetzner, AWS, DigitalOcean" value={costForm.provider} onChange={e => setCostForm(f => ({...f, provider: e.target.value}))} autoFocus />
+          </div>
+        </div>
+        <div className="form-group" style={{marginBottom:14}}>
+          <label className="form-label">Description <span className="form-hint" style={{display:'inline',marginLeft:4}}>optional</span></label>
+          <input placeholder="e.g. VPS server, CDN, Storage" value={costForm.description} onChange={e => setCostForm(f => ({...f, description: e.target.value}))} />
+        </div>
+        <div className="form-row" style={{marginBottom:14}}>
+          <div className="form-group">
+            <label className="form-label">Billing cycle</label>
+            <Select value={costForm.cycle} onChange={val => setCostForm(f => ({...f, cycle: val as 'monthly' | 'yearly'}))}
+              options={[{value:'monthly',label:'Monthly'},{value:'yearly',label:'Yearly'}]} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Amount (€) <span style={{color:'var(--red)'}}>*</span></label>
+            <input type="number" placeholder={costForm.cycle === 'yearly' ? '1200' : '100'} value={costForm.amount} onChange={e => setCostForm(f => ({...f, amount: e.target.value}))} />
+          </div>
+        </div>
+        {costForm.amount && (
+          <div className="form-hint">
+            Monthly equivalent: {(costForm.cycle === 'yearly' ? parseFloat(costForm.amount||'0')/12 : parseFloat(costForm.amount||'0')).toFixed(2)} €/mo
+          </div>
+        )}
+      </Modal>
+
+      {/* Cancel Infrastructure Cost modal */}
+      <Modal open={!!cancelCostTarget} title="Cancel Infrastructure Cost" maxWidth={420}
+        onClose={() => { setCancelCostTarget(null); setCancelCostMonth('') }}
+        footer={<>
+          <button className="btn btn-secondary btn-sm" onClick={() => { setCancelCostTarget(null); setCancelCostMonth('') }}>Back</button>
+          <button className="btn btn-sm" style={{background:'var(--red)',color:'#fff',border:'none'}}
+            onClick={async () => {
+              if (!cancelCostTarget || !cancelCostMonth) return
+              setCancellingCost(true)
+              try {
+                await store.cancelCost(cancelCostTarget.id, cancelCostMonth + '-01')
+                toast('success', 'Cost cancelled')
+                setCancelCostTarget(null); setCancelCostMonth('')
+              } catch (e) { toast('error', (e as Error).message) }
+              finally { setCancellingCost(false) }
+            }}
+            disabled={!cancelCostMonth || cancellingCost}>
+            {cancellingCost ? '…' : 'Confirm cancellation'}
+          </button>
+        </>}>
+        {cancelCostTarget && (
+          <div>
+            <p style={{margin:'0 0 16px',fontSize:14,color:'var(--c2)'}}>
+              Cancelling <strong>{cancelCostTarget.provider}</strong>{cancelCostTarget.description ? ` — ${cancelCostTarget.description}` : ''}
+            </p>
+            <div className="form-group" style={{marginBottom:12}}>
+              <label className="form-label">Cancel from month</label>
+              <input type="month" value={cancelCostMonth} onChange={e => setCancelCostMonth(e.target.value)} autoFocus />
+              <div className="form-hint">The cost will be marked as inactive from this month onwards.</div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       {/* Edit Hosting Client modal */}
       <Modal open={!!editHosting.form} title="Edit Hosting Client" onClose={editHosting.close}
         footer={<>
@@ -665,82 +866,67 @@ export function InfrastructureView() {
         </>}>
         {editHosting.form && (
           <>
+            {/* Read-only info */}
             <div className="form-row" style={{marginBottom:14}}>
               <div className="form-group">
                 <label className="form-label">Client</label>
-                <Select
-                  value={editHosting.form.client_id}
-                  onChange={val => editHosting.set('client_id', val)}
-                  options={cStore.clients.map(c => ({ value: c.id, label: c.name }))}
-                />
+                <input disabled value={cStore.clients.find(c => c.id === editHosting.form!.client_id)?.name ?? editHosting.form.client_id} style={{background:'var(--c7)',color:'var(--c3)'}} />
               </div>
+              <div className="form-group">
+                <label className="form-label">Billing cycle</label>
+                <input disabled value={editHosting.form.cycle === 'monthly' ? 'Monthly' : 'Yearly'} style={{background:'var(--c7)',color:'var(--c3)'}} />
+              </div>
+            </div>
+            <div className="form-row" style={{marginBottom:14}}>
+              <div className="form-group">
+                <label className="form-label">Amount</label>
+                <input disabled value={`${editHosting.form.amount} €/${editHosting.form.cycle === 'monthly' ? 'mo' : 'yr'}`} style={{background:'var(--c7)',color:'var(--c3)'}} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Billing since</label>
+                <input disabled value={editHosting.form.billing_since?.slice(0,7) ?? '—'} style={{background:'var(--c7)',color:'var(--c3)'}} />
+              </div>
+            </div>
+            {/* Editable fields */}
+            <div className="form-row" style={{marginBottom:14}}>
               <div className="form-group">
                 <label className="form-label">Project #</label>
                 <input placeholder="RS-2026-001" value={editHosting.form.project_pn} onChange={e => editHosting.set('project_pn', e.target.value)} />
               </div>
-            </div>
-            <div className="form-group" style={{marginBottom:14}}>
-              <label className="form-label">Service description</label>
-              <input value={editHosting.form.description ?? ''} onChange={e => editHosting.set('description', e.target.value)} />
-            </div>
-            <div className="form-row" style={{marginBottom:14}}>
-              <div className="form-group">
-                <label className="form-label">Billing cycle</label>
-                <Select
-                  value={editHosting.form.cycle}
-                  onChange={val => editHosting.set('cycle', val)}
-                  options={[
-                    { value: 'monthly', label: 'Monthly' },
-                    { value: 'yearly', label: 'Yearly' },
-                  ]}
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Amount (€)</label>
-                <input type="number" value={editHosting.form.amount} onChange={e => editHosting.set('amount', parseFloat(e.target.value) || 0)} />
-              </div>
-            </div>
-            <div className="form-row" style={{marginBottom:14}}>
-              <div className="form-group">
-                <label className="form-label">Billing since</label>
-                <input type="month" value={editHosting.form.billing_since?.slice(0,7) ?? ''} onChange={e => {
-                  const val = e.target.value
-                  editHosting.set('billing_since', val ? val + '-01' : '')
-                  if (editHosting.form!.cycle === 'yearly' && val && !editHosting.form!.next_invoice_date) {
-                    editHosting.set('next_invoice_date', val + '-01')
-                  }
-                }} />
-              </div>
-              {editHosting.form.cycle === 'yearly' && (
-                <div className="form-group">
-                  <label className="form-label">Next invoice month</label>
-                  <input type="month" value={editHosting.form.next_invoice_date?.slice(0,7) ?? ''} onChange={e => editHosting.set('next_invoice_date', e.target.value ? e.target.value + '-01' : '')} />
-                </div>
-              )}
-            </div>
-            <div className="form-row" style={{marginBottom:14}}>
               <div className="form-group">
                 <label className="form-label">Contract / Order ID <span className="form-hint" style={{display:'inline',marginLeft:4}}>optional</span></label>
                 <input placeholder="e.g. PO-2026-042" value={editHosting.form.contract_id ?? ''} onChange={e => editHosting.set('contract_id', e.target.value)} />
               </div>
-              <div className="form-group">
-                <label className="form-label">Contract expiry <span className="form-hint" style={{display:'inline',marginLeft:4}}>optional</span></label>
-                <input type="month" value={editHosting.form.contract_expiry?.slice(0,7) ?? ''} onChange={e => editHosting.set('contract_expiry', e.target.value ? e.target.value + '-01' : '')} />
-              </div>
             </div>
             <div className="form-row" style={{marginBottom:14}}>
-              <div className="form-group" style={{flex:'none',width:'48%'}}>
-                <label className="form-label">Status</label>
+              <div className="form-group">
+                <label className="form-label">Provider</label>
                 <Select
-                  value={editHosting.form.status}
-                  onChange={val => editHosting.set('status', val)}
+                  value={editHosting.form.provider ?? ''}
+                  onChange={val => editHosting.set('provider', val)}
                   options={[
-                    { value: 'active', label: 'Active' },
-                    { value: 'paused', label: 'Paused' },
-                    { value: 'cancelled', label: 'Cancelled' },
+                    { value: '', label: '— None —' },
+                    ...[...new Set(store.infraCosts.map(c => c.provider))].map(p => ({ value: p, label: p })),
                   ]}
                 />
               </div>
+              <div className="form-group">
+                <label className="form-label">Contract expiry</label>
+                <input disabled value={editHosting.form.contract_expiry?.slice(0,7) ?? '—'} style={{background:'var(--c7)',color:'var(--c3)'}} />
+              </div>
+            </div>
+            <div className="form-row" style={{marginBottom:14}}>
+              {editHosting.form.cycle === 'yearly' && (
+                <div className="form-group">
+                  <label className="form-label">Billing month</label>
+                  <select value={editHosting.form.billing_month ?? ''} onChange={e => editHosting.set('billing_month', e.target.value ? parseInt(e.target.value) : null)}>
+                    <option value="">— Select month —</option>
+                    {['January','February','March','April','May','June','July','August','September','October','November','December'].map((name, i) => (
+                      <option key={i+1} value={i+1}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           </>
         )}

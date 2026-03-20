@@ -12,23 +12,34 @@ interface Props {
   style?: React.CSSProperties
   className?: string
   placeholder?: string
+  searchable?: boolean
 }
 
-export function Select({ value, onChange, options, style, className, placeholder }: Props) {
+export function Select({ value, onChange, options, style, className, placeholder, searchable }: Props) {
   const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
   const ref = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  // Auto-enable search when there are many options
+  const showSearch = searchable ?? options.length > 6
 
   useEffect(() => {
-    if (!open) return
+    if (!open) { setQuery(''); return }
+    if (showSearch) setTimeout(() => searchRef.current?.focus(), 10)
     function handler(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [open])
+  }, [open, showSearch])
 
   const selected = options.find(o => o.value === value)
   const displayLabel = selected ? selected.label : (placeholder ?? '—')
+
+  const filtered = query.trim()
+    ? options.filter(o => o.label.toLowerCase().includes(query.toLowerCase()))
+    : options
 
   return (
     <div ref={ref} style={{ position: 'relative', ...style }} className={className}>
@@ -74,32 +85,46 @@ export function Select({ value, onChange, options, style, className, placeholder
           borderRadius: 10,
           boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
           zIndex: 1000,
-          maxHeight: 240,
-          overflowY: 'auto',
         }}>
-          {options.map(opt => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => { onChange(opt.value); setOpen(false) }}
-              style={{
-                display: 'block',
-                width: '100%',
-                padding: '9px 14px',
-                border: 'none',
-                borderBottom: '1px solid var(--c7)',
-                background: opt.value === value ? 'var(--navy-light)' : '#fff',
-                fontSize: 14,
-                color: opt.value === value ? 'var(--navy)' : 'var(--c1)',
-                textAlign: 'left',
-                cursor: 'pointer',
-                fontWeight: opt.value === value ? 600 : 400,
-                fontFamily: 'inherit',
-              }}
-            >
-              {opt.label}
-            </button>
-          ))}
+          {showSearch && (
+            <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--c6)' }}>
+              <input
+                ref={searchRef}
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Search…"
+                style={{ width: '100%', height: 32, fontSize: 13, border: '1px solid var(--c6)', borderRadius: 6, padding: '0 10px', outline: 'none', fontFamily: 'inherit' }}
+                onClick={e => e.stopPropagation()}
+              />
+            </div>
+          )}
+          <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+            {filtered.length === 0 ? (
+              <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--c4)' }}>No results</div>
+            ) : filtered.map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => { onChange(opt.value); setOpen(false) }}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '9px 14px',
+                  border: 'none',
+                  borderBottom: '1px solid var(--c7)',
+                  background: opt.value === value ? 'var(--navy-light)' : '#fff',
+                  fontSize: 14,
+                  color: opt.value === value ? 'var(--navy)' : 'var(--c1)',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  fontWeight: opt.value === value ? 600 : 400,
+                  fontFamily: 'inherit',
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>

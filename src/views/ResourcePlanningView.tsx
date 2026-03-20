@@ -101,6 +101,37 @@ function newEntry(fridayDate: string): AssignEntry {
   return { id: ++entryIdCounter, category: 'project', projectId: '', label: '', mode: 'week', totalHours: 20, dayHours: [0, 0, 0, 0, 0], recurring: false, repeatWeeks: 4, billable: true, hasDeadline: false, deadlineDate: fridayDate }
 }
 
+/* ── WizardSteps helper ───────────────────────────────────────── */
+
+function WizardSteps({ step }: { step: number }) {
+  const labels = ['Projects', 'Budgets & Team', 'AI Plan', 'Review']
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20 }}>
+      {labels.map((label, i) => {
+        const n = i + 1
+        const done = step > n
+        const active = step === n
+        return (
+          <>
+            <div key={n} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+              <div style={{
+                width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', fontSize: 10, fontWeight: 800,
+                background: done || active ? 'var(--navy)' : 'var(--c6)',
+                color: done || active ? '#fff' : 'var(--c3)',
+              }}>{done ? '✓' : n}</div>
+              <span style={{ fontSize: 10, color: active ? 'var(--navy)' : 'var(--c3)', fontWeight: active ? 700 : 400, whiteSpace: 'nowrap' }}>{label}</span>
+            </div>
+            {i < labels.length - 1 && (
+              <div style={{ flex: 1, height: 2, background: step > n ? 'var(--navy)' : 'var(--c6)', margin: '0 4px', marginBottom: 14 }} />
+            )}
+          </>
+        )
+      })}
+    </div>
+  )
+}
+
 /* ═══════════════════════════════════════════════════════════════ */
 
 export function ResourcePlanningView() {
@@ -156,6 +187,25 @@ export function ResourcePlanningView() {
   const [smartSuggestions, setSmartSuggestions] = useState<{ member_id: string; project_id: string; category: AllocationCategory; weekly_hours: number; label: string; reason: string }[]>([])
   const [smartRemovedIdx, setSmartRemovedIdx] = useState<Set<number>>(new Set())
   const [smartSaving, setSmartSaving] = useState(false)
+
+  // smart allocate wizard
+  const [showWizard, setShowWizard] = useState(false)
+  const [wizardStep, setWizardStep] = useState<1 | 2 | 3 | 4>(1)
+  const [wizardMonth, setWizardMonth] = useState(() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  })
+  const [wizardSelectedProjects, setWizardSelectedProjects] = useState<Set<string>>(new Set())
+  const [wizardBudgets, setWizardBudgets] = useState<Record<string, number>>({})
+  const [wizardProjectMembers, setWizardProjectMembers] = useState<Record<string, string[]>>({})
+  const [wizardPlan, setWizardPlan] = useState<{
+    week_start: string
+    allocations: { member_id: string; project_id: string; weekly_hours: number; reason: string; _id: string }[]
+  }[]>([])
+  const [wizardLoading, setWizardLoading] = useState(false)
+  const [wizardSaveAsTemplate, setWizardSaveAsTemplate] = useState(false)
+  const [wizardTemplateName, setWizardTemplateName] = useState('')
+  const [wizardSaving, setWizardSaving] = useState(false)
 
   const days = weekDaysOf(weekStart)
   const weekEnd = days[4]
@@ -478,6 +528,156 @@ export function ResourcePlanningView() {
     finally { setSmartSaving(false) }
   }
 
+  /* ── smart allocate wizard ─────────────────────────────────── */
+
+  function resetWizard() {
+    setWizardStep(1)
+    setWizardSelectedProjects(new Set())
+    setWizardBudgets({})
+    setWizardProjectMembers({})
+    setWizardPlan([])
+    setWizardLoading(false)
+    setWizardSaveAsTemplate(false)
+    setWizardTemplateName('')
+  }
+
+  async function runWizardAI() {
+    setWizardLoading(true)
+    setWizardPlan([])
+    try {
+      const monthStart = wizardMonth + '-01'
+      const selectedProjs = projects.filter(p => wizardSelectedProjects.has(p.id))
+      const projPayload = selectedProjs.map(p => ({
+        id: p.id, pn: p.pn, name: p.name,
+        budget_hours: wizardBudgets[p.id] ?? 40,
+        member_ids: wizardProjectMembers[p.id] ?? [],
+        deliverables: deliverables.filter(d => d.project_id === p.id && d.status === 'active')
+          .map(d => ({ title: d.title, due_date: d.due_date ?? null, estimated_hours: d.estimated_hours ?? null })),
+      }))
+
+      const monthEnd = (() => {
+        const d = new Date(monthStart + 'T00:00:00')
+        d.setMonth(d.getMonth() + 1)
+        d.setDate(0)
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      })()
+      const { data: monthAllocs } = await supabase.from('resource_allocations')
+        .select('member_id, date, hours')
+        .gte('date', monthStart).lte('date', monthEnd)
+
+      const EDGE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/smart-allocator`
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+      const res = await fetch(EDGE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': anonKey, 'Authorization': `Bearer ${anonKey}` },
+        body: JSON.stringify({
+          projects: projPayload,
+          members: allActive.map(m => ({ id: m.id, name: m.name, hours_per_day: m.hours_per_day, role: m.role ?? null })),
+          month_start: monthStart,
+          existing_allocations: monthAllocs ?? [],
+        }),
+      })
+      if (!res.ok) throw new Error('Edge function error')
+      const data = await res.json()
+
+      const plan = (data.weeks ?? []).map((w: { week_start: string; allocations: { member_id: string; project_id: string; weekly_hours: number; reason: string }[] }) => ({
+        week_start: w.week_start,
+        allocations: (w.allocations ?? []).map((a: { member_id: string; project_id: string; weekly_hours: number; reason: string }) => ({
+          ...a, _id: Math.random().toString(36).slice(2)
+        })),
+      }))
+      setWizardPlan(plan)
+      setWizardStep(3)
+    } catch {
+      toast('error', 'Smart allocator unavailable — check Supabase edge function')
+    } finally {
+      setWizardLoading(false)
+    }
+  }
+
+  async function handleWizardApply() {
+    setWizardSaving(true)
+    try {
+      const monthStart = wizardMonth + '-01'
+      const monthEnd = (() => {
+        const d = new Date(monthStart + 'T00:00:00')
+        d.setMonth(d.getMonth() + 1)
+        d.setDate(0)
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      })()
+
+      const { data: monthAllocs } = await supabase.from('resource_allocations')
+        .select('member_id, date, hours, id')
+        .gte('date', monthStart).lte('date', monthEnd)
+
+      const existingByWeek = (weekStartStr: string) => (monthAllocs ?? []).filter(a => {
+        const d = new Date(a.date + 'T00:00:00')
+        const mon = new Date(weekStartStr + 'T00:00:00')
+        const fri = new Date(mon)
+        fri.setDate(fri.getDate() + 4)
+        return d >= mon && d <= fri
+      })
+
+      const rows: { member_id: string; project_id: string | null; category: AllocationCategory; date: string; hours: number; is_billable: boolean }[] = []
+      for (const week of wizardPlan) {
+        const weekSlice = existingByWeek(week.week_start) as ResourceAllocation[]
+        for (const alloc of week.allocations) {
+          if (alloc.weekly_hours <= 0) continue
+          const daySlots = distributeWeekly(week.week_start, alloc.member_id, alloc.weekly_hours, allActive, weekSlice)
+          for (const { date, hours } of daySlots) {
+            rows.push({
+              member_id: alloc.member_id,
+              project_id: alloc.project_id,
+              category: 'project',
+              date,
+              hours,
+              is_billable: true,
+            })
+          }
+        }
+      }
+
+      if (rows.length === 0) { toast('info', 'No capacity available'); setWizardSaving(false); return }
+      await addAllocationsBatch(rows)
+
+      if (wizardSaveAsTemplate && wizardTemplateName.trim()) {
+        const entryMap: Record<string, { sum: number; count: number; entry: TemplateEntry }> = {}
+        for (const week of wizardPlan) {
+          for (const alloc of week.allocations) {
+            if (alloc.weekly_hours <= 0) continue
+            const key = `${alloc.member_id}::${alloc.project_id}`
+            const m = allActive.find(x => x.id === alloc.member_id)
+            const proj = projects.find(p => p.id === alloc.project_id)
+            if (!entryMap[key]) {
+              entryMap[key] = {
+                sum: 0, count: 0,
+                entry: {
+                  member_id: alloc.member_id, member_name: m?.name ?? '?',
+                  project_id: alloc.project_id, project_label: proj ? `${proj.pn} — ${proj.name}` : '?',
+                  category: 'project', weekly_hours: 0, is_billable: true,
+                }
+              }
+            }
+            entryMap[key].sum += alloc.weekly_hours
+            entryMap[key].count += 1
+          }
+        }
+        const entries: TemplateEntry[] = Object.values(entryMap).map(({ sum, count, entry }) => ({
+          ...entry, weekly_hours: Math.round((sum / count) * 2) / 2,
+        }))
+        await saveTemplate(wizardTemplateName.trim(), entries)
+      }
+
+      toast('success', `Applied ${rows.length} allocations across the month`)
+      setShowWizard(false)
+      resetWizard()
+    } catch {
+      toast('error', 'Failed to apply plan')
+    } finally {
+      setWizardSaving(false)
+    }
+  }
+
   /* ── render ────────────────────────────────────────────────── */
 
   return (
@@ -526,6 +726,7 @@ export function ResourcePlanningView() {
 
           <button className="btn btn-secondary btn-sm" onClick={openBatch}>⚡ Batch Assign</button>
           <button className="btn btn-primary btn-sm" onClick={() => { setShowSmartPlan(true); runSmartPlan() }}>✦ Smart Plan</button>
+          <button className="btn btn-primary btn-sm" onClick={() => { resetWizard(); setShowWizard(true) }}>✦ Smart Allocate</button>
         </div>
       </div>
 
@@ -1343,6 +1544,259 @@ export function ResourcePlanningView() {
           </div>
         )
       })()}
+
+      {/* ═══════════ SMART ALLOCATE WIZARD ═══════════ */}
+      {showWizard && (
+        <div className="modal-overlay" onClick={() => { if (!wizardLoading && !wizardSaving) { setShowWizard(false); resetWizard() } }}>
+          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 780, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="modal-header">
+              <div>
+                <h3 style={{ margin: 0 }}>✦ Smart Allocate</h3>
+                <p style={{ margin: '2px 0 0', fontSize: 13, color: 'var(--c4)', fontWeight: 400 }}>Monthly AI-powered resource planning</p>
+              </div>
+              <button className="modal-close" onClick={() => { setShowWizard(false); resetWizard() }}>&times;</button>
+            </div>
+            <div className="modal-body" style={{ flex: 1, overflowY: 'auto' }}>
+              <WizardSteps step={wizardStep} />
+
+              {/* Step 1 — Pick projects */}
+              {wizardStep === 1 && (
+                <div>
+                  <div style={{ display: 'flex', gap: 12, marginBottom: 14, alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--c2)' }}>Month:</span>
+                    <input type="month" value={wizardMonth} onChange={e => setWizardMonth(e.target.value)}
+                      style={{ border: '1px solid var(--c6)', borderRadius: 6, padding: '4px 8px', fontFamily: 'inherit', fontSize: 13 }} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {projects.filter(p => p.status === 'active').map(p => {
+                      const checked = wizardSelectedProjects.has(p.id)
+                      const delivCount = deliverables.filter(d => d.project_id === p.id && d.status === 'active').length
+                      return (
+                        <div key={p.id} onClick={() => setWizardSelectedProjects(prev => {
+                          const n = new Set(prev); n.has(p.id) ? n.delete(p.id) : n.add(p.id); return n
+                        })} style={{
+                          display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
+                          border: checked ? '1.5px solid var(--navy)' : '1px solid var(--c6)',
+                          background: checked ? 'var(--navy-light)' : '#fff',
+                        }}>
+                          <input type="checkbox" checked={checked} onChange={() => {}} style={{ width: 15, height: 15 }} />
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--c0)' }}>{p.pn} — {p.name}</div>
+                            {delivCount > 0 && <div style={{ fontSize: 11, color: 'var(--c3)' }}>{delivCount} active deliverable{delivCount !== 1 ? 's' : ''}</div>}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Step 2 — Budgets & team */}
+              {wizardStep === 2 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {[...wizardSelectedProjects].map(pid => {
+                    const proj = projects.find(p => p.id === pid)
+                    if (!proj) return null
+                    const delivHours = deliverables.filter(d => d.project_id === pid && d.status === 'active')
+                      .reduce((s, d) => s + (d.estimated_hours ?? 0), 0)
+                    const defaultBudget = delivHours > 0 ? delivHours : 40
+                    const budget = wizardBudgets[pid] ?? defaultBudget
+                    const memberIds = wizardProjectMembers[pid] ?? []
+                    return (
+                      <div key={pid} style={{ background: 'var(--c7)', borderRadius: 8, padding: '12px 14px' }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--c0)', marginBottom: 8 }}>{proj.pn} — {proj.name}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                          <label style={{ fontSize: 12, color: 'var(--c3)' }}>Budget (hours):</label>
+                          <input type="number" value={budget} min={1} step={0.5}
+                            onChange={e => setWizardBudgets(prev => ({ ...prev, [pid]: Number(e.target.value) }))}
+                            style={{ width: 70, border: '1px solid var(--c6)', borderRadius: 6, padding: '4px 8px', fontFamily: 'inherit', fontSize: 13 }} />
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--c3)', marginBottom: 6, fontWeight: 700 }}>TEAM</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                          {allActive.map(m => {
+                            const sel = memberIds.includes(m.id)
+                            return (
+                              <button key={m.id} onClick={() => setWizardProjectMembers(prev => ({
+                                ...prev, [pid]: sel ? memberIds.filter(id => id !== m.id) : [...memberIds, m.id],
+                              }))} style={{
+                                padding: '4px 10px', borderRadius: 100, fontSize: 12, fontWeight: 600,
+                                border: sel ? '1.5px solid var(--navy)' : '1px solid var(--c6)',
+                                background: sel ? 'var(--navy-light)' : '#fff',
+                                color: sel ? 'var(--navy)' : 'var(--c2)',
+                                cursor: 'pointer', fontFamily: 'inherit',
+                              }}>{m.name}</button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {(() => {
+                    const totalBudget = [...wizardSelectedProjects].reduce((s, pid) => s + (wizardBudgets[pid] ?? 40), 0)
+                    const allMemberIds = new Set([...wizardSelectedProjects].flatMap(pid => wizardProjectMembers[pid] ?? []))
+                    const weekCount = 4
+                    const totalCap = [...allMemberIds].reduce((s, mid) => {
+                      const m = allActive.find(x => x.id === mid)
+                      return s + (m ? m.hours_per_day * 5 * weekCount : 0)
+                    }, 0)
+                    if (totalBudget > totalCap && totalCap > 0) {
+                      return <div className="alert alert-amber" style={{ marginTop: 10, fontSize: 12 }}>
+                        ⚠ Total budget ({totalBudget}h) exceeds estimated team capacity ({totalCap}h). Plan may be truncated.
+                      </div>
+                    }
+                    return null
+                  })()}
+                </div>
+              )}
+
+              {/* Step 3 — AI plan */}
+              {wizardStep === 3 && (
+                <div>
+                  {wizardLoading && (
+                    <div style={{ textAlign: 'center', padding: '48px 20px' }}>
+                      <div style={{ fontSize: 28, marginBottom: 12 }}>✦</div>
+                      <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--c1)', marginBottom: 6 }}>Generating allocation plan…</div>
+                      <div style={{ fontSize: 13, color: 'var(--c4)' }}>AI is planning {wizardSelectedProjects.size} projects across the month</div>
+                    </div>
+                  )}
+                  {!wizardLoading && wizardPlan.length > 0 && (
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                        <thead>
+                          <tr style={{ borderBottom: '2px solid var(--c6)' }}>
+                            <th style={{ textAlign: 'left', padding: '8px', color: 'var(--c3)', fontWeight: 700 }}>Member</th>
+                            {wizardPlan.map(w => (
+                              <th key={w.week_start} style={{ textAlign: 'center', padding: '8px', color: 'var(--c3)', fontWeight: 700, minWidth: 100 }}>
+                                {new Date(w.week_start + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {allActive.filter(m => wizardPlan.some(w => w.allocations.some(a => a.member_id === m.id))).map(m => (
+                            <tr key={m.id} style={{ borderBottom: '1px solid var(--c7)' }}>
+                              <td style={{ padding: '8px', fontWeight: 700, color: 'var(--c0)' }}>{m.name}</td>
+                              {wizardPlan.map(w => {
+                                const cellAllocs = w.allocations.filter(a => a.member_id === m.id)
+                                return (
+                                  <td key={w.week_start} style={{ padding: '8px', verticalAlign: 'top' }}>
+                                    {cellAllocs.length === 0
+                                      ? <span style={{ color: 'var(--c5)', fontSize: 11 }}>—</span>
+                                      : cellAllocs.map(a => {
+                                        const proj = projects.find(p => p.id === a.project_id)
+                                        return (
+                                          <div key={a._id} style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 3 }}>
+                                            <span style={{ fontSize: 11, color: 'var(--navy)', fontWeight: 600 }}>{proj?.pn ?? '?'}</span>
+                                            <input type="number" value={a.weekly_hours} min={0} step={0.5}
+                                              onChange={e => {
+                                                const val = Number(e.target.value)
+                                                setWizardPlan(prev => prev.map(wk =>
+                                                  wk.week_start !== w.week_start ? wk : {
+                                                    ...wk,
+                                                    allocations: wk.allocations.map(al =>
+                                                      al._id === a._id ? { ...al, weekly_hours: val } : al
+                                                    )
+                                                  }
+                                                ))
+                                              }}
+                                              style={{ width: 44, border: '1px solid var(--c6)', borderRadius: 4, padding: '2px 4px', fontSize: 11, fontFamily: 'inherit' }} />
+                                            <span style={{ fontSize: 10, color: 'var(--c3)' }}>h</span>
+                                          </div>
+                                        )
+                                      })
+                                    }
+                                  </td>
+                                )
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {!wizardLoading && wizardPlan.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '32px', color: 'var(--c3)', fontSize: 13 }}>
+                      No plan generated. <button className="btn btn-secondary btn-sm" onClick={runWizardAI}>Try again</button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Step 4 — Review & apply */}
+              {wizardStep === 4 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {[...wizardSelectedProjects].map(pid => {
+                    const proj = projects.find(p => p.id === pid)
+                    const budget = wizardBudgets[pid] ?? 40
+                    const allocated = wizardPlan.flatMap(w => w.allocations)
+                      .filter(a => a.project_id === pid)
+                      .reduce((s, a) => s + a.weekly_hours, 0)
+                    const pct = budget > 0 ? Math.round((allocated / budget) * 100) : 0
+                    return (
+                      <div key={pid} style={{ background: 'var(--c7)', borderRadius: 8, padding: '10px 14px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 13, fontWeight: 700 }}>{proj?.pn} — {proj?.name}</span>
+                          <span style={{ fontSize: 12, color: pct >= 90 ? 'var(--green)' : 'var(--amber)', fontWeight: 700 }}>{allocated}h / {budget}h ({pct}%)</span>
+                        </div>
+                        <div style={{ height: 4, background: 'var(--c6)', borderRadius: 2, marginTop: 6 }}>
+                          <div style={{ width: `${Math.min(100, pct)}%`, height: 4, background: pct >= 90 ? 'var(--green)' : 'var(--navy)', borderRadius: 2 }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <input type="checkbox" id="wiz-save-tmpl" checked={wizardSaveAsTemplate}
+                      onChange={e => {
+                        setWizardSaveAsTemplate(e.target.checked)
+                        if (e.target.checked && !wizardTemplateName) {
+                          const d = new Date(wizardMonth + '-01T00:00:00')
+                          setWizardTemplateName(`${d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} Smart Plan`)
+                        }
+                      }} />
+                    <label htmlFor="wiz-save-tmpl" style={{ fontSize: 13 }}>Save as template</label>
+                    {wizardSaveAsTemplate && (
+                      <input value={wizardTemplateName} onChange={e => setWizardTemplateName(e.target.value)}
+                        style={{ flex: 1, border: '1px solid var(--c6)', borderRadius: 6, padding: '4px 8px', fontFamily: 'inherit', fontSize: 13 }} />
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              {wizardStep > 1 && (
+                <button className="btn btn-ghost btn-sm" style={{ marginRight: 'auto' }}
+                  onClick={() => setWizardStep(s => (s - 1) as 1 | 2 | 3 | 4)}>← Back</button>
+              )}
+              <button className="btn btn-secondary" onClick={() => { setShowWizard(false); resetWizard() }}>Cancel</button>
+              {wizardStep === 1 && (
+                <button className="btn btn-primary" disabled={wizardSelectedProjects.size === 0}
+                  onClick={() => setWizardStep(2)}>
+                  Next: Set budgets →
+                </button>
+              )}
+              {wizardStep === 2 && (
+                <button className="btn btn-primary"
+                  disabled={[...wizardSelectedProjects].some(pid => !(wizardProjectMembers[pid]?.length > 0))}
+                  onClick={() => { setWizardStep(3); runWizardAI() }}>
+                  ✦ Generate Plan →
+                </button>
+              )}
+              {wizardStep === 3 && !wizardLoading && wizardPlan.length > 0 && (
+                <button className="btn btn-primary" onClick={() => setWizardStep(4)}>
+                  Review & Apply →
+                </button>
+              )}
+              {wizardStep === 4 && (
+                <button className="btn btn-primary" disabled={wizardSaving}
+                  onClick={handleWizardApply}>
+                  {wizardSaving ? 'Applying…' : 'Apply plan'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ═══════════ SAVE TEMPLATE MODAL ═══════════ */}
       {showSaveTemplate && (

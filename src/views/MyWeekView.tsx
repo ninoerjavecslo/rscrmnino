@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { TeamMember, ResourceAllocation, ResourceConfirmation, AllocationCategory } from '../lib/types'
 import { generatePPSCsv, downloadCsv } from '../lib/exportPPS'
+import { toast } from '../lib/toast'
 
 // ─── Utility functions ────────────────────────────────────────────────────────
 
@@ -220,10 +221,11 @@ export function MyWeekView() {
 
   async function markDelayed(date: string) {
     if (!member) return
-    await supabase.from('resource_confirmations').upsert(
+    const { error } = await supabase.from('resource_confirmations').upsert(
       { member_id: member.id, date, status: 'delayed', delay_reason: null },
       { onConflict: 'member_id,date' }
     )
+    if (error) { toast('error', 'Failed to save: ' + error.message); return }
     setConfirmations(prev => [
       ...prev.filter(c => c.date !== date),
       { id: '', member_id: member.id, date, status: 'delayed', delay_reason: null, confirmed_at: new Date().toISOString() },
@@ -234,31 +236,37 @@ export function MyWeekView() {
     if (!member) return
     setEodLoading(true)
     const selectedAllocs = allocations.filter(a => a.date === selectedDate)
+    const snapDate = selectedDate
 
     const inserts = selectedAllocs.map(a => ({
       allocation_id: a.id,
       member_id: member.id,
-      date: selectedDate,
+      date: snapDate,
       actual_hours: actualMap[a.id] ?? a.hours,
       note: noteMap[a.id] || null,
     }))
 
-    await supabase.from('allocation_actuals').upsert(inserts, { onConflict: 'allocation_id' })
-    await supabase.from('resource_confirmations').upsert(
-      { member_id: member.id, date: selectedDate, status: 'confirmed' },
+    const { error: actualsErr } = await supabase.from('allocation_actuals').upsert(inserts, { onConflict: 'allocation_id' })
+    if (actualsErr) { toast('error', 'Failed to save actuals: ' + actualsErr.message); setEodLoading(false); return }
+
+    const { error: confErr } = await supabase.from('resource_confirmations').upsert(
+      { member_id: member.id, date: snapDate, status: 'confirmed' },
       { onConflict: 'member_id,date' }
     )
+    if (confErr) { toast('error', 'Failed to confirm day: ' + confErr.message); setEodLoading(false); return }
+
     setConfirmations(prev => [
-      ...prev.filter(c => c.date !== selectedDate),
-      { id: '', member_id: member.id, date: selectedDate, status: 'confirmed', delay_reason: null, confirmed_at: new Date().toISOString() },
+      ...prev.filter(c => c.date !== snapDate),
+      { id: '', member_id: member.id, date: snapDate, status: 'confirmed', delay_reason: null, confirmed_at: new Date().toISOString() },
     ])
+    toast('success', 'Day confirmed!')
 
     const hasDeltas = selectedAllocs.some(a => (actualMap[a.id] ?? a.hours) !== a.hours)
-    if (hasDeltas) await fetchAiAdvice(selectedAllocs)
+    if (hasDeltas) await fetchAiAdvice(selectedAllocs, snapDate)
     setEodLoading(false)
   }
 
-  async function fetchAiAdvice(selectedAllocs: ResourceAllocation[]) {
+  async function fetchAiAdvice(selectedAllocs: ResourceAllocation[], snapDate: string) {
     if (!member) return
     setAiLoading(true)
     const today_tasks = selectedAllocs.map(a => ({
@@ -270,7 +278,7 @@ export function MyWeekView() {
       note: noteMap[a.id] || undefined,
     }))
     const remaining_week = allocations
-      .filter(a => a.date > selectedDate)
+      .filter(a => a.date > snapDate)
       .map(a => ({
         date: a.date,
         project_name: a.project?.name ?? a.label ?? a.category,
@@ -312,11 +320,12 @@ export function MyWeekView() {
       is_unplanned: true,
       is_billable: true,
     })
-    if (insErr) { alert('Failed to save: ' + insErr.message); return }
+    if (insErr) { toast('error', 'Failed to save: ' + insErr.message); return }
     const { data } = await supabase.from('resource_allocations')
       .select('*, project:projects(id, pn, name)')
       .eq('member_id', member.id).gte('date', weekStart).lte('date', weekEnd).order('date')
     if (data) setAllocations(data as ResourceAllocation[])
+    toast('success', 'Unplanned work logged!')
     setShowUnplanned(false)
     setUnplannedProject('')
     setUnplannedHours(2)

@@ -1,1866 +1,1557 @@
-import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useResourceStore } from '../stores/resource'
 import { useProjectsStore } from '../stores/projects'
-import { Select } from '../components/Select'
-import { toast } from '../lib/toast'
-import type { AllocationCategory, Project, ResourceAllocation } from '../lib/types'
-import { analyzeMemberBuffer } from '../lib/bufferAnalysis'
-import type { MemberBufferStats } from '../lib/bufferAnalysis'
-import { distributeWeekly } from '../lib/distributeWeekly'
+import { useMaintenancesStore } from '../stores/maintenances'
 import { supabase } from '../lib/supabase'
-import { useTemplates } from '../hooks/useTemplates'
-import type { AllocationTemplate, TemplateEntry } from '../lib/types'
+import { toast } from '../lib/toast'
+import type { AllocationCategory, Maintenance, Project, TeamMember, TimeOff } from '../lib/types'
 
-/* ── helpers ──────────────────────────────────────────────────── */
+// ── helpers ───────────────────────────────────────────────────────────────────
 
 function localDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
-
 function getMonday(d: Date): string {
   const c = new Date(d.getFullYear(), d.getMonth(), d.getDate())
   const day = c.getDay()
   c.setDate(c.getDate() + (day === 0 ? -6 : 1 - day))
   return localDate(c)
 }
-
-function weekDaysOf(monday: string): string[] {
+function weekDays(monday: string): string[] {
   const d = new Date(monday + 'T00:00:00')
   return Array.from({ length: 5 }, (_, i) => {
     const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() + i)
     return localDate(x)
   })
 }
-
 function shiftWeek(monday: string, n: number): string {
   const d = new Date(monday + 'T00:00:00')
   return localDate(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n * 7))
 }
-
-function dayLabel(s: string): string {
-  const d = new Date(s + 'T00:00:00')
-  return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]
-}
-function dayNum(s: string): string {
-  const d = new Date(s + 'T00:00:00')
-  return `${d.getDate()}/${d.getMonth() + 1}`
-}
-
 function fmtWeekLabel(monday: string): string {
-  return new Date(monday + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  const mon = new Date(monday + 'T00:00:00')
+  const fri = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + 4)
+  const m = mon.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
+  const f = fri.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  return `${m} – ${f}`
+}
+function timeOffWorkDays(timeOff: TimeOff[], days: string[]): number {
+  return days.filter(d => timeOff.some(t => d >= t.start_date && d <= t.end_date)).length
+}
+function utilizationColor(pct: number): string {
+  if (pct > 100) return 'var(--red)'
+  if (pct >= 70) return 'var(--green)'
+  if (pct >= 50) return 'var(--amber)'
+  return 'var(--c4)'
+}
+function parsePriority(notes: string | null | undefined): 'none' | 'high' | 'urgent' {
+  if (!notes) return 'none'
+  if (notes.includes('[URGENT]')) return 'urgent'
+  if (notes.includes('[HIGH]')) return 'high'
+  return 'none'
+}
+const PRIORITY_CHIP: Record<'none' | 'high' | 'urgent', { bg: string; color: string }> = {
+  none:   { bg: 'var(--navy-light)', color: 'var(--navy)' },
+  high:   { bg: '#fff8e1',           color: '#e65100' },
+  urgent: { bg: '#fce4ec',           color: '#c62828' },
 }
 
-const CATS: { value: AllocationCategory; label: string; color: string; bg: string; billable: boolean }[] = [
-  { value: 'project',     label: 'Project',     color: 'var(--navy)', bg: 'var(--navy-light)', billable: true },
-  { value: 'maintenance', label: 'Maintenance', color: '#c2410c',     bg: '#fff7ed',           billable: true },
-  { value: 'internal',    label: 'Internal',    color: 'var(--blue)', bg: '#e8f4fd',           billable: false },
-  { value: 'meeting',     label: 'Meeting',     color: '#e67700',     bg: '#fff3e0',           billable: false },
-  { value: 'admin',       label: 'Admin',       color: 'var(--c3)',   bg: 'var(--c7)',         billable: false },
-  { value: 'leave',       label: 'Leave',       color: 'var(--red)',  bg: '#fce4ec',           billable: false },
-]
+// ── types ─────────────────────────────────────────────────────────────────────
 
-function catInfo(c: AllocationCategory) { return CATS.find(x => x.value === c)! }
-
-/* ── grouped alloc type ──────────────────────────────────────── */
-
-interface AllocGroup {
-  key: string
-  memberId: string
-  category: AllocationCategory
-  projectId: string | null
-  projectLabel: string
-  label: string | null
-  dayHours: Record<string, number>
-  allocIds: Record<string, string>
-  weekTotal: number
-  recurring: boolean
-  recurringGroupId: string | null
-  isDeadlineWeek: boolean
-  hasUnplanned: boolean
+interface ProjectChip {
+  label: string
+  hours: number
+  priority: 'none' | 'high' | 'urgent'
 }
 
-/* ── assign entry (multi-assign) ─────────────────────────────── */
+interface MemberStats {
+  member: TeamMember
+  capacity: number
+  allocated: number
+  utilization: number
+  projectChips: ProjectChip[]
+  hasMaintenance: boolean
+  offDays: number
+  leaveHours: number
+}
 
-interface AssignEntry {
-  id: number
+interface AssignForm {
   category: AllocationCategory
   projectId: string
-  label: string
-  mode: 'week' | 'day'
-  totalHours: number
-  dayHours: number[]
-  recurring: boolean
-  repeatWeeks: number
-  billable: boolean
-  hasDeadline: boolean
-  deadlineDate: string
+  maintenanceId: string
+  customLabel: string
+  hours: number
+  isBillable: boolean
+  priority: 'none' | 'high' | 'urgent'
+  deadline: string
+  note: string
+  leaveDays: string[]
+  leaveHoursPerDay: number
 }
 
-let entryIdCounter = 0
-function newEntry(fridayDate: string): AssignEntry {
-  return { id: ++entryIdCounter, category: 'project', projectId: '', label: '', mode: 'week', totalHours: 20, dayHours: [0, 0, 0, 0, 0], recurring: false, repeatWeeks: 4, billable: true, hasDeadline: false, deadlineDate: fridayDate }
+const DEFAULT_FORM: AssignForm = {
+  category: 'project',
+  projectId: '',
+  maintenanceId: '',
+  customLabel: '',
+  hours: 8,
+  isBillable: true,
+  priority: 'none',
+  deadline: '',
+  note: '',
+  leaveDays: [],
+  leaveHoursPerDay: 8,
 }
 
-/* ── WizardSteps helper ───────────────────────────────────────── */
+const CAT_OPTIONS: { value: AllocationCategory; label: string; defaultBillable: boolean }[] = [
+  { value: 'project',     label: 'Project',         defaultBillable: true },
+  { value: 'maintenance', label: 'Maintenance',      defaultBillable: true },
+  { value: 'internal',    label: 'Internal',         defaultBillable: false },
+  { value: 'meeting',     label: 'Meeting',          defaultBillable: false },
+  { value: 'admin',       label: 'Admin',            defaultBillable: false },
+  { value: 'sales',       label: 'Sales',            defaultBillable: false },
+  { value: 'leave',       label: 'Leave / Time Off', defaultBillable: false },
+]
 
-function WizardSteps({ step }: { step: number }) {
-  const labels = ['Projects', 'Budgets & Team', 'AI Plan', 'Review']
+// ── AssignModal ───────────────────────────────────────────────────────────────
+
+function AssignModal({
+  member,
+  days,
+  projects,
+  maintenances,
+  alreadyPlanned,
+  weekCapacity,
+  onClose,
+  onSave,
+}: {
+  member: TeamMember
+  days: string[]
+  projects: Project[]
+  maintenances: Maintenance[]
+  alreadyPlanned: number
+  weekCapacity: number
+  onClose: () => void
+  onSave: (rows: Array<{
+    member_id: string; project_id?: string | null; category: AllocationCategory
+    date: string; hours: number; label?: string | null; notes?: string | null
+    is_billable?: boolean; deadline_date?: string | null
+  }>) => Promise<void>
+}) {
+  const [form, setForm] = useState<AssignForm>({ ...DEFAULT_FORM, leaveHoursPerDay: member.hours_per_day })
+  const [saving, setSaving] = useState(false)
+  const [projSearch, setProjSearch] = useState('')
+  const [maintSearch, setMaintSearch] = useState('')
+
+  const filteredProjects = projects.filter(p =>
+    p.status === 'active' &&
+    (projSearch === '' || `${p.pn} ${p.name}`.toLowerCase().includes(projSearch.toLowerCase()))
+  )
+
+  const filteredMaintenances = maintenances.filter(m =>
+    m.status === 'active' &&
+    (maintSearch === '' || `${m.name}`.toLowerCase().includes(maintSearch.toLowerCase()))
+  )
+
+  const isLeave = form.category === 'leave'
+  const usesDayPicker = isLeave || form.category === 'meeting'
+
+  function toggleLeaveDay(d: string) {
+    setForm(f => ({
+      ...f,
+      leaveDays: f.leaveDays.includes(d) ? f.leaveDays.filter(x => x !== d) : [...f.leaveDays, d],
+    }))
+  }
+
+  async function doSave(keepOpen: boolean) {
+    if (usesDayPicker) {
+      if (form.leaveDays.length === 0) { toast('error', 'Select at least one day'); return }
+      if (form.leaveHoursPerDay <= 0) { toast('error', 'Hours must be > 0'); return }
+      const noteStr = form.note.trim() || null
+      const rows = form.leaveDays.map(date => ({
+        member_id: member.id, project_id: null,
+        category: form.category,
+        date, hours: form.leaveHoursPerDay,
+        label: isLeave ? null : (form.customLabel.trim() || null),
+        notes: noteStr, is_billable: false, deadline_date: null,
+      }))
+      setSaving(true)
+      try { await onSave(rows); if (keepOpen) setForm(f => ({ ...f, leaveDays: [] })) }
+      finally { setSaving(false) }
+      return
+    }
+    const hoursPerDay = Math.round((form.hours / days.length) * 10) / 10
+    if (hoursPerDay <= 0) { toast('error', 'Hours must be > 0'); return }
+    const noteStr = [
+      form.priority !== 'none' ? `[${form.priority.toUpperCase()}]` : '',
+      form.note.trim(),
+    ].filter(Boolean).join(' ')
+    const projectId = form.category === 'project' ? (form.projectId || null)
+      : form.category === 'maintenance' ? (form.maintenanceId || null)
+      : null
+    const rows = days.map(date => ({
+      member_id: member.id, project_id: projectId,
+      category: form.category, date, hours: hoursPerDay,
+      label: form.customLabel.trim() || null,
+      notes: noteStr || null,
+      is_billable: form.isBillable,
+      deadline_date: form.deadline || null,
+    }))
+    setSaving(true)
+    try {
+      await onSave(rows)
+      if (keepOpen) setForm(f => ({ ...f, projectId: '', maintenanceId: '', customLabel: '', priority: 'none', note: '', deadline: '' }))
+    } finally { setSaving(false) }
+  }
+
+  const pickedTotal = form.leaveDays.length * form.leaveHoursPerDay
+  const remaining = weekCapacity - alreadyPlanned
+  const isOver = remaining < 0
+
+  const isSaveDisabled = saving || (
+    usesDayPicker ? form.leaveDays.length === 0 :
+    form.category === 'project' ? !form.projectId :
+    form.category === 'maintenance' ? !form.maintenanceId :
+    false
+  )
+  const saveLabel = isLeave
+    ? `Mark ${form.leaveDays.length}d off`
+    : form.category === 'meeting'
+      ? `Add to ${form.leaveDays.length} day${form.leaveDays.length !== 1 ? 's' : ''}`
+      : `Assign ${form.hours}h`
+
   return (
-    <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20 }}>
-      {labels.map((label, i) => {
-        const n = i + 1
-        const done = step > n
-        const active = step === n
-        return (
-          <Fragment key={n}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-              <div style={{
-                width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center',
-                justifyContent: 'center', fontSize: 10, fontWeight: 800,
-                background: done || active ? 'var(--navy)' : 'var(--c6)',
-                color: done || active ? '#fff' : 'var(--c3)',
-              }}>{done ? '✓' : n}</div>
-              <span style={{ fontSize: 10, color: active ? 'var(--navy)' : 'var(--c3)', fontWeight: active ? 700 : 400, whiteSpace: 'nowrap' }}>{label}</span>
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 720 }}>
+        <div className="modal-header">
+          <div style={{ flex: 1 }}>
+            <h3 style={{ marginBottom: 10 }}>Assign to {member.name}</h3>
+            <div style={{ display: 'flex', gap: 20 }}>
+              {[
+                { label: 'Already planned', value: `${alreadyPlanned}h`, color: alreadyPlanned > weekCapacity ? 'var(--red)' : 'var(--c0)' },
+                { label: 'Capacity', value: `${weekCapacity}h`, color: 'var(--c0)' },
+                { label: 'Remaining', value: `${remaining}h`, color: remaining < 0 ? 'var(--red)' : 'var(--green)' },
+              ].map(s => (
+                <div key={s.label}>
+                  <div style={{ fontSize: 10, color: 'var(--c4)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>{s.label}</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.value}</div>
+                </div>
+              ))}
             </div>
-            {i < labels.length - 1 && (
-              <div style={{ flex: 1, height: 2, background: step > n ? 'var(--navy)' : 'var(--c6)', margin: '0 4px', marginBottom: 14 }} />
+            {isOver && (
+              <div style={{ marginTop: 10, padding: '7px 12px', background: '#fce4ec', borderRadius: 6, fontSize: 12, color: '#c62828', fontWeight: 600 }}>
+                ⚠ Over capacity by {Math.abs(remaining)}h — consider reducing hours or moving work to another week.
+              </div>
             )}
-          </Fragment>
-        )
-      })}
+          </div>
+          <button className="modal-close" onClick={onClose}>&times;</button>
+        </div>
+        <div className="modal-body">
+
+          {/* Category tabs */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 18 }}>
+            {CAT_OPTIONS.map(opt => (
+              <button key={opt.value} type="button"
+                onClick={() => setForm(f => ({
+                  ...f, category: opt.value, projectId: '', maintenanceId: '', customLabel: '',
+                  leaveDays: [], leaveHoursPerDay: member.hours_per_day,
+                  isBillable: opt.defaultBillable,
+                }))}
+                style={{
+                  padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  border: form.category === opt.value ? '2px solid var(--navy)' : '2px solid var(--c5)',
+                  background: form.category === opt.value ? 'var(--navy)' : '#fff',
+                  color: form.category === opt.value ? '#fff' : 'var(--c2)',
+                }}
+              >{opt.label}</button>
+            ))}
+          </div>
+
+          {/* Priority buttons (not for leave) */}
+          {!isLeave && (
+            <div style={{ marginBottom: 16 }}>
+              <div className="form-label" style={{ marginBottom: 6 }}>Priority</div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {(['none', 'high', 'urgent'] as const).map(p => {
+                  const colors = { none: { bg: '#fff', border: 'var(--c5)', text: 'var(--c2)' }, high: { bg: '#fff8e1', border: '#ffcc02', text: '#e65100' }, urgent: { bg: '#fce4ec', border: '#ef9a9a', text: '#c62828' } }
+                  const c = colors[p]
+                  const active = form.priority === p
+                  return (
+                    <button key={p} type="button"
+                      onClick={() => setForm(f => ({ ...f, priority: p }))}
+                      style={{
+                        padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                        border: `2px solid ${active ? c.border : 'var(--c5)'}`,
+                        background: active ? c.bg : '#fff',
+                        color: active ? c.text : 'var(--c3)',
+                        boxShadow: active ? `0 0 0 1px ${c.border}` : 'none',
+                      }}
+                    >{p === 'none' ? 'No priority' : p.charAt(0).toUpperCase() + p.slice(1)}</button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Project select */}
+          {form.category === 'project' && (
+            <div className="form-group" style={{ marginBottom: 16 }}>
+              <label className="form-label">Project</label>
+              <input placeholder="Search projects..." value={projSearch} onChange={e => setProjSearch(e.target.value)} style={{ marginBottom: 8 }} />
+              <div style={{ maxHeight: 150, overflowY: 'auto', border: '1px solid var(--c6)', borderRadius: 6 }}>
+                {filteredProjects.length === 0 && <div style={{ padding: '10px 12px', color: 'var(--c4)', fontSize: 13 }}>No projects found</div>}
+                {filteredProjects.map(p => (
+                  <div key={p.id} onClick={() => setForm(f => ({ ...f, projectId: p.id }))}
+                    style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--c7)', background: form.projectId === p.id ? 'var(--navy-light)' : '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <span style={{ fontSize: 12, color: 'var(--c3)', marginRight: 8 }}>{p.pn}</span>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>{p.name}</span>
+                    </div>
+                    {p.client && <span style={{ fontSize: 11, color: 'var(--c4)' }}>{p.client.name}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Maintenance select */}
+          {form.category === 'maintenance' && (
+            <div className="form-group" style={{ marginBottom: 16 }}>
+              <label className="form-label">Maintenance Contract</label>
+              <input placeholder="Search maintenances..." value={maintSearch} onChange={e => setMaintSearch(e.target.value)} style={{ marginBottom: 8 }} />
+              <div style={{ maxHeight: 150, overflowY: 'auto', border: '1px solid var(--c6)', borderRadius: 6 }}>
+                {filteredMaintenances.length === 0 && <div style={{ padding: '10px 12px', color: 'var(--c4)', fontSize: 13 }}>No active maintenances found</div>}
+                {filteredMaintenances.map(m => (
+                  <div key={m.id} onClick={() => setForm(f => ({ ...f, maintenanceId: m.id }))}
+                    style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--c7)', background: form.maintenanceId === m.id ? 'var(--navy-light)' : '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>{m.name}</span>
+                      {m.client && <span style={{ fontSize: 11, color: 'var(--c4)', marginLeft: 8 }}>{m.client.name}</span>}
+                    </div>
+                    <span style={{ fontSize: 11, color: 'var(--c4)' }}>{m.hours_included}h/mo</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Custom label */}
+          {(form.category === 'internal' || form.category === 'meeting' || form.category === 'admin' || form.category === 'sales') && (
+            <div className="form-group" style={{ marginBottom: 16 }}>
+              <label className="form-label">Label</label>
+              <input placeholder="e.g. Team workshop, Sales call…" value={form.customLabel} onChange={e => setForm(f => ({ ...f, customLabel: e.target.value }))} />
+            </div>
+          )}
+
+          {/* Day picker (leave + meeting) */}
+          {usesDayPicker && (
+            <div style={{ marginBottom: 20 }}>
+              <div className="form-label" style={{ marginBottom: 8 }}>
+                {isLeave ? 'Select days off' : 'Select meeting days'}
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                {days.map(d => {
+                  const wd = new Date(d + 'T00:00:00')
+                  const selected = form.leaveDays.includes(d)
+                  return (
+                    <button key={d} type="button" onClick={() => toggleLeaveDay(d)}
+                      style={{
+                        flex: 1, padding: '10px 4px', borderRadius: 8, cursor: 'pointer',
+                        border: selected ? '2px solid var(--navy)' : '2px solid var(--c5)',
+                        background: selected ? 'var(--navy)' : '#fff',
+                        color: selected ? '#fff' : 'var(--c3)',
+                        fontSize: 12, fontWeight: 700, textAlign: 'center',
+                      }}
+                    >
+                      <div>{wd.toLocaleDateString('en-US', { weekday: 'short' })}</div>
+                      <div style={{ fontSize: 10, fontWeight: 400, marginTop: 2, opacity: 0.8 }}>{wd.getDate()}/{wd.getMonth() + 1}</div>
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="form-group">
+                <label className="form-label">Hours per day</label>
+                <input type="number" min={0.5} max={member.hours_per_day} step={0.5}
+                  value={form.leaveHoursPerDay}
+                  onChange={e => setForm(f => ({ ...f, leaveHoursPerDay: Number(e.target.value) }))}
+                  style={{ maxWidth: 120 }} />
+                {form.leaveDays.length > 0 && (
+                  <div className="form-hint">{form.leaveDays.length} day{form.leaveDays.length > 1 ? 's' : ''} · {pickedTotal}h total</div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Hours + Deadline + Billable (not for day-picker categories) */}
+          {!usesDayPicker && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 16 }}>
+              <div className="form-group">
+                <label className="form-label">Total Hours (week)</label>
+                <input type="number" min={0.5} step={0.5} value={form.hours}
+                  onChange={e => setForm(f => ({ ...f, hours: Number(e.target.value) }))} />
+                <div className="form-hint">{(form.hours / days.length).toFixed(1)}h / day</div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Deadline (optional)</label>
+                <input type="date" value={form.deadline} onChange={e => setForm(f => ({ ...f, deadline: e.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Billable</label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={form.isBillable}
+                    onChange={e => setForm(f => ({ ...f, isBillable: e.target.checked }))}
+                    style={{ width: 16, height: 16, accentColor: 'var(--green)' }} />
+                  <span style={{ fontSize: 13, color: form.isBillable ? 'var(--green)' : 'var(--c3)', fontWeight: 600 }}>
+                    {form.isBillable ? 'Billable' : 'Non-billable'}
+                  </span>
+                </label>
+              </div>
+            </div>
+          )}
+
+          {/* Note */}
+          {!isLeave && (
+            <div className="form-group">
+              <label className="form-label">Note for member dashboard</label>
+              <textarea rows={2} placeholder="e.g. Focus on checkout flow, coordinate with design team…"
+                value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
+                style={{ resize: 'vertical' }} />
+            </div>
+          )}
+        </div>
+
+        <div className="modal-footer">
+          <button className="btn btn-secondary btn-sm" onClick={onClose}>Cancel</button>
+          <button className="btn btn-secondary btn-sm" disabled={isSaveDisabled} onClick={() => doSave(true)}>
+            {saving ? 'Saving…' : `${saveLabel} + Add more`}
+          </button>
+          <button className="btn btn-primary btn-sm" disabled={isSaveDisabled} onClick={() => doSave(false)}>
+            {saving ? 'Saving…' : saveLabel}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
 
-/* ═══════════════════════════════════════════════════════════════ */
+// ── ProjectPoolPanel ──────────────────────────────────────────────────────────
 
-export function ResourcePlanningView() {
-  const {
-    members, allocations, loading,
-    fetchMembers, fetchAllocations,
-    addAllocationsBatch, removeAllocation, removeRecurringGroup,
-    removeAllocationsForWeek,
-    deliverables, fetchDeliverables,
-  } = useResourceStore()
-  const projects: Project[] = useProjectsStore(s => s.projects)
-  const fetchProjects = useProjectsStore(s => s.fetchAll)
-
-  const { templates, saveTemplate, deleteTemplate, applyTemplate } = useTemplates()
-
-  const [weekStart, setWeekStart] = useState(() => getMonday(new Date()))
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const [detailGroup, setDetailGroup] = useState<AllocGroup | null>(null)
-
-  // filters
+function ProjectPoolPanel({ projects, onClose }: { projects: Project[]; onClose: () => void }) {
   const [search, setSearch] = useState('')
-  const [filterTeam, setFilterTeam] = useState('')
+  const active = projects.filter(p =>
+    p.status === 'active' &&
+    (search === '' || `${p.pn} ${p.name}`.toLowerCase().includes(search.toLowerCase()))
+  )
+  return (
+    <div style={{
+      position: 'fixed', top: 0, right: 0, bottom: 0, width: 320, zIndex: 200,
+      background: '#fff', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)',
+      display: 'flex', flexDirection: 'column',
+    }}>
+      <div style={{ padding: '20px 20px 12px', borderBottom: '1px solid var(--c6)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 800 }}>Project Pool</div>
+          <div style={{ fontSize: 12, color: 'var(--c4)' }}>{active.length} active projects</div>
+        </div>
+        <button className="btn btn-ghost btn-sm" onClick={onClose}>&times;</button>
+      </div>
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--c6)' }}>
+        <input placeholder="Search projects..." value={search} onChange={e => setSearch(e.target.value)} style={{ width: '100%' }} />
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+        {active.map(p => (
+          <div key={p.id} style={{ padding: '10px 16px', borderBottom: '1px solid var(--c7)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--c4)', marginBottom: 2 }}>{p.pn}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--c0)' }}>{p.name}</div>
+                {p.client && <div style={{ fontSize: 11, color: 'var(--c4)', marginTop: 2 }}>{p.client.name}</div>}
+              </div>
+              <span className={`badge ${p.type === 'fixed' ? 'badge-blue' : p.type === 'maintenance' ? 'badge-amber' : 'badge-green'}`}>
+                {p.type}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
-  // assign modal
-  const [assignFor, setAssignFor] = useState<string | null>(null)
-  const [assignEntries, setAssignEntries] = useState<AssignEntry[]>([])
-  const [bufferStats, setBufferStats] = useState<Map<string, MemberBufferStats>>(new Map())
-  const [assignTab, setAssignTab] = useState<'simple' | 'advanced'>('simple')
+// ── SummaryModal ──────────────────────────────────────────────────────────────
 
-  // batch assign modal
-  const [showBatch, setShowBatch] = useState(false)
-  const [batchMembers, setBatchMembers] = useState<Set<string>>(new Set())
-  const [batchCategory, setBatchCategory] = useState<AllocationCategory>('admin')
-  const [batchLabel, setBatchLabel] = useState('')
-  const [batchProjectId, setBatchProjectId] = useState('')
-  const [batchHours, setBatchHours] = useState(0.5)
-  const [batchFreq, setBatchFreq] = useState<'daily' | 'weekly' | 'monthly'>('daily')
-  const [batchWeekDay, setBatchWeekDay] = useState(1) // 1=Mon
-  const [batchMonthDay, setBatchMonthDay] = useState(1) // 1st of month
-  const [batchWeeks, setBatchWeeks] = useState(4)
-  const [batchSaving, setBatchSaving] = useState(false)
-
-  // template state
-  const [showTemplatesDropdown, setShowTemplatesDropdown] = useState(false)
-  const [showSaveTemplate, setShowSaveTemplate] = useState(false)
-  const [saveTemplateName, setSaveTemplateName] = useState('')
-  const [lastWeekDismissed, setLastWeekDismissed] = useState(false)
-  const [lastWeekAllocations, setLastWeekAllocations] = useState<ResourceAllocation[]>([])
-
-  // smart plan modal
-  const [showSmartPlan, setShowSmartPlan] = useState(false)
-  const [smartLoading, setSmartLoading] = useState(false)
-  const [smartSuggestions, setSmartSuggestions] = useState<{ member_id: string; project_id: string; category: AllocationCategory; weekly_hours: number; label: string; reason: string }[]>([])
-  const [smartRemovedIdx, setSmartRemovedIdx] = useState<Set<number>>(new Set())
-  const [smartSaving, setSmartSaving] = useState(false)
-
-  // smart allocate wizard
-  const [showWizard, setShowWizard] = useState(false)
-  const [wizardStep, setWizardStep] = useState<1 | 2 | 3 | 4>(1)
-  const [wizardMonth, setWizardMonth] = useState(() => {
-    const d = new Date()
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-  })
-  const [wizardSelectedProjects, setWizardSelectedProjects] = useState<Set<string>>(new Set())
-  const [wizardBudgets, setWizardBudgets] = useState<Record<string, number>>({})
-  const [wizardProjectMembers, setWizardProjectMembers] = useState<Record<string, string[]>>({})
-  const [wizardPlan, setWizardPlan] = useState<{
-    week_start: string
-    allocations: { member_id: string; project_id: string; weekly_hours: number; reason: string; _id: string }[]
-  }[]>([])
-  const [wizardLoading, setWizardLoading] = useState(false)
-  const [wizardSaveAsTemplate, setWizardSaveAsTemplate] = useState(false)
-  const [wizardTemplateName, setWizardTemplateName] = useState('')
-  const [wizardSaving, setWizardSaving] = useState(false)
-
-  const days = weekDaysOf(weekStart)
-  const weekEnd = days[4]
-  const teams = useResourceStore(s => s.teams)
-  const fetchTeams = useResourceStore(s => s.fetchTeams)
-  const allActive = members.filter(m => m.active)
-  const active = allActive.filter(m => {
-    if (search && !m.name.toLowerCase().includes(search.toLowerCase())) return false
-    if (filterTeam && m.team_id !== filterTeam) return false
-    return true
-  })
-
-  useEffect(() => { fetchMembers(); fetchProjects(); fetchTeams(); fetchDeliverables() }, [])
-  useEffect(() => { fetchAllocations(weekStart, weekEnd) }, [weekStart])
-  useEffect(() => {
-    if (!assignFor) return
-    analyzeMemberBuffer(assignFor).then(stats => {
-      setBufferStats(prev => new Map(prev).set(assignFor, stats))
-    })
-  }, [assignFor])
-
-  useEffect(() => {
-    setLastWeekDismissed(sessionStorage.getItem('rp_lastweek_dismissed_' + weekStart) === '1')
-  }, [weekStart])
-
-  useEffect(() => {
-    const prevMonday = (() => {
-      const d = new Date(weekStart + 'T00:00:00')
-      d.setDate(d.getDate() - 7)
-      return localDate(d)
-    })()
-    const prevFriday = (() => {
-      const d = new Date(weekStart + 'T00:00:00')
-      d.setDate(d.getDate() - 3)
-      return localDate(d)
-    })()
-    supabase.from('resource_allocations')
-      .select('*, project:projects(id, pn, name)')
-      .gte('date', prevMonday).lte('date', prevFriday)
-      .then(({ data }) => setLastWeekAllocations((data ?? []) as ResourceAllocation[]))
-  }, [weekStart])
-
-  /* ── grouping ─── */
-
-  const grouped = useCallback((): Record<string, AllocGroup[]> => {
-    const r: Record<string, AllocGroup[]> = {}
-    for (const m of active) r[m.id] = []
-    for (const a of allocations) {
-      if (!r[a.member_id]) continue
-      const k = `${a.member_id}:${a.category}:${a.project_id || a.label || a.category}`
-      let g = r[a.member_id].find(x => x.key === k)
-      if (!g) {
-        g = {
-          key: k, memberId: a.member_id, category: a.category,
-          projectId: a.project_id || null,
-          projectLabel: (a.category === 'project' || a.category === 'maintenance') ? (a.project ? `${a.project.pn} — ${a.project.name}` : '?') : (a.label || a.category),
-          label: a.label || null, dayHours: {}, allocIds: {}, weekTotal: 0,
-          recurring: !!a.recurring_group_id, recurringGroupId: a.recurring_group_id || null,
-          isDeadlineWeek: false, hasUnplanned: false,
-        }
-        r[a.member_id].push(g)
-      }
-      g.dayHours[a.date] = (g.dayHours[a.date] || 0) + a.hours
-      g.allocIds[a.date] = a.id
-      g.weekTotal += a.hours
-      if ((a.notes || '').includes('[DEADLINE]') || a.deadline_date) g.isDeadlineWeek = true
-      if (a.is_unplanned) g.hasUnplanned = true
-    }
-    return r
-  }, [allocations, active])
-
-  const groups = grouped()
-  const unplannedCount = allocations.filter(a => a.is_unplanned).length
-  const mTotal = (mid: string) => (groups[mid] || []).reduce((s, g) => s + g.weekTotal, 0)
-  const mDayTotal = (mid: string, d: string) => allocations.filter(a => a.member_id === mid && a.date === d).reduce((s, a) => s + a.hours, 0)
-
-  const showLastWeekBanner = !lastWeekDismissed
-    && allocations.length === 0
-    && lastWeekAllocations.length > 0
-
-  const lastWeekSummary = useMemo(() => {
-    const groups: Record<string, number> = {}
-    for (const a of lastWeekAllocations) {
-      const label = (a.project as { pn?: string } | null)?.pn ?? (a as { label?: string }).label ?? a.category
-      const key = `${a.member_id}::${label}`
-      groups[key] = (groups[key] || 0) + a.hours
-    }
-    return Object.entries(groups).slice(0, 4).map(([key, h]) => {
-      const [mid, label] = key.split('::')
-      const m = allActive.find(x => x.id === mid)
-      return `${m?.name ?? '?'} ${h}h ${label}`
-    }).join(' · ')
-  }, [lastWeekAllocations, allActive])
-
-  function buildLastWeekTemplate(): Pick<AllocationTemplate, 'entries'> {
-    const grps: Record<string, TemplateEntry> = {}
-    for (const a of lastWeekAllocations) {
-      const key = `${a.member_id}::${a.project_id ?? a.category}`
-      if (!grps[key]) {
-        const m = allActive.find(x => x.id === a.member_id)
-        const proj = a.project as { pn?: string; name?: string } | null
-        grps[key] = {
-          member_id: a.member_id,
-          member_name: m?.name ?? '?',
-          project_id: a.project_id ?? null,
-          project_label: proj ? `${proj.pn} — ${proj.name}` : (a as { label?: string }).label ?? a.category,
-          category: a.category,
-          weekly_hours: 0,
-          is_billable: a.is_billable,
-        }
-      }
-      grps[key].weekly_hours += a.hours
-    }
-    return { entries: Object.values(grps) }
-  }
-
-  /* ── assign ─── */
-
-  const openAssign = (mid: string) => {
-    setAssignFor(mid)
-    setAssignEntries([newEntry(weekEnd)])
-  }
-
-  const updateEntry = (id: number, patch: Partial<AssignEntry>) => {
-    setAssignEntries(prev => prev.map(e => e.id === id ? { ...e, ...patch } : e))
-  }
-  const removeEntry = (id: number) => {
-    setAssignEntries(prev => prev.filter(e => e.id !== id))
-  }
-
-  const handleAssign = async () => {
-    if (!assignFor) return
-    try {
-      const allRows: Array<{ member_id: string; project_id?: string | null; category: AllocationCategory; date: string; hours: number; label?: string | null; notes?: string | null; recurring_group_id?: string | null }> = []
-
-      for (const entry of assignEntries) {
-        if ((entry.category === 'project' || entry.category === 'maintenance') && !entry.projectId) { toast('error', 'Select a project for each entry'); return }
-        const weeksN = entry.recurring ? entry.repeatWeeks : 1
-        const gid = entry.recurring ? crypto.randomUUID() : null
-
-        for (let w = 0; w < weeksN; w++) {
-          const wkDays = weekDaysOf(shiftWeek(weekStart, w))
-          const base = {
-            member_id: assignFor,
-            project_id: (entry.category === 'project' || entry.category === 'maintenance') ? entry.projectId : null,
-            category: entry.category,
-            label: (entry.category !== 'project' && entry.category !== 'maintenance') ? (entry.label || null) : null,
-            notes: entry.hasDeadline ? '[DEADLINE]' : null,
-            is_billable: entry.billable,
-            deadline_date: entry.hasDeadline ? entry.deadlineDate : null,
-            recurring_group_id: gid,
-          }
-          if (entry.mode === 'day') {
-            entry.dayHours.forEach((h, i) => { if (h > 0) allRows.push({ ...base, date: wkDays[i], hours: h }) })
-          } else {
-            const wkStart = shiftWeek(weekStart, w)
-            const daySlots = distributeWeekly(wkStart, assignFor, entry.totalHours, allActive, allocations)
-            daySlots.forEach(({ date, hours }) => { allRows.push({ ...base, date, hours }) })
-          }
-        }
-      }
-
-      if (allRows.length === 0) { toast('error', 'Nothing to allocate'); return }
-      await addAllocationsBatch(allRows)
-      toast('success', `Allocated ${allRows.reduce((s, r) => s + r.hours, 0)}h`)
-      setAssignFor(null)
-    } catch { toast('error', 'Failed to allocate') }
-  }
-
-  /* ── delete ─── */
-
-  const deleteGroup = async (g: AllocGroup) => {
-    try {
-      if (g.recurringGroupId) { await removeRecurringGroup(g.recurringGroupId); toast('success', 'Series removed') }
-      else { await removeAllocationsForWeek(g.memberId, g.projectId, g.category, weekStart, weekEnd); toast('success', 'Removed') }
-      setDetailGroup(null)
-    } catch { toast('error', 'Failed') }
-  }
-
-  const deleteDay = async (allocId: string, g: AllocGroup, day: string) => {
-    try {
-      await removeAllocation(allocId)
-      toast('success', 'Day removed')
-      const hrs = g.dayHours[day] || 0
-      setDetailGroup({ ...g, dayHours: { ...g.dayHours, [day]: 0 }, allocIds: { ...g.allocIds, [day]: '' }, weekTotal: g.weekTotal - hrs })
-    } catch { toast('error', 'Failed') }
-  }
-
-  const projectOptions = projects.filter((p: Project) => p.status === 'active').map((p: Project) => ({ value: p.id, label: `${p.pn} — ${p.name}` }))
-
-  /* ── batch assign ──────────────────────────────────────────── */
-
-  const openBatch = () => {
-    setBatchMembers(new Set(allActive.map(m => m.id)))
-    setBatchCategory('admin')
-    setBatchLabel('')
-    setBatchProjectId('')
-    setBatchHours(0.5)
-    setBatchFreq('daily')
-    setBatchWeekDay(1)
-    setBatchMonthDay(1)
-    setBatchWeeks(4)
-    setShowBatch(true)
-  }
-
-  const handleBatchAssign = async () => {
-    if (batchMembers.size === 0) { toast('error', 'Select at least one member'); return }
-    const needsProject = batchCategory === 'project' || batchCategory === 'maintenance'
-    if (needsProject && !batchProjectId) { toast('error', 'Select a project'); return }
-    if (!needsProject && !batchLabel.trim()) { toast('error', 'Enter a label'); return }
-    setBatchSaving(true)
-    try {
-      const rows: Array<{ member_id: string; category: AllocationCategory; date: string; hours: number; project_id?: string | null; label?: string | null; is_billable: boolean; recurring_group_id?: string }> = []
-      const gid = crypto.randomUUID()
-      const cat = CATS.find(c => c.value === batchCategory)!
-
-      for (let w = 0; w < batchWeeks; w++) {
-        const wkStart = shiftWeek(weekStart, w)
-        const wkDays = weekDaysOf(wkStart)
-
-        for (const mid of batchMembers) {
-          const base = {
-            member_id: mid,
-            category: batchCategory,
-            project_id: needsProject ? batchProjectId : null,
-            label: needsProject ? null : batchLabel.trim(),
-            is_billable: cat.billable,
-            recurring_group_id: batchWeeks > 1 ? gid : undefined,
-          }
-          if (batchFreq === 'daily') {
-            wkDays.forEach(d => rows.push({ ...base, date: d, hours: batchHours }))
-          } else if (batchFreq === 'weekly') {
-            const d = wkDays[Math.min(batchWeekDay, 4)]
-            rows.push({ ...base, date: d, hours: batchHours })
-          } else {
-            // monthly — find the target day in the month of wkStart
-            const ref = new Date(wkStart + 'T00:00:00')
-            const target = new Date(ref.getFullYear(), ref.getMonth(), batchMonthDay)
-            if (target.getDay() !== 0 && target.getDay() !== 6) {
-              const ds = `${target.getFullYear()}-${String(target.getMonth()+1).padStart(2,'0')}-${String(target.getDate()).padStart(2,'0')}`
-              // only add once per month
-              if (!rows.find(r => r.member_id === mid && r.date === ds)) {
-                rows.push({ ...base, date: ds, hours: batchHours })
-              }
-            }
-          }
-        }
-      }
-
-      if (rows.length === 0) { toast('error', 'Nothing to allocate'); setBatchSaving(false); return }
-      await addAllocationsBatch(rows)
-      toast('success', `Added ${rows.length} allocations for ${batchMembers.size} member${batchMembers.size > 1 ? 's' : ''}`)
-      setShowBatch(false)
-    } catch { toast('error', 'Failed to batch assign') }
-    finally { setBatchSaving(false) }
-  }
-
-  /* ── smart plan ────────────────────────────────────────────── */
-
-  const runSmartPlan = async () => {
-    setSmartLoading(true)
-    setSmartSuggestions([])
-    setSmartRemovedIdx(new Set())
-    try {
-      const EDGE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/smart-planner`
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-      const res = await fetch(EDGE_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'apikey': anonKey, 'Authorization': `Bearer ${anonKey}` },
-        body: JSON.stringify({ members: allActive, deliverables, allocations, weekStart, weekEnd, projects }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        if (data.suggestions?.length) {
-          setSmartSuggestions(data.suggestions)
-        } else {
-          toast('info', 'AI returned no suggestions for this week')
-        }
-      } else {
-        throw new Error('Edge function error')
-      }
-    } catch {
-      toast('error', 'Smart planner unavailable — check Supabase edge function')
-    } finally {
-      setSmartLoading(false)
-    }
-  }
-
-  const applySmartPlan = async () => {
-    const toApply = smartSuggestions.filter((_, i) => !smartRemovedIdx.has(i))
-    if (toApply.length === 0) { toast('error', 'Nothing selected'); return }
-    setSmartSaving(true)
-    try {
-      const expanded = toApply.flatMap(s =>
-        distributeWeekly(weekStart, s.member_id, s.weekly_hours, allActive, allocations).map(({ date, hours }) => ({
-          member_id: s.member_id,
-          project_id: s.project_id || null,
-          category: s.category,
-          date,
-          hours,
-          label: s.label || null,
-          is_billable: s.category === 'project' || s.category === 'maintenance',
-        }))
-      )
-      if (expanded.length === 0) { toast('error', 'No available capacity to distribute hours'); return }
-      await addAllocationsBatch(expanded)
-      toast('success', `Applied ${expanded.length} day allocations from ${toApply.length} suggestions`)
-      setShowSmartPlan(false)
-      setSmartSuggestions([])
-    } catch { toast('error', 'Failed to apply plan') }
-    finally { setSmartSaving(false) }
-  }
-
-  /* ── smart allocate wizard ─────────────────────────────────── */
-
-  function resetWizard() {
-    setWizardStep(1)
-    setWizardSelectedProjects(new Set())
-    setWizardBudgets({})
-    setWizardProjectMembers({})
-    setWizardPlan([])
-    setWizardLoading(false)
-    setWizardSaveAsTemplate(false)
-    setWizardTemplateName('')
-  }
-
-  async function runWizardAI() {
-    setWizardLoading(true)
-    setWizardPlan([])
-    try {
-      const monthStart = wizardMonth + '-01'
-      const selectedProjs = projects.filter(p => wizardSelectedProjects.has(p.id))
-      const projPayload = selectedProjs.map(p => ({
-        id: p.id, pn: p.pn, name: p.name,
-        budget_hours: wizardBudgets[p.id] ?? 40,
-        member_ids: wizardProjectMembers[p.id] ?? [],
-        deliverables: deliverables.filter(d => d.project_id === p.id && d.status === 'active')
-          .map(d => ({ title: d.title, due_date: d.due_date ?? null, estimated_hours: d.estimated_hours ?? null })),
-      }))
-
-      const monthEnd = (() => {
-        const d = new Date(monthStart + 'T00:00:00')
-        d.setMonth(d.getMonth() + 1)
-        d.setDate(0)
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-      })()
-      const { data: monthAllocs } = await supabase.from('resource_allocations')
-        .select('member_id, date, hours')
-        .gte('date', monthStart).lte('date', monthEnd)
-
-      const EDGE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/smart-allocator`
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-      const res = await fetch(EDGE_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'apikey': anonKey, 'Authorization': `Bearer ${anonKey}` },
-        body: JSON.stringify({
-          projects: projPayload,
-          members: allActive.map(m => ({ id: m.id, name: m.name, hours_per_day: m.hours_per_day, role: m.role ?? null })),
-          month_start: monthStart,
-          existing_allocations: monthAllocs ?? [],
-        }),
-      })
-      if (!res.ok) throw new Error('Edge function error')
-      const data = await res.json()
-
-      const plan = (data.weeks ?? []).map((w: { week_start: string; allocations: { member_id: string; project_id: string; weekly_hours: number; reason: string }[] }) => ({
-        week_start: w.week_start,
-        allocations: (w.allocations ?? [])
-          .map((a: { member_id: string; project_id: string; weekly_hours: number; reason: string }) => ({
-            ...a,
-            weekly_hours: Number(a.weekly_hours),
-            _id: Math.random().toString(36).slice(2),
-          }))
-          .filter((a: { member_id: string; project_id: string; weekly_hours: number }) =>
-            a.weekly_hours > 0 &&
-            allActive.some(m => m.id === a.member_id) &&
-            wizardSelectedProjects.has(a.project_id)
-          ),
-      }))
-      setWizardPlan(plan)
-      setWizardStep(3)
-    } catch {
-      toast('error', 'Smart allocator unavailable — check Supabase edge function')
-    } finally {
-      setWizardLoading(false)
-    }
-  }
-
-  async function handleWizardApply() {
-    setWizardSaving(true)
-    try {
-      const monthStart = wizardMonth + '-01'
-      const monthEnd = (() => {
-        const d = new Date(monthStart + 'T00:00:00')
-        d.setMonth(d.getMonth() + 1)
-        d.setDate(0)
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-      })()
-
-      const { data: monthAllocs } = await supabase.from('resource_allocations')
-        .select('member_id, date, hours, id')
-        .gte('date', monthStart).lte('date', monthEnd)
-
-      const existingByWeek = (weekStartStr: string) => (monthAllocs ?? []).filter(a => {
-        const d = new Date(a.date + 'T00:00:00')
-        const mon = new Date(weekStartStr + 'T00:00:00')
-        const fri = new Date(mon)
-        fri.setDate(fri.getDate() + 4)
-        return d >= mon && d <= fri
-      })
-
-      const rows: { member_id: string; project_id: string | null; category: AllocationCategory; date: string; hours: number; is_billable: boolean }[] = []
-      for (const week of wizardPlan) {
-        const weekSlice = existingByWeek(week.week_start) as ResourceAllocation[]
-        for (const alloc of week.allocations) {
-          if (alloc.weekly_hours <= 0) continue
-          const daySlots = distributeWeekly(week.week_start, alloc.member_id, alloc.weekly_hours, allActive, weekSlice)
-          for (const { date, hours } of daySlots) {
-            rows.push({
-              member_id: alloc.member_id,
-              project_id: alloc.project_id,
-              category: 'project',
-              date,
-              hours,
-              is_billable: true,
-            })
-          }
-        }
-      }
-
-      if (rows.length === 0) { toast('info', 'No capacity available'); setWizardSaving(false); return }
-      await addAllocationsBatch(rows)
-
-      if (wizardSaveAsTemplate && wizardTemplateName.trim()) {
-        const entryMap: Record<string, { sum: number; count: number; entry: TemplateEntry }> = {}
-        for (const week of wizardPlan) {
-          for (const alloc of week.allocations) {
-            if (alloc.weekly_hours <= 0) continue
-            const key = `${alloc.member_id}::${alloc.project_id}`
-            const m = allActive.find(x => x.id === alloc.member_id)
-            const proj = projects.find(p => p.id === alloc.project_id)
-            if (!entryMap[key]) {
-              entryMap[key] = {
-                sum: 0, count: 0,
-                entry: {
-                  member_id: alloc.member_id, member_name: m?.name ?? '?',
-                  project_id: alloc.project_id, project_label: proj ? `${proj.pn} — ${proj.name}` : '?',
-                  category: 'project', weekly_hours: 0, is_billable: true,
-                }
-              }
-            }
-            entryMap[key].sum += alloc.weekly_hours
-            entryMap[key].count += 1
-          }
-        }
-        const entries: TemplateEntry[] = Object.values(entryMap).map(({ sum, count, entry }) => ({
-          ...entry, weekly_hours: Math.round((sum / count) * 2) / 2,
-        }))
-        await saveTemplate(wizardTemplateName.trim(), entries)
-      }
-
-      toast('success', `Applied ${rows.length} allocations across the month`)
-      setShowWizard(false)
-      resetWizard()
-    } catch {
-      toast('error', 'Failed to apply plan')
-    } finally {
-      setWizardSaving(false)
-    }
-  }
-
-  /* ── render ────────────────────────────────────────────────── */
+function SummaryModal({
+  memberStats,
+  weekStart,
+  onClose,
+}: {
+  memberStats: MemberStats[]
+  weekStart: string
+  onClose: () => void
+}) {
+  const totalCapacity = memberStats.reduce((s, ms) => s + ms.capacity, 0)
+  const totalAllocated = memberStats.reduce((s, ms) => s + ms.allocated, 0)
+  const buffer = totalCapacity - totalAllocated
+  const overAllocated = memberStats.filter(ms => ms.utilization > 100)
+  const fri = new Date(weekStart + 'T00:00:00')
+  fri.setDate(fri.getDate() + 4)
+  const weekLabel = `${new Date(weekStart + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${fri.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
 
   return (
-    <div>
-      <div className="page-header">
-        <div><h1>Resource Planning</h1><p>Weekly team allocation</p></div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {/* Templates dropdown */}
-          <div style={{ position: 'relative' }}>
-            <button className="btn btn-secondary btn-sm" onClick={e => { e.stopPropagation(); setShowTemplatesDropdown(v => !v) }}>
-              📋 Templates ▾
-            </button>
-            {showTemplatesDropdown && (
-              <div style={{
-                position: 'absolute', top: '100%', right: 0, zIndex: 200, marginTop: 4,
-                background: '#fff', border: '1px solid var(--c6)', borderRadius: 8,
-                boxShadow: '0 8px 24px rgba(0,0,0,0.12)', minWidth: 280, padding: 8,
-              }} onClick={e => e.stopPropagation()}>
-                {templates.length === 0 && (
-                  <div style={{ padding: '10px 8px', fontSize: 13, color: 'var(--c3)' }}>No saved templates yet.</div>
-                )}
-                {templates.map(t => (
-                  <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 6 }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--c0)' }}>{t.name}</div>
-                      <div style={{ fontSize: 11, color: 'var(--c3)' }}>{t.entries.length} entries</div>
-                    </div>
-                    <button className="btn btn-primary btn-xs" onClick={async () => {
-                      setShowTemplatesDropdown(false)
-                      await applyTemplate(t, weekStart, allocations, allActive, addAllocationsBatch)
-                    }}>Apply</button>
-                    <button className="btn btn-ghost btn-xs" onClick={() => deleteTemplate(t.id)}>×</button>
-                  </div>
-                ))}
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
+        <div className="modal-header">
+          <div>
+            <h3 style={{ marginBottom: 2 }}>Weekly Planning Summary</h3>
+            <div style={{ fontSize: 12, color: 'var(--c4)' }}>Week of {weekLabel} · Complete capacity review</div>
+          </div>
+          <button className="modal-close" onClick={onClose}>&times;</button>
+        </div>
+        <div className="modal-body">
+
+          {/* stat cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
+            {[
+              { label: 'Total Capacity', value: `${totalCapacity}h`, sub: null, color: 'var(--navy)' },
+              { label: 'Allocated', value: `${totalAllocated}h`, sub: `${Math.round((totalAllocated / (totalCapacity || 1)) * 100)}% utilized`, color: 'var(--green)' },
+              { label: 'Buffer Remaining', value: `${Math.max(0, buffer)}h`, sub: buffer < totalCapacity * 0.1 ? 'Low buffer' : 'Healthy', color: buffer < 0 ? 'var(--red)' : 'var(--amber)' },
+              { label: 'Over-allocated', value: String(overAllocated.length), sub: overAllocated.length > 0 ? 'Team member' + (overAllocated.length > 1 ? 's' : '') : 'None', color: overAllocated.length > 0 ? 'var(--red)' : 'var(--green)' },
+            ].map(s => (
+              <div key={s.label} style={{ background: 'var(--c7)', borderRadius: 10, padding: '14px 16px' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>{s.label}</div>
+                <div style={{ fontSize: 24, fontWeight: 800, color: s.color }}>{s.value}</div>
+                {s.sub && <div style={{ fontSize: 11, color: 'var(--c4)', marginTop: 3 }}>{s.sub}</div>}
               </div>
+            ))}
+          </div>
+
+          {/* capacity by member */}
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--c1)', marginBottom: 12 }}>Capacity by Team Member</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {memberStats.map(ms => {
+                const pct = ms.capacity > 0 ? Math.min(1, ms.allocated / ms.capacity) : 0
+                const barColor = ms.utilization > 100 ? 'var(--red)' : ms.utilization >= 70 ? 'var(--green)' : ms.utilization >= 50 ? 'var(--amber)' : 'var(--c5)'
+                return (
+                  <div key={ms.member.id} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 140, fontSize: 13, fontWeight: 600, color: 'var(--c1)', flexShrink: 0 }}>
+                      {ms.member.name}
+                      {ms.member.role && <div style={{ fontSize: 11, color: 'var(--c4)', fontWeight: 400 }}>{ms.member.role}</div>}
+                    </div>
+                    <div style={{ flex: 1, height: 8, background: 'var(--c6)', borderRadius: 4, overflow: 'hidden' }}>
+                      <div style={{ width: `${pct * 100}%`, height: '100%', background: barColor, borderRadius: 4 }} />
+                    </div>
+                    <div style={{ width: 80, textAlign: 'right', fontSize: 13, fontWeight: 700, color: barColor }}>
+                      {ms.allocated}h / {ms.capacity}h
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* over-allocated */}
+          {overAllocated.length > 0 && (
+            <div style={{ background: '#fce4ec', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--red)', marginBottom: 8 }}>⚠ Over-allocated Members</div>
+              {overAllocated.map(ms => (
+                <div key={ms.member.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
+                  <span style={{ fontWeight: 600 }}>{ms.member.name}</span>
+                  <span style={{ color: 'var(--red)', fontWeight: 700 }}>+{ms.allocated - ms.capacity}h over</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* maintenance buffer note */}
+          {memberStats.some(ms => ms.hasMaintenance) && (
+            <div style={{ background: '#fff8e1', borderRadius: 10, padding: '12px 16px', fontSize: 13, color: '#e65100' }}>
+              <strong>Maintenance buffer:</strong> Some members have maintenance allocations. Variable maintenance demand may consume additional capacity — keep buffer available.
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-primary btn-sm" onClick={onClose}>Done</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── MemberRow ─────────────────────────────────────────────────────────────────
+
+function MemberRow({ stats, onAssign, onEdit, onShareLink }: { stats: MemberStats; onAssign: () => void; onEdit: () => void; onShareLink: () => void }) {
+  const { member, capacity, allocated, utilization, projectChips, hasMaintenance, offDays, leaveHours } = stats
+  const pct = capacity > 0 ? Math.min(1, allocated / capacity) : 0
+  const barColor = utilization > 100 ? 'var(--red)' : utilization >= 70 ? 'var(--green)' : utilization >= 50 ? 'var(--amber)' : 'var(--c5)'
+  const teamColor = member.team?.color ?? '#64748b'
+
+  return (
+    <tr style={{ borderBottom: '1px solid var(--c7)' }}>
+      {/* Member */}
+      <td style={{ padding: '14px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{
+            width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
+            background: teamColor + '22', color: teamColor,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 13, fontWeight: 800,
+          }}>
+            {member.name.charAt(0)}
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--c0)' }}>{member.name}</span>
+              <button
+                onClick={onShareLink}
+                title="Copy member dashboard link"
+                style={{ background: 'none', border: 'none', padding: '1px 3px', cursor: 'pointer', fontSize: 12, color: 'var(--c4)', lineHeight: 1 }}
+              >🔗</button>
+            </div>
+            <div style={{ fontSize: 11, color: teamColor, fontWeight: 600 }}>
+              {member.team?.name ?? '—'}{member.role ? ` · ${member.role}` : ''}
+            </div>
+          </div>
+        </div>
+      </td>
+
+      {/* Availability */}
+      <td style={{ padding: '14px 12px', verticalAlign: 'middle' }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--c1)' }}>
+          {capacity}h
+          {offDays > 0 && <span style={{ fontSize: 11, color: 'var(--amber)', marginLeft: 6 }}>−{offDays}d off</span>}
+          {leaveHours > 0 && <span style={{ fontSize: 11, color: '#c62828', marginLeft: 6 }}>−{leaveHours}h leave</span>}
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--c4)' }}>{member.hours_per_day}h/day</div>
+      </td>
+
+      {/* Current projects */}
+      <td style={{ padding: '14px 12px', verticalAlign: 'middle', maxWidth: 280 }}>
+        {projectChips.length === 0 ? (
+          <span style={{ fontSize: 12, color: 'var(--c5)' }}>No assignments</span>
+        ) : (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {projectChips.slice(0, 4).map((chip, i) => {
+              const c = PRIORITY_CHIP[chip.priority]
+              return (
+                <span key={i} style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: c.bg, color: c.color }}>
+                  {chip.label} <span style={{ opacity: 0.7 }}>({chip.hours}h)</span>
+                </span>
+              )
+            })}
+            {projectChips.length > 4 && (
+              <span style={{ fontSize: 11, color: 'var(--c4)', alignSelf: 'center' }}>+{projectChips.length - 4}</span>
+            )}
+            {hasMaintenance && (
+              <span title="Has maintenance allocations — keep buffer available" style={{
+                padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700,
+                background: '#fff8e1', color: '#e65100', cursor: 'default',
+              }}>M buffer</span>
             )}
           </div>
-
-          {/* Save as template */}
-          <button className="btn btn-secondary btn-sm" onClick={() => {
-            const d = new Date(weekStart + 'T00:00:00')
-            const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-            setSaveTemplateName(`Sprint Week ${label}`)
-            setShowSaveTemplate(true)
-          }}>💾 Save week</button>
-
-          <button className="btn btn-secondary btn-sm" onClick={openBatch}>⚡ Batch Assign</button>
-          <button className="btn btn-primary btn-sm" onClick={() => { setShowSmartPlan(true); runSmartPlan() }}>✦ Smart Plan</button>
-          <button className="btn btn-primary btn-sm" onClick={() => { resetWizard(); setShowWizard(true) }}>✦ Smart Allocate</button>
-        </div>
-      </div>
-
-      <div className="page-content" onClick={() => setShowTemplatesDropdown(false)}>
-        {/* ── Week nav ─── */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
-          <button className="btn btn-secondary" onClick={() => setWeekStart(shiftWeek(weekStart, -1))} style={{ height: 42, padding: '0 18px', fontSize: 14 }}>&larr; Prev</button>
-          <button className="btn btn-ghost" onClick={() => setWeekStart(getMonday(new Date()))} style={{ height: 42, padding: '0 18px', fontSize: 14, color: 'var(--navy)', fontWeight: 600 }}>Today</button>
-          <h2 style={{ fontSize: 20, fontWeight: 800, color: 'var(--c0)', margin: 0 }}>Week of {fmtWeekLabel(weekStart)}</h2>
-          <button className="btn btn-secondary" onClick={() => setWeekStart(shiftWeek(weekStart, 1))} style={{ height: 42, padding: '0 18px', fontSize: 14 }}>Next &rarr;</button>
-          {loading && <span style={{ fontSize: 13, color: 'var(--c4)' }}>Loading...</span>}
-        </div>
-
-        {showLastWeekBanner && (
-          <div style={{
-            background: 'var(--navy-light)', border: '1px solid var(--c5)',
-            borderRadius: 8, padding: '10px 14px', marginBottom: 12,
-            display: 'flex', alignItems: 'center', gap: 10,
-          }}>
-            <span style={{ fontSize: 14 }}>💡</span>
-            <span style={{ fontSize: 13, flex: 1, color: 'var(--c1)' }}>
-              <strong>Repeat last week?</strong> {lastWeekSummary}
-            </span>
-            <button className="btn btn-primary btn-sm" onClick={async () => {
-              await applyTemplate(buildLastWeekTemplate(), weekStart, allocations, allActive, addAllocationsBatch)
-            }}>Apply</button>
-            <button className="btn btn-ghost btn-sm" onClick={() => {
-              sessionStorage.setItem('rp_lastweek_dismissed_' + weekStart, '1')
-              setLastWeekDismissed(true)
-            }}>Dismiss</button>
-          </div>
         )}
+      </td>
 
-        {/* ── Filters ─── */}
-        <div style={{ display: 'flex', gap: 12, marginBottom: 20, alignItems: 'center' }}>
-          <input
-            value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search by name..."
-            style={{ width: 220 }}
-          />
-          <Select
-            value={filterTeam}
-            onChange={v => setFilterTeam(v)}
-            options={[{ value: '', label: 'All teams' }, ...teams.map(t => ({ value: t.id, label: t.name }))]}
-            style={{ width: 180 }}
-          />
-          {/* Stats summary */}
-          {(() => {
-            const overAlloc = allActive.filter(m => {
-              return days.some(d => mDayTotal(m.id, d) > m.hours_per_day)
-            })
-            const underAlloc = allActive.filter(m => {
-              const cap = m.hours_per_day * 5
-              return cap > 0 && mTotal(m.id) < cap * 0.5
-            })
-            return (
-              <div style={{ marginLeft: 'auto', display: 'flex', gap: 12 }}>
-                {unplannedCount > 0 && (
-                  <span className="badge badge-amber" style={{ fontSize: 13, padding: '6px 12px' }}>
-                    ⚡ {unplannedCount} unplanned
-                  </span>
-                )}
-                {overAlloc.length > 0 && (
-                  <span className="badge badge-red" style={{ fontSize: 13, padding: '6px 12px' }}>
-                    {overAlloc.length} over-allocated
-                  </span>
-                )}
-                {underAlloc.length > 0 && (
-                  <span className="badge badge-amber" style={{ fontSize: 13, padding: '6px 12px' }}>
-                    {underAlloc.length} under 50%
-                  </span>
-                )}
-                <span style={{ fontSize: 14, color: 'var(--c3)' }}>{active.length} people</span>
-              </div>
-            )
-          })()}
-        </div>
-
-        {/* ── People ─── */}
-        {active.map(member => {
-          const gs = groups[member.id] || []
-          const total = mTotal(member.id)
-          const cap = member.hours_per_day * 5
-          const pct = cap > 0 ? Math.round((total / cap) * 100) : 0
-          const isExp = expanded.has(member.id)
-          const hasOverDay = days.some(d => mDayTotal(member.id, d) > member.hours_per_day)
-          const isUnder = cap > 0 && pct < 50
-
-          return (
-            <div key={member.id} className="card" style={{ marginBottom: 20 }}>
-              {/* ── Person header ─── */}
-              <div
-                onClick={() => setExpanded(prev => { const n = new Set(prev); n.has(member.id) ? n.delete(member.id) : n.add(member.id); return n })}
-                style={{ display: 'flex', alignItems: 'center', padding: '16px 20px', cursor: 'pointer', gap: 16, borderBottom: isExp && gs.length > 0 ? '2px solid var(--c6)' : undefined }}
-              >
-                <span style={{ fontSize: 14, color: 'var(--c4)', width: 18 }}>{isExp ? '▾' : '▸'}</span>
-
-                {/* Name + team — left side, plenty of room */}
-                <div style={{ minWidth: 200, flex: '0 0 200px' }}>
-                  <div style={{ fontWeight: 800, fontSize: 17, color: 'var(--c0)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    {member.name}
-                    {gs.some(g => g.isDeadlineWeek) && <span className="badge badge-red" style={{ fontSize: 10 }}>DEADLINE</span>}
-                    {hasOverDay && <span className="badge badge-red" style={{ fontSize: 10 }}>OVER</span>}
-                    {isUnder && <span className="badge badge-amber" style={{ fontSize: 10 }}>LOW</span>}
-                  </div>
-                  <div style={{ fontSize: 13, color: 'var(--c4)', marginTop: 2 }}>
-                    {member.team ? <span style={{ color: member.team.color, fontWeight: 600 }}>{member.team.name}</span> : 'No team'}
-                    {member.role && <span> · {member.role}</span>}
-                  </div>
-                </div>
-
-                {/* Capacity — middle */}
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ fontSize: 14, color: 'var(--c3)', whiteSpace: 'nowrap' }}>{total}h / {cap}h</span>
-                  <div style={{ flex: 1, maxWidth: 160, height: 8, borderRadius: 4, background: 'var(--c6)', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, borderRadius: 4, background: pct > 100 ? 'var(--red)' : pct >= 80 ? 'var(--green)' : 'var(--blue)', transition: 'width .2s' }} />
-                  </div>
-                  <span className={pct > 100 ? 'badge badge-red' : pct >= 80 ? 'badge badge-green' : 'badge badge-gray'} style={{ fontSize: 13, fontWeight: 700 }}>{pct}%</span>
-                </div>
-
-                {/* Daily mini — right side */}
-                <div style={{ display: 'flex', gap: 6 }}>
-                  {days.map(d => {
-                    const dt = mDayTotal(member.id, d)
-                    const isOver = dt > member.hours_per_day
-                    const isFull = dt === member.hours_per_day
-                    return (
-                      <div key={d} style={{ textAlign: 'center', width: 44 }}>
-                        <div style={{ fontSize: 11, color: 'var(--c4)', marginBottom: 2 }}>{dayLabel(d)}</div>
-                        <div style={{
-                          fontSize: 14, fontWeight: 700, padding: '3px 0', borderRadius: 6,
-                          background: isOver ? 'rgba(211,47,47,.15)' : isFull ? 'rgba(5,150,105,.15)' : dt > 0 ? 'rgba(5,150,105,.06)' : 'var(--c7)',
-                          color: isOver ? 'var(--red)' : isFull ? 'var(--green)' : dt > 0 ? 'var(--c1)' : 'var(--c5)',
-                          border: isOver ? '2px solid var(--red)' : '2px solid transparent',
-                        }}>{dt || '—'}</div>
-                      </div>
-                    )
-                  })}
-                </div>
-
-                <button className="btn btn-primary" onClick={e => { e.stopPropagation(); openAssign(member.id) }} style={{ height: 44, padding: '0 24px', fontSize: 15, fontWeight: 700, whiteSpace: 'nowrap' }}>
-                  + Assign
-                </button>
-              </div>
-
-              {/* ── Expanded rows ─── */}
-              {isExp && (
-                <div>
-                  {gs.length > 0 && (
-                    <div style={{ display: 'flex', alignItems: 'center', padding: '8px 20px', background: 'var(--c7)', borderBottom: '1px solid var(--c6)' }}>
-                      <div style={{ width: 32 }} />
-                      <div style={{ flex: 1, fontSize: 12, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '.5px' }}>Allocation</div>
-                      {days.map(d => <div key={d} style={{ width: 64, textAlign: 'center', fontSize: 12, fontWeight: 700, color: 'var(--c4)' }}>{dayLabel(d)} {dayNum(d)}</div>)}
-                      <div style={{ width: 64, textAlign: 'center', fontSize: 12, fontWeight: 700, color: 'var(--c4)' }}>Total</div>
-                    </div>
-                  )}
-                  {gs.map(g => {
-                    const ci = catInfo(g.category)
-                    return (
-                      <div
-                        key={g.key}
-                        onClick={() => setDetailGroup(g)}
-                        style={{ display: 'flex', alignItems: 'center', padding: '12px 20px', borderBottom: '1px solid var(--c6)', cursor: 'pointer', transition: 'background .1s' }}
-                        onMouseEnter={e => (e.currentTarget.style.background = '#fafbfc')}
-                        onMouseLeave={e => (e.currentTarget.style.background = '')}
-                      >
-                        <div style={{ width: 32, display: 'flex', justifyContent: 'center' }}>
-                          <div style={{ width: 12, height: 12, borderRadius: '50%', background: ci.color, flexShrink: 0 }} />
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--c0)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.projectLabel}</span>
-                            {g.recurring && <span className="badge badge-blue" style={{ fontSize: 10 }}>↻</span>}
-                            {g.hasUnplanned && <span className="badge badge-amber" style={{ fontSize: 10 }}>⚡ UNPLANNED</span>}
-                            {g.isDeadlineWeek && <span className="badge badge-red" style={{ fontSize: 10 }}>DEADLINE</span>}
-                          </div>
-                          <div style={{ fontSize: 12, color: ci.color, fontWeight: 600 }}>{ci.label}</div>
-                        </div>
-                        {days.map(d => {
-                          const hrs = g.dayHours[d] || 0
-                          return (
-                            <div key={d} style={{ width: 64, textAlign: 'center' }}>
-                              {hrs > 0 ? (
-                                <span style={{
-                                  display: 'inline-block', padding: '5px 0', width: 48, borderRadius: 8,
-                                  fontSize: 15, fontWeight: 700,
-                                  background: ci.bg, color: ci.color,
-                                  borderLeft: `4px solid ${ci.color}`,
-                                }}>{hrs}h</span>
-                              ) : <span style={{ color: 'var(--c6)', fontSize: 14 }}>—</span>}
-                            </div>
-                          )
-                        })}
-                        <div style={{ width: 64, textAlign: 'center', fontWeight: 800, fontSize: 16, color: 'var(--c0)' }}>{g.weekTotal}h</div>
-                      </div>
-                    )
-                  })}
-                  {gs.length === 0 && (
-                    <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 15 }}>
-                      No allocations yet. Click <strong>+ Assign</strong> to add work.
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )
-        })}
-
-        {active.length === 0 && (
-          <div className="card" style={{ padding: 48, textAlign: 'center', color: 'var(--c4)', fontSize: 16 }}>
-            No team members. Go to <strong>Team</strong> to add people first.
+      {/* Allocated hours + bar */}
+      <td style={{ padding: '14px 12px', verticalAlign: 'middle', width: 180 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <div style={{ flex: 1, height: 6, background: 'var(--c6)', borderRadius: 3, overflow: 'hidden' }}>
+            <div style={{ width: `${pct * 100}%`, height: '100%', background: barColor, borderRadius: 3 }} />
           </div>
-        )}
-      </div>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--c2)', flexShrink: 0 }}>
+            {allocated}h / {capacity}h
+          </span>
+        </div>
+      </td>
 
-      {/* ═══════════ ASSIGN MODAL ═══════════ */}
-      {assignFor && (() => {
-        const member = members.find(m => m.id === assignFor)
-        if (!member) return null
-        return (
-          <div className="modal-overlay" onClick={() => { setAssignFor(null); setAssignTab('simple') }}>
-            <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 640, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
-              <div className="modal-header">
-                <h3>Assign to {member.name}</h3>
-                <button className="modal-close" onClick={() => { setAssignFor(null); setAssignTab('simple') }}>&times;</button>
-              </div>
+      {/* Utilization */}
+      <td style={{ padding: '14px 12px', verticalAlign: 'middle' }}>
+        <span style={{ fontSize: 14, fontWeight: 800, color: utilizationColor(utilization) }}>
+          {utilization}%
+        </span>
+        {utilization > 100 && <div style={{ fontSize: 10, color: 'var(--red)', fontWeight: 700 }}>OVER</div>}
+        {utilization < 50 && utilization >= 0 && <div style={{ fontSize: 10, color: 'var(--c4)' }}>LOW</div>}
+      </td>
 
-              <div className="modal-body" style={{ flex: 1, overflowY: 'auto' }}>
-                {/* Buffer suggestion */}
-                {bufferStats.get(assignFor) && (() => {
-                  const stats = bufferStats.get(assignFor)!
-                  if (stats.avgUnplannedHoursPerWeek <= 0) return null
-                  return (
-                    <div className="alert alert-amber" style={{ fontSize: 13, marginBottom: 12 }}>
-                      <strong>Buffer suggestion:</strong> Based on the last {stats.weeksAnalyzed} weeks,{' '}
-                      {member.name} averages <strong>{stats.avgUnplannedHoursPerWeek}h/week</strong> of unplanned work.
-                      Consider leaving some capacity free.
-                    </div>
-                  )
-                })()}
+      {/* Actions */}
+      <td style={{ padding: '14px 16px', verticalAlign: 'middle', textAlign: 'right' }}>
+        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+          {stats.projectChips.length > 0 && (
+            <button className="btn btn-ghost btn-sm" onClick={onEdit} style={{ fontSize: 12 }}>
+              Edit
+            </button>
+          )}
+          <button className="btn btn-primary btn-sm" onClick={onAssign} style={{ fontSize: 12 }}>
+            + Assign
+          </button>
+        </div>
+      </td>
+    </tr>
+  )
+}
 
-                {/* Capacity overview */}
-                <div style={{ background: 'var(--c7)', borderRadius: 10, padding: 14, marginBottom: 18 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 8 }}>Available capacity this week</div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    {days.map(d => {
-                      const used = mDayTotal(member.id, d)
-                      const avail = Math.max(0, member.hours_per_day - used)
-                      const isOver = used > member.hours_per_day
-                      return (
-                        <div key={d} style={{ flex: 1, textAlign: 'center' }}>
-                          <div style={{ fontSize: 12, color: 'var(--c4)', marginBottom: 3 }}>{dayLabel(d)}</div>
-                          <div style={{
-                            fontSize: 16, fontWeight: 800, padding: '6px 0', borderRadius: 8,
-                            background: isOver ? 'rgba(211,47,47,.1)' : avail === 0 ? 'rgba(5,150,105,.1)' : '#fff',
-                            color: isOver ? 'var(--red)' : avail === 0 ? 'var(--green)' : 'var(--c1)',
-                            border: isOver ? '2px solid var(--red)' : '1px solid var(--c6)',
-                          }}>
-                            {isOver ? `${used}h!` : `${avail}h`}
-                          </div>
-                          <div style={{ fontSize: 10, color: isOver ? 'var(--red)' : 'var(--c4)', marginTop: 2 }}>
-                            {isOver ? 'over!' : avail === 0 ? 'full' : `of ${member.hours_per_day}h`}
-                          </div>
-                        </div>
-                      )
-                    })}
-                    <div style={{ flex: 1, textAlign: 'center' }}>
-                      <div style={{ fontSize: 12, color: 'var(--c4)', marginBottom: 3 }}>Week</div>
-                      <div style={{ fontSize: 16, fontWeight: 800, padding: '6px 0', borderRadius: 8, background: '#fff', border: '1px solid var(--c6)', color: 'var(--c1)' }}>
-                        {Math.max(0, member.hours_per_day * 5 - mTotal(member.id))}h
-                      </div>
-                      <div style={{ fontSize: 10, color: 'var(--c4)', marginTop: 2 }}>free</div>
-                    </div>
-                  </div>
-                </div>
+// ── EditAllocationsModal ──────────────────────────────────────────────────────
 
-                {/* Simple / Advanced tabs */}
-                <div style={{ display: 'flex', border: '1px solid var(--c6)', borderRadius: 6, overflow: 'hidden', marginBottom: 16 }}>
-                  {(['simple', 'advanced'] as const).map(tab => (
-                    <button key={tab} onClick={() => setAssignTab(tab)} style={{
-                      flex: 1, padding: '8px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                      fontWeight: 700, fontSize: 13,
-                      background: assignTab === tab ? 'var(--navy)' : 'var(--c7)',
-                      color: assignTab === tab ? '#fff' : 'var(--c3)',
-                    }}>
-                      {tab === 'simple' ? 'Simple' : 'Advanced'}
-                    </button>
-                  ))}
-                </div>
+const CAT_BADGE: Record<AllocationCategory, { bg: string; color: string; label: string }> = {
+  project:     { bg: 'var(--navy-light)',  color: 'var(--navy)',  label: 'Project' },
+  maintenance: { bg: '#fff8e1',            color: '#e65100',      label: 'Maintenance' },
+  internal:    { bg: '#f3f4f6',            color: '#374151',      label: 'Internal' },
+  meeting:     { bg: '#ede9fe',            color: '#7c3aed',      label: 'Meeting' },
+  admin:       { bg: '#f3f4f6',            color: '#374151',      label: 'Admin' },
+  sales:       { bg: '#d1fae5',            color: '#065f46',      label: 'Sales' },
+  leave:       { bg: '#fce4ec',            color: '#c62828',      label: 'Leave' },
+}
 
-                {/* ── Simple tab ── */}
-                {assignTab === 'simple' && (() => {
-                  const e0 = assignEntries[0]
-                  const needsProject = e0.category === 'project' || e0.category === 'maintenance'
-                  return (
-                    <div>
-                      <div className="form-row">
-                        <div className="form-group">
-                          <label className="form-label">Type</label>
-                          <Select
-                            value={e0.category}
-                            onChange={v => {
-                              const cat = v as AllocationCategory
-                              const b = CATS.find(c => c.value === cat)?.billable ?? false
-                              setAssignEntries(prev => prev.map((e, i) => i === 0 ? { ...e, category: cat, billable: b } : e))
-                            }}
-                            options={CATS.map(c => ({ value: c.value, label: c.label }))}
-                          />
-                        </div>
-                        {needsProject ? (
-                          <div className="form-group">
-                            <label className="form-label">Project</label>
-                            <Select
-                              value={e0.projectId}
-                              onChange={v => setAssignEntries(prev => prev.map((e, i) => i === 0 ? { ...e, projectId: v } : e))}
-                              options={projectOptions}
-                              placeholder="Choose project..."
-                              searchable
-                            />
-                          </div>
-                        ) : (
-                          <div className="form-group">
-                            <label className="form-label">Description</label>
-                            <input
-                              value={e0.label}
-                              onChange={ev => setAssignEntries(prev => prev.map((e, i) => i === 0 ? { ...e, label: ev.target.value } : e))}
-                              placeholder={e0.category === 'leave' ? 'e.g. Annual leave' : e0.category === 'meeting' ? 'e.g. Sprint planning' : 'Description'}
-                            />
-                          </div>
-                        )}
-                      </div>
+type EditGroup = {
+  key: string
+  ids: string[]
+  category: AllocationCategory
+  label: string
+  dates: string[]
+  totalHours: number
+  notes: string
+  isBillable: boolean
+  priority: 'none' | 'high' | 'urgent'
+  dirty: boolean
+}
 
-                      <div className="form-group">
-                        <label className="form-label">Hours this week</label>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                          <input
-                            type="number" min={1} step={1}
-                            value={e0.totalHours}
-                            onChange={ev => setAssignEntries(prev => prev.map((e, i) => i === 0 ? { ...e, totalHours: Number(ev.target.value), mode: 'week' } : e))}
-                            style={{ width: 80, fontSize: 20, fontWeight: 800, textAlign: 'center' }}
-                          />
-                          <span style={{ fontSize: 15, color: 'var(--c3)' }}>hours</span>
-                          <div style={{ display: 'flex', gap: 4, marginLeft: 'auto', flexWrap: 'wrap' }}>
-                            {[4, 8, 16, 20, 24, 32, 40].map(h => (
-                              <button key={h} type="button"
-                                className={`btn ${e0.totalHours === h ? 'btn-primary' : 'btn-ghost'} btn-sm`}
-                                onClick={() => setAssignEntries(prev => prev.map((e, i) => i === 0 ? { ...e, totalHours: h, mode: 'week' } : e))}
-                                style={{ padding: '6px 12px', fontSize: 13 }}
-                              >{h}h</button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
+function buildGroups(allocations: import('../lib/types').ResourceAllocation[]): EditGroup[] {
+  const groupMap: Record<string, EditGroup> = {}
+  allocations.forEach(a => {
+    const p = a.project as { name?: string } | null | undefined
+    const lbl = p?.name ?? a.label ?? a.category.charAt(0).toUpperCase() + a.category.slice(1)
+    const pid = (a as { project_id?: string | null }).project_id ?? null
+    const key = pid ? `p:${pid}` : `l:${a.label ?? a.category}`
+    const pri = parsePriority(a.notes)
+    const note = (a.notes ?? '').replace(/^\[(HIGH|URGENT)\]\s*/, '').trim()
+    if (!groupMap[key]) {
+      groupMap[key] = { key, ids: [], category: a.category, label: lbl, dates: [], totalHours: 0, notes: note, isBillable: a.is_billable, priority: pri, dirty: false }
+    }
+    groupMap[key].ids.push(a.id)
+    groupMap[key].dates.push(a.date)
+    groupMap[key].totalHours = Math.round((groupMap[key].totalHours + a.hours) * 10) / 10
+    if (p?.name) groupMap[key].label = p.name
+    if (pri === 'urgent') groupMap[key].priority = 'urgent'
+    else if (pri === 'high' && groupMap[key].priority === 'none') groupMap[key].priority = 'high'
+  })
+  return Object.values(groupMap)
+}
 
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginTop: 8, flexWrap: 'wrap' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
-                          <input type="checkbox" checked={e0.recurring}
-                            onChange={ev => setAssignEntries(prev => prev.map((e, i) => i === 0 ? { ...e, recurring: ev.target.checked } : e))}
-                            style={{ width: 18, height: 18 }} />
-                          Repeat weekly
-                        </label>
-                        {e0.recurring && (
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14 }}>
-                            for <input type="number" value={e0.repeatWeeks}
-                              onChange={ev => setAssignEntries(prev => prev.map((e, i) => i === 0 ? { ...e, repeatWeeks: Number(ev.target.value) } : e))}
-                              min={2} max={52} style={{ width: 56, textAlign: 'center', fontSize: 14, padding: '6px' }} /> weeks
+function EditAllocationsModal({
+  member,
+  allocations,
+  onClose,
+  onUpdate,
+  onDelete,
+}: {
+  member: TeamMember
+  allocations: import('../lib/types').ResourceAllocation[]
+  onClose: () => void
+  onUpdate: (id: string, data: Partial<{ hours: number; notes: string | null; is_billable: boolean }>) => Promise<void>
+  onDelete: (id: string) => Promise<void>
+}) {
+  const [groups, setGroups] = useState<EditGroup[]>(() => buildGroups(allocations))
+  const [saving, setSaving] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
+
+  function setGroup(key: string, patch: Partial<EditGroup>) {
+    setGroups(gs => gs.map(g => g.key === key ? { ...g, ...patch, dirty: true } : g))
+  }
+
+  async function saveGroup(key: string) {
+    const g = groups.find(g => g.key === key)
+    if (!g || !g.dirty) return
+    const hoursPerDay = Math.round((g.totalHours / g.ids.length) * 10) / 10
+    const noteStr = [
+      g.priority !== 'none' ? `[${g.priority.toUpperCase()}]` : '',
+      g.notes.trim(),
+    ].filter(Boolean).join(' ')
+    setSaving(key)
+    try {
+      await Promise.all(g.ids.map(id => onUpdate(id, { hours: hoursPerDay, notes: noteStr || null, is_billable: g.isBillable })))
+      setGroups(gs => gs.map(g => g.key === key ? { ...g, dirty: false } : g))
+    } finally { setSaving(null) }
+  }
+
+  async function deleteGroup(key: string) {
+    const g = groups.find(g => g.key === key)
+    if (!g) return
+    setDeleting(key)
+    try {
+      await Promise.all(g.ids.map(id => onDelete(id)))
+      setGroups(gs => gs.filter(g => g.key !== key))
+    } finally { setDeleting(null) }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 720 }}>
+        <div className="modal-header">
+          <div>
+            <h3>Edit allocations — {member.name}</h3>
+            <div style={{ fontSize: 12, color: 'var(--c4)', marginTop: 2 }}>{groups.length} assignment{groups.length !== 1 ? 's' : ''} this week</div>
+          </div>
+          <button className="modal-close" onClick={onClose}>&times;</button>
+        </div>
+        <div className="modal-body">
+          {groups.length === 0 ? (
+            <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--c4)', fontSize: 14 }}>No allocations this week</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {groups.map(g => {
+                const cat = CAT_BADGE[g.category]
+                const isSav = saving === g.key
+                const isDel = deleting === g.key
+                const isLeaveG = g.category === 'leave'
+                const usesDayPickerG = isLeaveG || g.category === 'meeting'
+                const sortedDates = [...g.dates].sort()
+                return (
+                  <div key={g.key} style={{ border: `1px solid ${g.dirty ? 'var(--amber)' : 'var(--c6)'}`, borderRadius: 10, padding: '16px 18px', background: g.dirty ? '#fffbf0' : '#fff' }}>
+                    {/* Header row */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+                      <span style={{ padding: '3px 10px', borderRadius: 10, fontSize: 11, fontWeight: 700, background: cat.bg, color: cat.color }}>{cat.label}</span>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--c0)', flex: 1 }}>{g.label}</span>
+                      {/* Day chips */}
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        {sortedDates.map(d => (
+                          <span key={d} style={{ padding: '2px 7px', borderRadius: 6, fontSize: 11, fontWeight: 700, background: 'var(--navy-light)', color: 'var(--navy)' }}>
+                            {new Date(d + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' })}
                           </span>
-                        )}
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
-                          <input type="checkbox" checked={e0.billable}
-                            onChange={ev => setAssignEntries(prev => prev.map((e, i) => i === 0 ? { ...e, billable: ev.target.checked } : e))}
-                            style={{ width: 18, height: 18 }} />
-                          Billable
-                        </label>
-                      </div>
-
-                      <div className="modal-footer" style={{ padding: '16px 0 0', border: 'none' }}>
-                        <button className="btn btn-primary" onClick={handleAssign} style={{ height: 44, padding: '0 28px', fontSize: 15, fontWeight: 700, width: '100%' }}>
-                          Assign {e0.totalHours}h{e0.recurring ? ' + recurring' : ''}
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })()}
-
-                {/* ── Advanced tab ── */}
-                {assignTab === 'advanced' && (
-                  <div>
-                    {assignEntries.map((entry, idx) => (
-                      <div key={entry.id} style={{ border: '1.5px solid var(--c6)', borderRadius: 12, padding: 20, marginBottom: 16, position: 'relative' }}>
-                    {assignEntries.length > 1 && (
-                      <button className="btn btn-ghost btn-xs" onClick={() => removeEntry(entry.id)} style={{ position: 'absolute', top: 12, right: 12, color: 'var(--red)', fontSize: 16 }}>&times;</button>
-                    )}
-
-                    {idx > 0 && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 12 }}>Allocation {idx + 1}</div>}
-
-                    <div className="form-row">
-                      <div className="form-group">
-                        <label className="form-label">Type</label>
-                        <Select
-                          value={entry.category}
-                          onChange={v => { const cat = v as AllocationCategory; const b = CATS.find(c => c.value === cat)?.billable ?? false; updateEntry(entry.id, { category: cat, billable: b }) }}
-                          options={CATS.map(c => ({ value: c.value, label: c.label }))}
-                        />
-                      </div>
-                      {(entry.category === 'project' || entry.category === 'maintenance') ? (
-                        <div className="form-group">
-                          <label className="form-label">Project</label>
-                          <Select
-                            value={entry.projectId}
-                            onChange={v => updateEntry(entry.id, { projectId: v })}
-                            options={projectOptions}
-                            placeholder="Choose project..."
-                            searchable
-                          />
-                        </div>
-                      ) : (
-                        <div className="form-group">
-                          <label className="form-label">Description</label>
-                          <input
-                            value={entry.label}
-                            onChange={e => updateEntry(entry.id, { label: e.target.value })}
-                            placeholder={entry.category === 'leave' ? 'e.g. Annual leave' : entry.category === 'meeting' ? 'e.g. Sprint planning' : 'Description'}
-                          />
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Mode toggle */}
-                    <div className="form-group">
-                      <label className="form-label">Allocation mode</label>
-                      <div style={{ display: 'flex', gap: 2, background: 'var(--c7)', borderRadius: 10, padding: 3 }}>
-                        {(['week', 'day'] as const).map(m => (
-                          <button key={m} type="button" onClick={() => updateEntry(entry.id, { mode: m })}
-                            style={{
-                              flex: 1, padding: '10px 0', borderRadius: 8, border: 'none', fontSize: 14, fontWeight: entry.mode === m ? 700 : 400,
-                              background: entry.mode === m ? '#fff' : 'transparent',
-                              color: entry.mode === m ? 'var(--navy)' : 'var(--c4)',
-                              boxShadow: entry.mode === m ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                              cursor: 'pointer', fontFamily: 'inherit',
-                            }}
-                          >{m === 'week' ? 'Per week — auto split' : 'Per day — manual'}</button>
                         ))}
                       </div>
                     </div>
 
-                    {entry.mode === 'week' ? (
-                      <div className="form-group">
-                        <label className="form-label">Hours this week</label>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                          <input type="number" value={entry.totalHours} onChange={e => updateEntry(entry.id, { totalHours: Number(e.target.value) })} min={1} step={1} style={{ width: 80, fontSize: 20, fontWeight: 800, textAlign: 'center' }} />
-                          <span style={{ fontSize: 15, color: 'var(--c3)' }}>hours</span>
-                          <div style={{ display: 'flex', gap: 4, marginLeft: 'auto', flexWrap: 'wrap' }}>
-                            {[4, 8, 16, 20, 24, 32, 40].map(h => (
-                              <button key={h} type="button" className={`btn ${entry.totalHours === h ? 'btn-primary' : 'btn-ghost'} btn-sm`}
-                                onClick={() => updateEntry(entry.id, { totalHours: h })}
-                                style={{ padding: '6px 12px', fontSize: 13 }}
-                              >{h}h</button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="form-group">
-                        <label className="form-label">Hours per day</label>
-                        <div style={{ display: 'flex', gap: 10 }}>
-                          {days.map((d, i) => {
-                            const existing = mDayTotal(member.id, d)
-                            const planned = entry.dayHours[i]
-                            const wouldBe = existing + planned
-                            const isOver = wouldBe > member.hours_per_day && planned > 0
+                    {/* Priority (not for leave) */}
+                    {!isLeaveG && (
+                      <div style={{ marginBottom: 12 }}>
+                        <div className="form-label" style={{ marginBottom: 6 }}>Priority</div>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          {(['none', 'high', 'urgent'] as const).map(p => {
+                            const colors = { none: { bg: '#fff', border: 'var(--c5)', text: 'var(--c2)' }, high: { bg: '#fff8e1', border: '#ffcc02', text: '#e65100' }, urgent: { bg: '#fce4ec', border: '#ef9a9a', text: '#c62828' } }
+                            const c = colors[p]; const active = g.priority === p
                             return (
-                              <div key={d} style={{ flex: 1, textAlign: 'center' }}>
-                                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--c3)', marginBottom: 6 }}>{dayLabel(d)} {dayNum(d)}</div>
-                                <input type="number" min={0} max={24} step={1} value={planned}
-                                  onChange={e => { const h = [...entry.dayHours]; h[i] = Number(e.target.value); updateEntry(entry.id, { dayHours: h }) }}
-                                  style={{ textAlign: 'center', fontSize: 18, fontWeight: 700, padding: '10px 4px', borderColor: isOver ? 'var(--red)' : undefined, color: isOver ? 'var(--red)' : undefined }}
-                                />
-                                {isOver && <div style={{ fontSize: 10, color: 'var(--red)', marginTop: 2, fontWeight: 700 }}>{wouldBe}h total!</div>}
-                              </div>
+                              <button key={p} type="button" onClick={() => setGroup(g.key, { priority: p })}
+                                style={{ padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer', border: `2px solid ${active ? c.border : 'var(--c5)'}`, background: active ? c.bg : '#fff', color: active ? c.text : 'var(--c3)', boxShadow: active ? `0 0 0 1px ${c.border}` : 'none' }}
+                              >{p === 'none' ? 'No priority' : p.charAt(0).toUpperCase() + p.slice(1)}</button>
                             )
                           })}
-                        </div>
-                        <div style={{ textAlign: 'right', fontSize: 14, color: 'var(--c3)', marginTop: 8 }}>
-                          Total: <strong>{entry.dayHours.reduce((s, h) => s + h, 0)}h</strong>
                         </div>
                       </div>
                     )}
 
-                    {/* Options row */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginTop: 8 }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
-                        <input type="checkbox" checked={entry.recurring} onChange={e => updateEntry(entry.id, { recurring: e.target.checked })} style={{ width: 18, height: 18 }} />
-                        Repeat weekly
-                      </label>
-                      {entry.recurring && (
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14 }}>
-                          for <input type="number" value={entry.repeatWeeks} onChange={e => updateEntry(entry.id, { repeatWeeks: Number(e.target.value) })} min={2} max={52} style={{ width: 56, textAlign: 'center', fontSize: 14, padding: '6px' }} /> weeks
-                        </span>
-                      )}
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
-                        <input type="checkbox" checked={entry.billable} onChange={e => updateEntry(entry.id, { billable: e.target.checked })} style={{ width: 18, height: 18 }} />
-                        Billable
-                      </label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer', marginLeft: 'auto', color: entry.hasDeadline ? 'var(--red)' : undefined }}>
-                        <input type="checkbox" checked={entry.hasDeadline} onChange={e => updateEntry(entry.id, { hasDeadline: e.target.checked })} style={{ width: 18, height: 18, accentColor: 'var(--red)' }} />
-                        Deadline
-                      </label>
-                      {entry.hasDeadline && (
-                        <input type="date" value={entry.deadlineDate} onChange={e => updateEntry(entry.id, { deadlineDate: e.target.value })} style={{ fontSize: 14, padding: '6px 10px', borderRadius: 'var(--r)', border: '1.5px solid var(--red)', color: 'var(--red)', fontWeight: 600 }} />
-                      )}
-                    </div>
+                    {/* Hours + Billable */}
+                    <div style={{ display: 'grid', gridTemplateColumns: usesDayPickerG ? '1fr' : '160px 1fr 1fr', gap: 14, marginBottom: !isLeaveG ? 12 : 0 }}>
+                      <div className="form-group">
+                        <label className="form-label">{usesDayPickerG ? 'Hours per day' : 'Total hours (week)'}</label>
+                        <input type="number" min={0.5} step={0.5} value={g.totalHours}
+                          onChange={e => setGroup(g.key, { totalHours: Number(e.target.value) })}
+                          style={{ maxWidth: 120 }} />
+                        {!usesDayPickerG && g.ids.length > 0 && (
+                          <div className="form-hint">{(g.totalHours / g.ids.length).toFixed(1)}h / day · {g.ids.length} day{g.ids.length > 1 ? 's' : ''}</div>
+                        )}
+                        {usesDayPickerG && g.ids.length > 0 && (
+                          <div className="form-hint">{g.ids.length} day{g.ids.length > 1 ? 's' : ''} · {g.totalHours}h total</div>
+                        )}
                       </div>
-                    ))}
+                      {!usesDayPickerG && (
+                        <>
+                          <div className="form-group">
+                            <label className="form-label">Billable</label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, cursor: 'pointer' }}>
+                              <input type="checkbox" checked={g.isBillable} onChange={e => setGroup(g.key, { isBillable: e.target.checked })} style={{ width: 16, height: 16, accentColor: 'var(--green)' }} />
+                              <span style={{ fontSize: 13, color: g.isBillable ? 'var(--green)' : 'var(--c3)', fontWeight: 600 }}>{g.isBillable ? 'Billable' : 'Non-billable'}</span>
+                            </label>
+                          </div>
+                          <div />
+                        </>
+                      )}
+                    </div>
 
-                    <button className="btn btn-secondary" onClick={() => setAssignEntries(prev => [...prev, newEntry(weekEnd)])} style={{ width: '100%', height: 44, fontSize: 15 }}>
-                      + Add another allocation
-                    </button>
-                  </div>
-                )}
+                    {/* Note (not for leave) */}
+                    {!isLeaveG && (
+                      <div className="form-group">
+                        <label className="form-label">Note</label>
+                        <textarea rows={2} value={g.notes} onChange={e => setGroup(g.key, { notes: e.target.value })}
+                          placeholder="Note for member dashboard…" style={{ resize: 'vertical' }} />
+                      </div>
+                    )}
 
-              </div>
-
-              <div className="modal-footer">
-                <button className="btn btn-secondary" onClick={() => { setAssignFor(null); setAssignTab('simple') }} style={{ height: 44, padding: '0 24px', fontSize: 15 }}>Cancel</button>
-                <button className="btn btn-primary" onClick={handleAssign} style={{ height: 44, padding: '0 28px', fontSize: 15, fontWeight: 700 }}>
-                  Assign {assignEntries.reduce((s, e) => s + (e.mode === 'week' ? e.totalHours : e.dayHours.reduce((a, b) => a + b, 0)), 0)}h
-                  {assignEntries.some(e => e.recurring) ? ' + recurring' : ''}
-                </button>
-              </div>
-            </div>
-          </div>
-        )
-      })()}
-
-      {/* ═══════════ BATCH ASSIGN MODAL ═══════════ */}
-      {showBatch && (
-        <div className="modal-overlay" onClick={() => setShowBatch(false)}>
-          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 600 }}>
-            <div className="modal-header">
-              <h3>Batch Assign</h3>
-              <button className="modal-close" onClick={() => setShowBatch(false)}>&times;</button>
-            </div>
-            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-
-              {/* Members */}
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 10 }}>Members</div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-                  <button
-                    className={`btn btn-xs ${batchMembers.size === allActive.length ? 'btn-primary' : 'btn-ghost'}`}
-                    onClick={() => setBatchMembers(batchMembers.size === allActive.length ? new Set() : new Set(allActive.map(m => m.id)))}
-                  >All</button>
-                  {allActive.map(m => (
-                    <button
-                      key={m.id}
-                      className={`btn btn-xs ${batchMembers.has(m.id) ? 'btn-primary' : 'btn-ghost'}`}
-                      onClick={() => setBatchMembers(prev => { const n = new Set(prev); n.has(m.id) ? n.delete(m.id) : n.add(m.id); return n })}
-                    >{m.name}</button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Category */}
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 10 }}>Category</div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {CATS.map(c => (
-                    <button
-                      key={c.value}
-                      className={`btn btn-xs`}
-                      style={{ background: batchCategory === c.value ? c.color : undefined, color: batchCategory === c.value ? '#fff' : c.color, border: `1px solid ${c.color}`, fontWeight: 600 }}
-                      onClick={() => { setBatchCategory(c.value); setBatchLabel(''); setBatchProjectId('') }}
-                    >{c.label}</button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Label / project */}
-              {(batchCategory === 'project' || batchCategory === 'maintenance') ? (
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label">Project</label>
-                  <Select value={batchProjectId} onChange={setBatchProjectId} options={projectOptions} placeholder="Select project..." />
-                </div>
-              ) : (
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label">Label</label>
-                  <input value={batchLabel} onChange={e => setBatchLabel(e.target.value)} placeholder={
-                    batchCategory === 'meeting' ? 'e.g. Weekly standup' :
-                    batchCategory === 'admin' ? 'e.g. Lunch break' :
-                    batchCategory === 'internal' ? 'e.g. R&D' : 'Description'
-                  } />
-                </div>
-              )}
-
-              {/* Hours + frequency */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label">Hours per occurrence</label>
-                  <input type="number" min={0.25} max={24} step={0.25} value={batchHours} onChange={e => setBatchHours(parseFloat(e.target.value) || 0)} />
-                </div>
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label">Frequency</label>
-                  <select value={batchFreq} onChange={e => setBatchFreq(e.target.value as 'daily' | 'weekly' | 'monthly')}>
-                    <option value="daily">Daily (Mon–Fri)</option>
-                    <option value="weekly">Weekly (pick day)</option>
-                    <option value="monthly">Monthly (pick day of month)</option>
-                  </select>
-                </div>
-              </div>
-
-              {batchFreq === 'weekly' && (
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label">Day of week</label>
-                  <select value={batchWeekDay} onChange={e => setBatchWeekDay(parseInt(e.target.value))}>
-                    {['Monday','Tuesday','Wednesday','Thursday','Friday'].map((d, i) => (
-                      <option key={i} value={i}>{d}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {batchFreq === 'monthly' && (
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label">Day of month</label>
-                  <input type="number" min={1} max={28} value={batchMonthDay} onChange={e => setBatchMonthDay(parseInt(e.target.value) || 1)} />
-                </div>
-              )}
-
-              {/* Weeks */}
-              <div className="form-group" style={{ margin: 0 }}>
-                <label className="form-label">Repeat for how many weeks?</label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {[1,2,4,8,12,26,52].map(w => (
-                    <button key={w} className={`btn btn-xs ${batchWeeks === w ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setBatchWeeks(w)}>{w === 52 ? '1y' : w === 26 ? '6m' : w === 12 ? '3m' : `${w}w`}</button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Preview summary */}
-              <div style={{ background: 'var(--c7)', borderRadius: 8, padding: '12px 16px', fontSize: 13, color: 'var(--c2)' }}>
-                <strong>Preview:</strong> {batchMembers.size} member{batchMembers.size !== 1 ? 's' : ''} &middot; {batchHours}h {batchFreq} &middot; {batchWeeks} week{batchWeeks !== 1 ? 's' : ''} = <strong>{(() => {
-                  const perWeek = batchFreq === 'daily' ? 5 : 1
-                  return batchMembers.size * perWeek * batchWeeks * batchHours
-                })()}h total</strong>
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowBatch(false)} style={{ height: 44, padding: '0 24px' }}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleBatchAssign} disabled={batchSaving} style={{ height: 44, padding: '0 28px', fontWeight: 700 }}>
-                {batchSaving ? 'Saving...' : 'Apply to All'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ═══════════ SMART PLAN MODAL ═══════════ */}
-      {showSmartPlan && (
-        <div className="modal-overlay" onClick={() => !smartLoading && !smartSaving && setShowSmartPlan(false)}>
-          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 740, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
-            <div className="modal-header">
-              <div>
-                <h3>✦ Smart Planning Wizard</h3>
-                <p style={{ margin: '2px 0 0', fontSize: 13, color: 'var(--c4)', fontWeight: 400 }}>Week of {fmtWeekLabel(weekStart)}</p>
-              </div>
-              <button className="modal-close" onClick={() => setShowSmartPlan(false)}>&times;</button>
-            </div>
-            <div className="modal-body" style={{ flex: 1, overflowY: 'auto' }}>
-              {smartLoading && (
-                <div style={{ textAlign: 'center', padding: '48px 20px' }}>
-                  <div style={{ fontSize: 32, marginBottom: 12 }}>✦</div>
-                  <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--c1)', marginBottom: 6 }}>Analysing deliverables & capacity…</div>
-                  <div style={{ fontSize: 13, color: 'var(--c4)' }}>AI is building a schedule based on your team, projects, and deadlines</div>
-                </div>
-              )}
-
-              {!smartLoading && smartSuggestions.length === 0 && (
-                <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--c4)' }}>
-                  <div style={{ fontSize: 14, marginBottom: 16 }}>No suggestions available. Make sure you have deliverables set on your projects.</div>
-                  <button className="btn btn-secondary btn-sm" onClick={runSmartPlan}>Try again</button>
-                </div>
-              )}
-
-              {!smartLoading && smartSuggestions.length > 0 && (
-                <>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                    <span style={{ fontSize: 14, color: 'var(--c3)' }}>{smartSuggestions.length - smartRemovedIdx.size} of {smartSuggestions.length} suggestions selected</span>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button className="btn btn-ghost btn-xs" onClick={() => setSmartRemovedIdx(new Set())}>Select all</button>
-                      <button className="btn btn-ghost btn-xs" onClick={() => setSmartRemovedIdx(new Set(smartSuggestions.map((_, i) => i)))}>Clear all</button>
+                    {/* Actions */}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+                      <button className="btn btn-ghost btn-xs" disabled={isDel} onClick={() => deleteGroup(g.key)}
+                        style={{ color: 'var(--red)', fontSize: 12 }}>
+                        {isDel ? 'Removing…' : 'Remove'}
+                      </button>
+                      {g.dirty && (
+                        <button className="btn btn-primary btn-xs" disabled={isSav} onClick={() => saveGroup(g.key)}>
+                          {isSav ? 'Saving…' : 'Save changes'}
+                        </button>
+                      )}
                     </div>
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--c3)', marginBottom: 12 }}>
-                    Hours will be distributed evenly across days with available capacity.
-                  </div>
-                  <table style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '2px solid var(--c6)' }}>
-                        <th style={{ width: 32, padding: '8px 4px' }}></th>
-                        <th style={{ textAlign: 'left', padding: '8px 8px', color: 'var(--c3)', fontWeight: 700 }}>Member</th>
-                        <th style={{ textAlign: 'left', padding: '8px 8px', color: 'var(--c3)', fontWeight: 700 }}>Allocation</th>
-                        <th style={{ textAlign: 'right', padding: '8px 8px', color: 'var(--c3)', fontWeight: 700 }}>Weekly h</th>
-                        <th style={{ textAlign: 'left', padding: '8px 8px', color: 'var(--c3)', fontWeight: 700 }}>Reason</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {smartSuggestions.map((s, i) => {
-                        const removed = smartRemovedIdx.has(i)
-                        const mem = allActive.find(m => m.id === s.member_id)
-                        const proj = projects.find(p => p.id === s.project_id)
-                        const ci = catInfo(s.category)
-                        return (
-                          <tr key={i} style={{ borderBottom: '1px solid var(--c7)', opacity: removed ? 0.35 : 1, background: removed ? undefined : 'transparent', cursor: 'pointer', transition: 'opacity .15s' }}
-                            onClick={() => setSmartRemovedIdx(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n })}>
-                            <td style={{ padding: '10px 4px' }}>
-                              <input type="checkbox" checked={!removed} onChange={() => {}} style={{ width: 15, height: 15 }} />
-                            </td>
-                            <td style={{ padding: '10px 8px', fontWeight: 600 }}>{mem?.name ?? '?'}</td>
-                            <td style={{ padding: '10px 8px' }}>
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                <span style={{ width: 8, height: 8, borderRadius: '50%', background: ci.color, flexShrink: 0 }} />
-                                {proj ? `${proj.pn} — ${proj.name}` : s.label || ci.label}
-                              </span>
-                            </td>
-                            <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 700 }}>{s.weekly_hours}h</td>
-                            <td style={{ padding: '10px 8px', color: 'var(--c4)', fontSize: 12 }}>{s.reason}</td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                    <tfoot>
-                      <tr>
-                        <td colSpan={3} style={{ padding: '10px 8px', fontWeight: 700, color: 'var(--c3)' }}>Total</td>
-                        <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 800, fontSize: 16 }}>
-                          {smartSuggestions.filter((_, i) => !smartRemovedIdx.has(i)).reduce((s, r) => s + r.weekly_hours, 0)}h
-                        </td>
-                        <td />
-                      </tr>
-                    </tfoot>
-                  </table>
-                </>
-              )}
+                )
+              })}
             </div>
-            <div className="modal-footer">
-              {!smartLoading && smartSuggestions.length > 0 && (
-                <button className="btn btn-ghost btn-sm" onClick={runSmartPlan} style={{ marginRight: 'auto' }}>↻ Regenerate</button>
-              )}
-              <button className="btn btn-secondary" onClick={() => setShowSmartPlan(false)} style={{ height: 44, padding: '0 24px' }}>Cancel</button>
-              {!smartLoading && smartSuggestions.length > 0 && (
-                <button className="btn btn-primary" onClick={applySmartPlan} disabled={smartSaving || smartRemovedIdx.size === smartSuggestions.length} style={{ height: 44, padding: '0 28px', fontWeight: 700 }}>
-                  {smartSaving ? 'Applying...' : `Apply ${smartSuggestions.length - smartRemovedIdx.size} allocations`}
-                </button>
-              )}
-            </div>
-          </div>
+          )}
         </div>
-      )}
+        <div className="modal-footer">
+          <button className="btn btn-primary btn-sm" onClick={onClose}>Done</button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
-      {/* ═══════════ DETAIL MODAL ═══════════ */}
-      {detailGroup && (() => {
-        const g = detailGroup
-        const member = members.find(m => m.id === g.memberId)
-        const ci = catInfo(g.category)
-        return (
-          <div className="modal-overlay" onClick={() => setDetailGroup(null)}>
-            <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 520 }}>
-              <div className="modal-header">
-                <h3>{g.projectLabel}</h3>
-                <button className="modal-close" onClick={() => setDetailGroup(null)}>&times;</button>
-              </div>
-              <div className="modal-body">
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 20, flexWrap: 'wrap' }}>
-                  <span style={{ padding: '5px 14px', borderRadius: 20, fontSize: 14, fontWeight: 700, background: ci.bg, color: ci.color }}>{ci.label}</span>
-                  {g.recurring && <span className="badge badge-blue" style={{ fontSize: 12 }}>↻ Recurring</span>}
-                  {g.isDeadlineWeek && <span className="badge badge-red" style={{ fontSize: 12 }}>DEADLINE</span>}
-                  {member && <span style={{ fontSize: 14, color: 'var(--c3)' }}>Assigned to <strong>{member.name}</strong></span>}
+// ── WeeklySummary ─────────────────────────────────────────────────────────────
+
+function WeeklySummary({
+  allocations,
+  members,
+}: {
+  allocations: import('../lib/types').ResourceAllocation[]
+  members: TeamMember[]
+}) {
+  const workAllocs = allocations.filter(a => a.category !== 'leave')
+
+  // Group: team → project key → { label, hours, priority, category }
+  const teamMap: Record<string, {
+    teamName: string
+    teamColor: string
+    totalHours: number
+    projects: Record<string, { label: string; hours: number; priority: 'none' | 'high' | 'urgent'; category: AllocationCategory }>
+  }> = {}
+
+  workAllocs.forEach(a => {
+    const member = members.find(m => m.id === a.member_id)
+    const teamId = member?.team_id ?? '__none__'
+    const teamName = (member?.team as { name?: string } | null | undefined)?.name ?? 'Other'
+    const teamColor = (member?.team as { color?: string } | null | undefined)?.color ?? '#64748b'
+
+    const p = a.project as { name?: string } | null | undefined
+    const lbl = p?.name ?? a.label ?? null
+    if (!lbl) return // skip allocations with no meaningful label
+    const pid = (a as { project_id?: string | null }).project_id ?? null
+    const projKey = pid ? `p:${pid}` : `l:${a.label ?? a.category}`
+    const pri = parsePriority(a.notes)
+
+    if (!teamMap[teamId]) teamMap[teamId] = { teamName, teamColor, totalHours: 0, projects: {} }
+    const team = teamMap[teamId]
+    team.totalHours = Math.round((team.totalHours + a.hours) * 10) / 10
+    if (!team.projects[projKey]) team.projects[projKey] = { label: lbl, hours: 0, priority: 'none', category: a.category }
+    const proj = team.projects[projKey]
+    if (p?.name) proj.label = p.name
+    proj.hours = Math.round((proj.hours + a.hours) * 10) / 10
+    if (pri === 'urgent') proj.priority = 'urgent'
+    else if (pri === 'high' && proj.priority === 'none') proj.priority = 'high'
+  })
+
+  const teams = Object.entries(teamMap)
+    .map(([, t]) => ({ ...t, projects: Object.values(t.projects).sort((a, b) => b.hours - a.hours) }))
+    .sort((a, b) => b.totalHours - a.totalHours)
+
+  if (teams.length === 0) return null
+
+  return (
+    <div style={{ marginTop: 20 }}>
+      <div style={{ background: '#fff', border: '1px solid var(--c6)', borderRadius: 12, padding: '16px 20px' }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--c1)', marginBottom: 16 }}>Weekly Allocation by Team</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
+          {teams.map(team => (
+            <div key={team.teamName} style={{ border: '1px solid var(--c6)', borderRadius: 8, overflow: 'hidden' }}>
+              {/* Team header */}
+              <div style={{ padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: team.teamColor + '18', borderBottom: '1px solid var(--c6)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: team.teamColor, flexShrink: 0 }} />
+                  <span style={{ fontSize: 12, fontWeight: 800, color: team.teamColor, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{team.teamName}</span>
                 </div>
-
-                {g.hasUnplanned && (
-                  <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#c2410c', marginBottom: 16 }}>
-                    ⚡ This includes unplanned work reported by a team member.
-                  </div>
-                )}
-
-                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 10 }}>Daily breakdown</div>
-                {days.map(d => {
-                  const hrs = g.dayHours[d] || 0
-                  const aid = g.allocIds[d]
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--c2)' }}>{team.totalHours}h</span>
+              </div>
+              {/* Projects */}
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {team.projects.map((proj, i) => {
+                  const pc = PRIORITY_CHIP[proj.priority]
+                  const catBadge = CAT_BADGE[proj.category]
                   return (
-                    <div key={d} style={{ display: 'flex', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--c6)' }}>
-                      <span style={{ width: 120, fontSize: 15, fontWeight: 600, color: 'var(--c1)' }}>{dayLabel(d)} {dayNum(d)}</span>
-                      <div style={{ flex: 1 }}>
-                        {hrs > 0 ? (
-                          <span style={{ display: 'inline-block', padding: '6px 18px', borderRadius: 8, fontSize: 16, fontWeight: 800, background: ci.bg, color: ci.color }}>{hrs}h</span>
-                        ) : <span style={{ color: 'var(--c5)', fontSize: 14 }}>—</span>}
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderBottom: i < team.projects.length - 1 ? '1px solid var(--c7)' : 'none' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
+                          {proj.priority !== 'none' && (
+                            <span style={{ padding: '1px 5px', borderRadius: 6, fontSize: 9, fontWeight: 800, background: pc.bg, color: pc.color, textTransform: 'uppercase', flexShrink: 0 }}>
+                              {proj.priority}
+                            </span>
+                          )}
+                          <span style={{ padding: '1px 5px', borderRadius: 6, fontSize: 9, fontWeight: 700, background: catBadge.bg, color: catBadge.color, flexShrink: 0 }}>
+                            {catBadge.label}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--c0)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{proj.label}</div>
                       </div>
-                      {hrs > 0 && aid && (
-                        <button className="btn btn-ghost btn-sm" onClick={() => deleteDay(aid, g, d)} style={{ color: 'var(--red)', fontSize: 13 }}>Remove</button>
-                      )}
+                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--c2)', flexShrink: 0 }}>{proj.hours}h</span>
                     </div>
                   )
                 })}
-                <div style={{ display: 'flex', alignItems: 'center', padding: '14px 0' }}>
-                  <span style={{ width: 120, fontSize: 15, fontWeight: 800 }}>Week total</span>
-                  <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--c0)' }}>{g.weekTotal}h</span>
-                </div>
-              </div>
-              <div className="modal-footer">
-                <button className="btn btn-ghost" onClick={() => { deleteGroup(g) }} style={{ color: 'var(--red)', height: 44, padding: '0 20px', fontSize: 14, marginRight: 'auto' }}>
-                  {g.recurring ? 'Delete entire series' : 'Delete this week'}
-                </button>
-                <button className="btn btn-secondary" onClick={() => setDetailGroup(null)} style={{ height: 44, padding: '0 24px', fontSize: 15 }}>Close</button>
               </div>
             </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── BulkAssignModal ───────────────────────────────────────────────────────────
+
+function BulkAssignModal({
+  members, days, projects, maintenances, onClose, onSave,
+}: {
+  members: TeamMember[]
+  days: string[]
+  projects: Project[]
+  maintenances: Maintenance[]
+  onClose: () => void
+  onSave: (rows: Array<{
+    member_id: string; project_id?: string | null; category: AllocationCategory
+    date: string; hours: number; label?: string | null; notes?: string | null
+    is_billable?: boolean; deadline_date?: string | null
+  }>) => Promise<void>
+}) {
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [memberSearch, setMemberSearch] = useState('')
+  const [form, setForm] = useState<AssignForm>({ ...DEFAULT_FORM })
+  const [projSearch, setProjSearch] = useState('')
+  const [maintSearch, setMaintSearch] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const filteredProjects = projects.filter(p =>
+    p.status === 'active' &&
+    (projSearch === '' || `${p.pn} ${p.name}`.toLowerCase().includes(projSearch.toLowerCase()))
+  )
+  const filteredMaintenances = maintenances.filter(m =>
+    m.status === 'active' &&
+    (maintSearch === '' || m.name.toLowerCase().includes(maintSearch.toLowerCase()))
+  )
+
+  const isLeave = form.category === 'leave'
+  const usesDayPicker = isLeave || form.category === 'meeting'
+  const pickedTotal = form.leaveDays.length * form.leaveHoursPerDay
+
+  function toggleMember(id: string) {
+    setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+  function toggleAll() {
+    setSelected(s => s.size === members.length ? new Set() : new Set(members.map(m => m.id)))
+  }
+  function toggleDay(d: string) {
+    setForm(f => ({
+      ...f,
+      leaveDays: f.leaveDays.includes(d) ? f.leaveDays.filter(x => x !== d) : [...f.leaveDays, d],
+    }))
+  }
+
+  async function handleSave() {
+    if (selected.size === 0) { toast('error', 'Select at least one member'); return }
+    const rows: Parameters<typeof onSave>[0] = []
+    if (usesDayPicker) {
+      if (form.leaveDays.length === 0) { toast('error', 'Select at least one day'); return }
+      if (form.leaveHoursPerDay <= 0) { toast('error', 'Hours must be > 0'); return }
+      const noteStr = form.note.trim() || null
+      selected.forEach(memberId => {
+        form.leaveDays.forEach(date => {
+          rows.push({
+            member_id: memberId, project_id: null,
+            category: form.category, date, hours: form.leaveHoursPerDay,
+            label: isLeave ? null : (form.customLabel.trim() || null),
+            notes: noteStr, is_billable: false, deadline_date: null,
+          })
+        })
+      })
+    } else {
+      const hoursPerDay = Math.round((form.hours / days.length) * 10) / 10
+      if (hoursPerDay <= 0) { toast('error', 'Hours must be > 0'); return }
+      const noteStr = [
+        form.priority !== 'none' ? `[${form.priority.toUpperCase()}]` : '',
+        form.note.trim(),
+      ].filter(Boolean).join(' ')
+      const projectId = form.category === 'project' ? (form.projectId || null)
+        : form.category === 'maintenance' ? (form.maintenanceId || null)
+        : null
+      selected.forEach(memberId => {
+        days.forEach(date => {
+          rows.push({
+            member_id: memberId, project_id: projectId,
+            category: form.category, date, hours: hoursPerDay,
+            label: form.customLabel.trim() || null,
+            notes: noteStr || null, is_billable: form.isBillable, deadline_date: form.deadline || null,
+          })
+        })
+      })
+    }
+    setSaving(true)
+    try { await onSave(rows) } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 780 }}>
+        <div className="modal-header">
+          <div>
+            <h3>Bulk Assign</h3>
+            <div style={{ fontSize: 12, color: 'var(--c4)', marginTop: 2 }}>Assign the same allocation to multiple team members at once</div>
           </div>
+          <button className="modal-close" onClick={onClose}>&times;</button>
+        </div>
+        <div className="modal-body" style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 20 }}>
+          {/* Member list */}
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <span className="form-label" style={{ margin: 0 }}>Team Members</span>
+              <button className="btn btn-ghost btn-xs" onClick={toggleAll} style={{ fontSize: 11 }}>
+                {selected.size === members.length ? 'Deselect all' : 'Select all'}
+              </button>
+            </div>
+            <input placeholder="Search members…" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} style={{ marginBottom: 8, fontSize: 12 }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 320, overflowY: 'auto' }}>
+              {members.filter(m => memberSearch === '' || m.name.toLowerCase().includes(memberSearch.toLowerCase())).map(m => (
+                <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 7, cursor: 'pointer', background: selected.has(m.id) ? 'var(--navy-light)' : 'var(--c7)' }}>
+                  <input type="checkbox" checked={selected.has(m.id)} onChange={() => toggleMember(m.id)} style={{ accentColor: 'var(--navy)' }} />
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--c0)' }}>{m.name}</div>
+                    {m.role && <div style={{ fontSize: 11, color: 'var(--c4)' }}>{m.role}</div>}
+                  </div>
+                </label>
+              ))}
+            </div>
+            {selected.size > 0 && (
+              <div style={{ marginTop: 8, fontSize: 12, color: 'var(--navy)', fontWeight: 700 }}>{selected.size} member{selected.size > 1 ? 's' : ''} selected</div>
+            )}
+          </div>
+
+          {/* Assignment form */}
+          <div>
+            {/* Category */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 14 }}>
+              {CAT_OPTIONS.map(opt => (
+                <button key={opt.value} type="button"
+                  onClick={() => setForm(f => ({ ...f, category: opt.value, projectId: '', maintenanceId: '', customLabel: '', leaveDays: [], leaveHoursPerDay: 8, isBillable: opt.defaultBillable }))}
+                  style={{
+                    padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                    border: form.category === opt.value ? '2px solid var(--navy)' : '2px solid var(--c5)',
+                    background: form.category === opt.value ? 'var(--navy)' : '#fff',
+                    color: form.category === opt.value ? '#fff' : 'var(--c2)',
+                  }}
+                >{opt.label}</button>
+              ))}
+            </div>
+
+            {/* Priority (not for leave) */}
+            {!isLeave && (
+              <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+                {(['none', 'high', 'urgent'] as const).map(p => {
+                  const colors = { none: { bg: '#fff', border: 'var(--c5)', text: 'var(--c2)' }, high: { bg: '#fff8e1', border: '#ffcc02', text: '#e65100' }, urgent: { bg: '#fce4ec', border: '#ef9a9a', text: '#c62828' } }
+                  const c = colors[p]; const active = form.priority === p
+                  return (
+                    <button key={p} type="button" onClick={() => setForm(f => ({ ...f, priority: p }))}
+                      style={{ padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer', border: `2px solid ${active ? c.border : 'var(--c5)'}`, background: active ? c.bg : '#fff', color: active ? c.text : 'var(--c3)' }}
+                    >{p === 'none' ? 'No priority' : p.charAt(0).toUpperCase() + p.slice(1)}</button>
+                  )
+                })}
+              </div>
+            )}
+
+            {form.category === 'project' && (
+              <div className="form-group" style={{ marginBottom: 12 }}>
+                <label className="form-label">Project</label>
+                <input placeholder="Search…" value={projSearch} onChange={e => setProjSearch(e.target.value)} style={{ marginBottom: 6 }} />
+                <div style={{ maxHeight: 130, overflowY: 'auto', border: '1px solid var(--c6)', borderRadius: 6 }}>
+                  {filteredProjects.map(p => (
+                    <div key={p.id} onClick={() => setForm(f => ({ ...f, projectId: p.id }))}
+                      style={{ padding: '7px 12px', cursor: 'pointer', background: form.projectId === p.id ? 'var(--navy-light)' : '#fff', borderBottom: '1px solid var(--c7)', fontSize: 13, fontWeight: 600 }}>
+                      <span style={{ fontSize: 11, color: 'var(--c4)', marginRight: 6 }}>{p.pn}</span>{p.name}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {form.category === 'maintenance' && (
+              <div className="form-group" style={{ marginBottom: 12 }}>
+                <label className="form-label">Maintenance</label>
+                <input placeholder="Search…" value={maintSearch} onChange={e => setMaintSearch(e.target.value)} style={{ marginBottom: 6 }} />
+                <div style={{ maxHeight: 130, overflowY: 'auto', border: '1px solid var(--c6)', borderRadius: 6 }}>
+                  {filteredMaintenances.map(m => (
+                    <div key={m.id} onClick={() => setForm(f => ({ ...f, maintenanceId: m.id }))}
+                      style={{ padding: '7px 12px', cursor: 'pointer', background: form.maintenanceId === m.id ? 'var(--navy-light)' : '#fff', borderBottom: '1px solid var(--c7)', fontSize: 13, fontWeight: 600 }}>
+                      {m.name}{m.client && <span style={{ fontSize: 11, color: 'var(--c4)', marginLeft: 6 }}>{m.client.name}</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {(form.category === 'internal' || form.category === 'meeting' || form.category === 'admin' || form.category === 'sales') && (
+              <div className="form-group" style={{ marginBottom: 12 }}>
+                <label className="form-label">Label</label>
+                <input placeholder="e.g. Weekly standup" value={form.customLabel} onChange={e => setForm(f => ({ ...f, customLabel: e.target.value }))} />
+              </div>
+            )}
+
+            {/* Day picker (leave + meeting) */}
+            {usesDayPicker && (
+              <div style={{ marginBottom: 16 }}>
+                <div className="form-label" style={{ marginBottom: 8 }}>
+                  {isLeave ? 'Select days off' : 'Select meeting days'}
+                </div>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                  {days.map(d => {
+                    const wd = new Date(d + 'T00:00:00')
+                    const sel = form.leaveDays.includes(d)
+                    return (
+                      <button key={d} type="button" onClick={() => toggleDay(d)}
+                        style={{
+                          flex: 1, padding: '8px 4px', borderRadius: 8, cursor: 'pointer',
+                          border: sel ? '2px solid var(--navy)' : '2px solid var(--c5)',
+                          background: sel ? 'var(--navy)' : '#fff',
+                          color: sel ? '#fff' : 'var(--c3)',
+                          fontSize: 12, fontWeight: 700, textAlign: 'center',
+                        }}
+                      >
+                        <div>{wd.toLocaleDateString('en-US', { weekday: 'short' })}</div>
+                        <div style={{ fontSize: 10, fontWeight: 400, marginTop: 2, opacity: 0.8 }}>{wd.getDate()}/{wd.getMonth() + 1}</div>
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Hours per day</label>
+                  <input type="number" min={0.5} step={0.5} value={form.leaveHoursPerDay}
+                    onChange={e => setForm(f => ({ ...f, leaveHoursPerDay: Number(e.target.value) }))}
+                    style={{ maxWidth: 120 }} />
+                  {form.leaveDays.length > 0 && (
+                    <div className="form-hint">{form.leaveDays.length} day{form.leaveDays.length > 1 ? 's' : ''} · {pickedTotal}h total per member</div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Hours + Deadline + Billable (not for day-picker categories) */}
+            {!usesDayPicker && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
+                <div className="form-group">
+                  <label className="form-label">Hours (week)</label>
+                  <input type="number" min={0.5} step={0.5} value={form.hours} onChange={e => setForm(f => ({ ...f, hours: Number(e.target.value) }))} />
+                  <div className="form-hint">{(form.hours / days.length).toFixed(1)}h/day</div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Deadline</label>
+                  <input type="date" value={form.deadline} onChange={e => setForm(f => ({ ...f, deadline: e.target.value }))} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Billable</label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={form.isBillable} onChange={e => setForm(f => ({ ...f, isBillable: e.target.checked }))} style={{ accentColor: 'var(--green)' }} />
+                    <span style={{ fontSize: 13, color: form.isBillable ? 'var(--green)' : 'var(--c3)', fontWeight: 600 }}>{form.isBillable ? 'Billable' : 'Non-billable'}</span>
+                  </label>
+                </div>
+              </div>
+            )}
+            {!isLeave && (
+              <div className="form-group">
+                <label className="form-label">Note</label>
+                <textarea rows={2} placeholder="Note visible on member dashboard…" value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} style={{ resize: 'vertical' }} />
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary btn-sm" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary btn-sm" disabled={saving || selected.size === 0} onClick={handleSave}>
+            {saving ? 'Saving…' : `Assign to ${selected.size} member${selected.size !== 1 ? 's' : ''}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── ResourcePlanningView ──────────────────────────────────────────────────────
+
+export function ResourcePlanningView() {
+  const [weekStart, setWeekStart] = useState(() => getMonday(new Date()))
+  const [search, setSearch] = useState('')
+  const [teamFilter, setTeamFilter] = useState('all')
+  const [showPool, setShowPool] = useState(false)
+  const [showSummary, setShowSummary] = useState(false)
+  const [showBulk, setShowBulk] = useState(false)
+  const [assignTarget, setAssignTarget] = useState<TeamMember | null>(null)
+  const [editTarget, setEditTarget] = useState<TeamMember | null>(null)
+  const [allTimeOff, setAllTimeOff] = useState<TimeOff[]>([])
+
+  const { members, allocations, teams, fetchMembers, fetchTeams, fetchAllocations, addAllocationsBatch, updateAllocation, removeAllocation } = useResourceStore()
+  const { projects, fetchAll: fetchProjects } = useProjectsStore()
+  const { maintenances, fetchAll: fetchMaintenances } = useMaintenancesStore()
+
+  const days = useMemo(() => weekDays(weekStart), [weekStart])
+  const weekEnd = days[4]
+
+  useEffect(() => {
+    fetchMembers()
+    fetchTeams()
+    fetchProjects()
+    fetchMaintenances()
+  }, [fetchMembers, fetchTeams, fetchProjects, fetchMaintenances])
+
+
+  useEffect(() => {
+    fetchAllocations(weekStart, weekEnd)
+    supabase
+      .from('time_off')
+      .select('*')
+      .lte('start_date', weekEnd)
+      .gte('end_date', weekStart)
+      .then(({ data }) => setAllTimeOff((data ?? []) as TimeOff[]))
+  }, [weekStart, weekEnd, fetchAllocations])
+
+  const memberStats = useMemo<MemberStats[]>(() => {
+    return members.map(m => {
+      const memberAllocs = allocations.filter(a => a.member_id === m.id)
+      const memberTimeOff = allTimeOff.filter(t => t.member_id === m.id)
+      const offDays = timeOffWorkDays(memberTimeOff, days)
+      const availDays = 5 - offDays
+      const capacity = m.hours_per_day * availDays
+      // leave allocations reduce capacity, not work
+      const leaveAllocs = memberAllocs.filter(a => a.category === 'leave')
+      const leaveHours = Math.round(leaveAllocs.reduce((s, a) => s + a.hours, 0) * 10) / 10
+      const adjustedCapacity = Math.max(0, capacity - leaveHours)
+      const workAllocs = memberAllocs.filter(a => a.category !== 'leave')
+      const allocated = Math.round(workAllocs.reduce((s, a) => s + a.hours, 0) * 10) / 10
+      const utilization = adjustedCapacity > 0 ? Math.round((allocated / adjustedCapacity) * 100) : 0
+      // build leave label chip
+      const leaveDays = leaveAllocs.map(a => a.date).sort()
+      const leaveChips: ProjectChip[] = leaveDays.length > 0 ? (() => {
+        const dayNames = leaveDays.map(d => new Date(d + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' }))
+        const label = leaveDays.length === 5
+          ? 'Vacation (full week)'
+          : `Day off: ${dayNames.join(', ')}`
+        return [{ label, hours: leaveHours, priority: 'none' as const }]
+      })() : []
+      // group work hours by project label
+      const chipMap: Record<string, { hours: number; priority: 'none' | 'high' | 'urgent' }> = {}
+      workAllocs.forEach(a => {
+        const p = a.project as { name?: string } | null | undefined
+        const lbl = p?.name ?? a.label ?? 'Internal'
+        const pri = parsePriority(a.notes)
+        if (!chipMap[lbl]) chipMap[lbl] = { hours: 0, priority: 'none' }
+        chipMap[lbl].hours += a.hours
+        if (pri === 'urgent') chipMap[lbl].priority = 'urgent'
+        else if (pri === 'high' && chipMap[lbl].priority === 'none') chipMap[lbl].priority = 'high'
+      })
+      const workChips: ProjectChip[] = Object.entries(chipMap).map(([label, { hours, priority }]) => ({ label, hours: Math.round(hours * 10) / 10, priority }))
+      const projectChips: ProjectChip[] = [...leaveChips, ...workChips]
+      const hasMaintenance = workAllocs.some(a => a.category === 'maintenance')
+      return { member: m, capacity: adjustedCapacity, allocated, utilization, projectChips, hasMaintenance, offDays, leaveHours }
+    })
+  }, [members, allocations, allTimeOff, days])
+
+  const filtered = useMemo(() => memberStats.filter(ms => {
+    if (search && !ms.member.name.toLowerCase().includes(search.toLowerCase())) return false
+    if (teamFilter !== 'all' && ms.member.team_id !== teamFilter) return false
+    return true
+  }), [memberStats, search, teamFilter])
+
+  const overCount = memberStats.filter(ms => ms.utilization > 100).length
+  const underCount = memberStats.filter(ms => ms.utilization < 50).length
+
+  const totalCapacity = memberStats.reduce((s, ms) => s + ms.capacity, 0)
+  const totalAllocated = memberStats.reduce((s, ms) => s + ms.allocated, 0)
+  const totalAvailable = Math.max(0, totalCapacity - totalAllocated)
+  const totalUtilization = totalCapacity > 0 ? Math.round((totalAllocated / totalCapacity) * 100) : 0
+  const BILLABLE_CATS: AllocationCategory[] = ['project', 'maintenance', 'sales']
+  const billableHours = Math.round(allocations.filter(a => a.is_billable && BILLABLE_CATS.includes(a.category)).reduce((s, a) => s + a.hours, 0) * 10) / 10
+  const billablePct = Math.min(100, totalAllocated > 0 ? Math.round((billableHours / totalAllocated) * 100) : 0)
+
+  return (
+    <div className="page">
+      <div className="page-header">
+        <div>
+          <h1>Resource Planning</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+            <button className="btn btn-ghost btn-sm" style={{ fontSize: 12 }} onClick={() => setWeekStart(shiftWeek(weekStart, -1))}>← Prev</button>
+            <button className="btn btn-ghost btn-sm" style={{ fontSize: 12 }} onClick={() => setWeekStart(getMonday(new Date()))}>Today</button>
+            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--c1)' }}>{fmtWeekLabel(weekStart)}</span>
+            <button className="btn btn-ghost btn-sm" style={{ fontSize: 12 }} onClick={() => setWeekStart(shiftWeek(weekStart, 1))}>Next →</button>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => setShowBulk(true)}>Bulk Assign</button>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => setShowPool(!showPool)}
+            style={{ background: showPool ? 'var(--navy-light)' : undefined }}
+          >
+            Project Pool {showPool ? '→' : '←'}
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowSummary(true)}>
+            Save Week
+          </button>
+        </div>
+      </div>
+
+      <div className="page-content">
+
+        {/* Stats strip */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10, marginBottom: 20 }}>
+          {[
+            { label: 'Total Capacity', value: `${totalCapacity}h`, color: 'var(--navy)' },
+            { label: 'Allocated', value: `${totalAllocated}h`, color: totalAllocated > totalCapacity ? 'var(--red)' : 'var(--green)' },
+            { label: 'Available', value: `${totalAvailable}h`, color: totalAvailable < totalCapacity * 0.1 ? 'var(--amber)' : 'var(--c1)' },
+            { label: 'Utilization', value: `${totalUtilization}%`, color: totalUtilization > 100 ? 'var(--red)' : totalUtilization >= 70 ? 'var(--green)' : 'var(--amber)' },
+            { label: 'Billable', value: `${billableHours}h`, color: 'var(--green)' },
+            { label: 'Billable %', value: `${billablePct}%`, color: billablePct >= 70 ? 'var(--green)' : billablePct >= 50 ? 'var(--amber)' : 'var(--c4)' },
+          ].map(s => (
+            <div key={s.label} style={{ background: '#fff', border: '1px solid var(--c6)', borderRadius: 10, padding: '12px 14px' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{s.label}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Filters + summary chips */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              placeholder="Search by name..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{ width: 200 }}
+            />
+            <select value={teamFilter} onChange={e => setTeamFilter(e.target.value)}>
+              <option value="all">All teams</option>
+              {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {underCount > 0 && (
+              <span style={{
+                padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700,
+                background: '#fff8e1', color: '#e65100', border: '1px solid #ffcc02',
+              }}>{underCount} under 50%</span>
+            )}
+            {overCount > 0 && (
+              <span style={{
+                padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700,
+                background: '#fce4ec', color: 'var(--red)', border: '1px solid #ef9a9a',
+              }}>{overCount} over-allocated</span>
+            )}
+            <span style={{ fontSize: 13, color: 'var(--c3)' }}>{filtered.length} people</span>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="card" style={{ overflow: 'hidden', padding: 0 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: 'var(--c7)', borderBottom: '2px solid var(--c6)' }}>
+                {['Team Member', 'Availability', 'Current Projects', 'Allocated Hours', 'Utilization', 'Actions'].map(h => (
+                  <th key={h} style={{
+                    padding: '10px 16px', textAlign: h === 'Actions' ? 'right' : 'left',
+                    fontSize: 11, fontWeight: 700, color: 'var(--c3)',
+                    textTransform: 'uppercase', letterSpacing: '0.06em',
+                  }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 14 }}>
+                    No team members found
+                  </td>
+                </tr>
+              ) : (
+                filtered.map(ms => (
+                  <MemberRow
+                    key={ms.member.id}
+                    stats={ms}
+                    onAssign={() => setAssignTarget(ms.member)}
+                    onEdit={() => setEditTarget(ms.member)}
+                    onShareLink={() => {
+                      const url = `${window.location.origin}/member-dashboard/${ms.member.share_token}`
+                      navigator.clipboard.writeText(url).then(() => toast('success', 'Dashboard link copied'))
+                    }}
+                  />
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Weekly summary */}
+        <WeeklySummary allocations={allocations} members={members} />
+      </div>
+
+      {/* Project Pool panel */}
+      {showPool && <ProjectPoolPanel projects={projects} onClose={() => setShowPool(false)} />}
+
+      {/* Bulk Assign Modal */}
+      {showBulk && (
+        <BulkAssignModal
+          members={members}
+          days={days}
+          projects={projects}
+          maintenances={maintenances}
+          onClose={() => setShowBulk(false)}
+          onSave={async rows => {
+            await addAllocationsBatch(rows)
+            toast('success', `Bulk assigned to ${new Set(rows.map(r => r.member_id)).size} members`)
+            setShowBulk(false)
+          }}
+        />
+      )}
+
+      {/* Assign Modal */}
+      {assignTarget && (() => {
+        const ms = memberStats.find(s => s.member.id === assignTarget.id)
+        return (
+          <AssignModal
+            member={assignTarget}
+            days={days}
+            projects={projects}
+            maintenances={maintenances}
+            alreadyPlanned={ms?.allocated ?? 0}
+            weekCapacity={ms?.capacity ?? assignTarget.hours_per_day * 5}
+            onClose={() => setAssignTarget(null)}
+            onSave={async rows => {
+              await addAllocationsBatch(rows)
+              toast('success', `Assigned to ${assignTarget.name}`)
+              setAssignTarget(null)
+            }}
+          />
         )
       })()}
 
-      {/* ═══════════ SMART ALLOCATE WIZARD ═══════════ */}
-      {showWizard && (
-        <div className="modal-overlay" onClick={() => { if (!wizardLoading && !wizardSaving) { setShowWizard(false); resetWizard() } }}>
-          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 780, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
-            <div className="modal-header">
-              <div>
-                <h3 style={{ margin: 0 }}>✦ Smart Allocate</h3>
-                <p style={{ margin: '2px 0 0', fontSize: 13, color: 'var(--c4)', fontWeight: 400 }}>Monthly AI-powered resource planning</p>
-              </div>
-              <button className="modal-close" onClick={() => { setShowWizard(false); resetWizard() }}>&times;</button>
-            </div>
-            <div className="modal-body" style={{ flex: 1, overflowY: 'auto' }}>
-              <WizardSteps step={wizardStep} />
-
-              {/* Step 1 — Pick projects */}
-              {wizardStep === 1 && (
-                <div>
-                  <div style={{ display: 'flex', gap: 12, marginBottom: 14, alignItems: 'center' }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--c2)' }}>Month:</span>
-                    <input type="month" value={wizardMonth} onChange={e => setWizardMonth(e.target.value)}
-                      style={{ border: '1px solid var(--c6)', borderRadius: 6, padding: '4px 8px', fontFamily: 'inherit', fontSize: 13 }} />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {projects.filter(p => p.status === 'active').map(p => {
-                      const checked = wizardSelectedProjects.has(p.id)
-                      const delivCount = deliverables.filter(d => d.project_id === p.id && d.status === 'active').length
-                      return (
-                        <div key={p.id} onClick={() => setWizardSelectedProjects(prev => {
-                          const n = new Set(prev); n.has(p.id) ? n.delete(p.id) : n.add(p.id); return n
-                        })} style={{
-                          display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
-                          border: checked ? '1.5px solid var(--navy)' : '1px solid var(--c6)',
-                          background: checked ? 'var(--navy-light)' : '#fff',
-                        }}>
-                          <input type="checkbox" checked={checked} onChange={() => {}} style={{ width: 15, height: 15 }} />
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--c0)' }}>{p.pn} — {p.name}</div>
-                            {delivCount > 0 && <div style={{ fontSize: 11, color: 'var(--c3)' }}>{delivCount} active deliverable{delivCount !== 1 ? 's' : ''}</div>}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Step 2 — Budgets & team */}
-              {wizardStep === 2 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  {[...wizardSelectedProjects].map(pid => {
-                    const proj = projects.find(p => p.id === pid)
-                    if (!proj) return null
-                    const delivHours = deliverables.filter(d => d.project_id === pid && d.status === 'active')
-                      .reduce((s, d) => s + (d.estimated_hours ?? 0), 0)
-                    const defaultBudget = delivHours > 0 ? delivHours : 40
-                    const budget = wizardBudgets[pid] ?? defaultBudget
-                    const memberIds = wizardProjectMembers[pid] ?? []
-                    return (
-                      <div key={pid} style={{ background: 'var(--c7)', borderRadius: 8, padding: '12px 14px' }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--c0)', marginBottom: 8 }}>{proj.pn} — {proj.name}</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                          <label style={{ fontSize: 12, color: 'var(--c3)' }}>Budget (hours):</label>
-                          <input type="number" value={budget} min={1} step={0.5}
-                            onChange={e => setWizardBudgets(prev => ({ ...prev, [pid]: Number(e.target.value) }))}
-                            style={{ width: 70, border: '1px solid var(--c6)', borderRadius: 6, padding: '4px 8px', fontFamily: 'inherit', fontSize: 13 }} />
-                        </div>
-                        <div style={{ fontSize: 11, color: 'var(--c3)', marginBottom: 6, fontWeight: 700 }}>TEAM</div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                          {allActive.map(m => {
-                            const sel = memberIds.includes(m.id)
-                            return (
-                              <button key={m.id} onClick={() => setWizardProjectMembers(prev => ({
-                                ...prev, [pid]: sel ? memberIds.filter(id => id !== m.id) : [...memberIds, m.id],
-                              }))} style={{
-                                padding: '4px 10px', borderRadius: 100, fontSize: 12, fontWeight: 600,
-                                border: sel ? '1.5px solid var(--navy)' : '1px solid var(--c6)',
-                                background: sel ? 'var(--navy-light)' : '#fff',
-                                color: sel ? 'var(--navy)' : 'var(--c2)',
-                                cursor: 'pointer', fontFamily: 'inherit',
-                              }}>{m.name}</button>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    )
-                  })}
-                  {(() => {
-                    const totalBudget = [...wizardSelectedProjects].reduce((s, pid) => {
-                      if (wizardBudgets[pid] !== undefined) return s + wizardBudgets[pid]
-                      const delivHours = deliverables.filter(d => d.project_id === pid && d.status === 'active')
-                        .reduce((dh, d) => dh + (d.estimated_hours ?? 0), 0)
-                      return s + (delivHours > 0 ? delivHours : 40)
-                    }, 0)
-                    const allMemberIds = new Set([...wizardSelectedProjects].flatMap(pid => wizardProjectMembers[pid] ?? []))
-                    const weekCount = 4
-                    const totalCap = [...allMemberIds].reduce((s, mid) => {
-                      const m = allActive.find(x => x.id === mid)
-                      return s + (m ? m.hours_per_day * 5 * weekCount : 0)
-                    }, 0)
-                    if (totalBudget > totalCap && totalCap > 0) {
-                      return <div className="alert alert-amber" style={{ marginTop: 10, fontSize: 12 }}>
-                        ⚠ Total budget ({totalBudget}h) exceeds estimated team capacity ({totalCap}h). Plan may be truncated.
-                      </div>
-                    }
-                    return null
-                  })()}
-                </div>
-              )}
-
-              {/* Step 3 — AI plan */}
-              {wizardStep === 3 && (
-                <div>
-                  {wizardLoading && (
-                    <div style={{ textAlign: 'center', padding: '48px 20px' }}>
-                      <div style={{ fontSize: 28, marginBottom: 12 }}>✦</div>
-                      <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--c1)', marginBottom: 6 }}>Generating allocation plan…</div>
-                      <div style={{ fontSize: 13, color: 'var(--c4)' }}>AI is planning {wizardSelectedProjects.size} projects across the month</div>
-                    </div>
-                  )}
-                  {!wizardLoading && wizardPlan.length > 0 && (
-                    <div style={{ overflowX: 'auto' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                        <thead>
-                          <tr style={{ borderBottom: '2px solid var(--c6)' }}>
-                            <th style={{ textAlign: 'left', padding: '8px', color: 'var(--c3)', fontWeight: 700 }}>Member</th>
-                            {wizardPlan.map(w => (
-                              <th key={w.week_start} style={{ textAlign: 'center', padding: '8px', color: 'var(--c3)', fontWeight: 700, minWidth: 100 }}>
-                                {new Date(w.week_start + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {allActive.filter(m => wizardPlan.some(w => w.allocations.some(a => a.member_id === m.id))).map(m => (
-                            <tr key={m.id} style={{ borderBottom: '1px solid var(--c7)' }}>
-                              <td style={{ padding: '8px', fontWeight: 700, color: 'var(--c0)' }}>{m.name}</td>
-                              {wizardPlan.map(w => {
-                                const cellAllocs = w.allocations.filter(a => a.member_id === m.id)
-                                return (
-                                  <td key={w.week_start} style={{ padding: '8px', verticalAlign: 'top' }}>
-                                    {cellAllocs.length === 0
-                                      ? <span style={{ color: 'var(--c5)', fontSize: 11 }}>—</span>
-                                      : cellAllocs.map(a => {
-                                        const proj = projects.find(p => p.id === a.project_id)
-                                        return (
-                                          <div key={a._id} style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 3 }}>
-                                            <span style={{ fontSize: 11, color: 'var(--navy)', fontWeight: 600 }}>{proj?.pn ?? '?'}</span>
-                                            <input type="number" value={a.weekly_hours} min={0} step={0.5}
-                                              onChange={e => {
-                                                const val = Number(e.target.value)
-                                                setWizardPlan(prev => prev.map(wk =>
-                                                  wk.week_start !== w.week_start ? wk : {
-                                                    ...wk,
-                                                    allocations: wk.allocations.map(al =>
-                                                      al._id === a._id ? { ...al, weekly_hours: val } : al
-                                                    )
-                                                  }
-                                                ))
-                                              }}
-                                              style={{ width: 44, border: '1px solid var(--c6)', borderRadius: 4, padding: '2px 4px', fontSize: 11, fontFamily: 'inherit' }} />
-                                            <span style={{ fontSize: 10, color: 'var(--c3)' }}>h</span>
-                                          </div>
-                                        )
-                                      })
-                                    }
-                                  </td>
-                                )
-                              })}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                  {!wizardLoading && wizardPlan.length === 0 && (
-                    <div style={{ textAlign: 'center', padding: '32px', color: 'var(--c3)', fontSize: 13 }}>
-                      No plan generated. <button className="btn btn-secondary btn-sm" onClick={runWizardAI}>Try again</button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Step 4 — Review & apply */}
-              {wizardStep === 4 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  {[...wizardSelectedProjects].map(pid => {
-                    const proj = projects.find(p => p.id === pid)
-                    const budget = wizardBudgets[pid] ?? 40
-                    const allocated = wizardPlan.flatMap(w => w.allocations)
-                      .filter(a => a.project_id === pid)
-                      .reduce((s, a) => s + a.weekly_hours, 0)
-                    const pct = budget > 0 ? Math.round((allocated / budget) * 100) : 0
-                    return (
-                      <div key={pid} style={{ background: 'var(--c7)', borderRadius: 8, padding: '10px 14px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: 13, fontWeight: 700 }}>{proj?.pn} — {proj?.name}</span>
-                          <span style={{ fontSize: 12, color: pct >= 90 ? 'var(--green)' : 'var(--amber)', fontWeight: 700 }}>{allocated}h / {budget}h ({pct}%)</span>
-                        </div>
-                        <div style={{ height: 4, background: 'var(--c6)', borderRadius: 2, marginTop: 6 }}>
-                          <div style={{ width: `${Math.min(100, pct)}%`, height: 4, background: pct >= 90 ? 'var(--green)' : 'var(--navy)', borderRadius: 2 }} />
-                        </div>
-                      </div>
-                    )
-                  })}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <input type="checkbox" id="wiz-save-tmpl" checked={wizardSaveAsTemplate}
-                      onChange={e => {
-                        setWizardSaveAsTemplate(e.target.checked)
-                        if (e.target.checked && !wizardTemplateName) {
-                          const d = new Date(wizardMonth + '-01T00:00:00')
-                          setWizardTemplateName(`${d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} Smart Plan`)
-                        }
-                      }} />
-                    <label htmlFor="wiz-save-tmpl" style={{ fontSize: 13 }}>Save as template</label>
-                    {wizardSaveAsTemplate && (
-                      <input value={wizardTemplateName} onChange={e => setWizardTemplateName(e.target.value)}
-                        style={{ flex: 1, border: '1px solid var(--c6)', borderRadius: 6, padding: '4px 8px', fontFamily: 'inherit', fontSize: 13 }} />
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="modal-footer">
-              {wizardStep > 1 && (
-                <button className="btn btn-ghost btn-sm" style={{ marginRight: 'auto' }}
-                  onClick={() => setWizardStep(s => (s - 1) as 1 | 2 | 3 | 4)}>← Back</button>
-              )}
-              <button className="btn btn-secondary" onClick={() => { setShowWizard(false); resetWizard() }}>Cancel</button>
-              {wizardStep === 1 && (
-                <button className="btn btn-primary" disabled={wizardSelectedProjects.size === 0}
-                  onClick={() => setWizardStep(2)}>
-                  Next: Set budgets →
-                </button>
-              )}
-              {wizardStep === 2 && (
-                <button className="btn btn-primary"
-                  disabled={[...wizardSelectedProjects].some(pid => !(wizardProjectMembers[pid]?.length > 0))}
-                  onClick={() => { setWizardStep(3); runWizardAI() }}>
-                  ✦ Generate Plan →
-                </button>
-              )}
-              {wizardStep === 3 && !wizardLoading && wizardPlan.length > 0 && (
-                <button className="btn btn-primary" onClick={() => setWizardStep(4)}>
-                  Review & Apply →
-                </button>
-              )}
-              {wizardStep === 4 && (
-                <button className="btn btn-primary" disabled={wizardSaving}
-                  onClick={handleWizardApply}>
-                  {wizardSaving ? 'Applying…' : 'Apply plan'}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+      {/* Edit Allocations Modal */}
+      {editTarget && (
+        <EditAllocationsModal
+          member={editTarget}
+          allocations={allocations.filter(a => a.member_id === editTarget.id)}
+          onClose={() => setEditTarget(null)}
+          onUpdate={async (id, data) => {
+            await updateAllocation(id, data)
+            await fetchAllocations(weekStart, weekEnd)
+          }}
+          onDelete={async id => {
+            await removeAllocation(id)
+            await fetchAllocations(weekStart, weekEnd)
+            toast('success', 'Allocation removed')
+          }}
+        />
       )}
 
-      {/* ═══════════ SAVE TEMPLATE MODAL ═══════════ */}
-      {showSaveTemplate && (
-        <div className="modal-overlay" onClick={() => setShowSaveTemplate(false)}>
-          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 480 }}>
-            <div className="modal-header">
-              <h3>Save week as template</h3>
-              <button className="modal-close" onClick={() => setShowSaveTemplate(false)}>&times;</button>
-            </div>
-            <div className="modal-body">
-              <div className="form-group">
-                <label className="form-label">Template name</label>
-                <input className="form-input" value={saveTemplateName}
-                  onChange={e => setSaveTemplateName(e.target.value)} />
-              </div>
-              <div style={{ marginTop: 12 }}>
-                {(() => {
-                  const grps: Record<string, number> = {}
-                  for (const a of allocations) {
-                    const proj = a.project as { pn?: string; name?: string } | null
-                    const label = proj ? `${proj.pn} — ${proj.name}` : (a as { label?: string }).label ?? a.category
-                    const m = allActive.find(x => x.id === a.member_id)
-                    const key = `${m?.name ?? '?'} — ${label}`
-                    grps[key] = (grps[key] || 0) + a.hours
-                  }
-                  return Object.entries(grps).map(([key, h]) => (
-                    <div key={key} style={{ fontSize: 13, color: 'var(--c2)', padding: '3px 0' }}>
-                      {key}: <strong>{h}h</strong>
-                    </div>
-                  ))
-                })()}
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowSaveTemplate(false)}>Cancel</button>
-              <button className="btn btn-primary" disabled={!saveTemplateName.trim()} onClick={async () => {
-                const entryGroups: Record<string, TemplateEntry> = {}
-                for (const a of allocations) {
-                  const key = `${a.member_id}::${a.project_id ?? a.category}`
-                  if (!entryGroups[key]) {
-                    const m = allActive.find(x => x.id === a.member_id)
-                    const proj = a.project as { pn?: string; name?: string } | null
-                    entryGroups[key] = {
-                      member_id: a.member_id,
-                      member_name: m?.name ?? '?',
-                      project_id: a.project_id ?? null,
-                      project_label: proj ? `${proj.pn} — ${proj.name}` : (a as { label?: string }).label ?? a.category,
-                      category: a.category,
-                      weekly_hours: 0,
-                      is_billable: a.is_billable,
-                    }
-                  }
-                  entryGroups[key].weekly_hours += a.hours
-                }
-                await saveTemplate(saveTemplateName.trim(), Object.values(entryGroups))
-                setShowSaveTemplate(false)
-              }}>Save template</button>
-            </div>
-          </div>
-        </div>
+      {/* Summary Modal */}
+      {showSummary && (
+        <SummaryModal
+          memberStats={memberStats}
+          weekStart={weekStart}
+          onClose={() => setShowSummary(false)}
+        />
       )}
     </div>
   )

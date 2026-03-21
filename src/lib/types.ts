@@ -433,7 +433,7 @@ export interface TimeOff {
   created_at: string
 }
 
-export type AllocationCategory = 'project' | 'maintenance' | 'internal' | 'meeting' | 'admin' | 'leave'
+export type AllocationCategory = 'project' | 'maintenance' | 'internal' | 'meeting' | 'admin' | 'leave' | 'sales'
 
 export interface ResourceAllocation {
   id: string

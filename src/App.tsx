@@ -30,6 +30,7 @@ import { ResourceByProjectView } from './views/ResourceByProjectView'
 import { TeamView } from './views/TeamView'
 import { TeamMemberDetailView } from './views/TeamMemberDetailView'
 import { MyWeekView } from './views/MyWeekView'
+import { MemberDashboardView } from './views/MemberDashboardView'
 import { Toaster } from './components/Toaster'
 import { Topbar } from './components/layout/Topbar'
 
@@ -42,6 +43,7 @@ function App() {
 
         {/* ── Standalone routes (no sidebar) ── */}
         <Route path="/my-week/:token" element={<MyWeekView />} />
+        <Route path="/member-dashboard/:token" element={<MemberDashboardView />} />
 
         {/* ── Main app layout ── */}
         <Route path="*" element={
@@ -100,7 +102,7 @@ function App() {
                 <Route path="/resource-reports" element={<ResourceReportsView />} />
                 <Route path="/resource-monthly" element={<ResourceMonthlyView />} />
                 <Route path="/resource-by-project" element={<ResourceByProjectView />} />
-                <Route path="/team"            element={<TeamView />} />
+                <Route path="/team"            element={<Navigate to="/resource-planning" replace />} />
                 <Route path="/team/:id"        element={<TeamMemberDetailView />} />
                 <Route path="/email-tool"      element={<EmailToolView />} />
                 <Route path="/settings"        element={<SettingsView />} />

@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 
 function IconHome()      { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> }
 function IconInvoice()   { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg> }
@@ -13,6 +13,7 @@ function IconTarget()    { return <svg width="16" height="16" viewBox="0 0 24 24
 function IconZap()       { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> }
 function IconSparkle()   { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5z"/><path d="M19 3l.75 2.25L22 6l-2.25.75L19 9l-.75-2.25L16 6l2.25-.75z"/></svg> }
 function IconGrid()      { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> }
+function IconLayers()    { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg> }
 
 const nav = ({isActive}: {isActive: boolean}) => 'sidebar-item' + (isActive ? ' active' : '')
 
@@ -22,11 +23,28 @@ interface SidebarProps {
 }
 
 export function Sidebar({ open, onClose }: SidebarProps) {
+  const navigate = useNavigate()
   return (
     <aside className={`sidebar${open ? ' sidebar-open' : ''}`}>
       <div className="sidebar-logo" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <div>
-          <div className="sidebar-logo-name">Agency Intelligence OS</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{
+            width: 30,
+            height: 30,
+            background: '#0f172a',
+            borderRadius: 6,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            color: '#fff',
+          }}>
+            <IconLayers />
+          </div>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 800, fontFamily: 'Manrope, sans-serif', color: 'var(--c0)', lineHeight: 1.2 }}>Agency OS</div>
+            <div style={{ fontSize: 9, fontWeight: 600, fontFamily: 'Manrope, sans-serif', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', lineHeight: 1.2 }}>Intelligence Platform</div>
+          </div>
         </div>
         <button className="mobile-close-btn" onClick={onClose} aria-label="Close menu">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -71,9 +89,6 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         <div className="sidebar-group-label">Planning</div>
         <NavLink to="/resource-planning" className={nav}><IconGrid /> Allocation</NavLink>
         <NavLink to="/resource-reports" className={nav}><IconBarChart /> Reports</NavLink>
-        <NavLink to="/resource-monthly" className={nav}><IconCalendar /> Monthly</NavLink>
-        <NavLink to="/resource-by-project" className={nav}><IconGrid /> By Project</NavLink>
-        <NavLink to="/team" className={nav}><IconUsers /> Team</NavLink>
 
         <div className="sidebar-divider" />
 
@@ -96,6 +111,9 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             <div style={{fontSize: 11, color: 'var(--c4)'}}>Admin</div>
           </div>
         </div>
+        <button className="btn btn-primary" style={{width:'100%', justifyContent:'center', marginTop:10, padding:'10px 0'}} onClick={() => navigate('/projects')}>
+          + New Project
+        </button>
       </div>
     </aside>
   )

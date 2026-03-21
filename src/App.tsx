@@ -31,6 +31,7 @@ import { TeamView } from './views/TeamView'
 import { TeamMemberDetailView } from './views/TeamMemberDetailView'
 import { MyWeekView } from './views/MyWeekView'
 import { Toaster } from './components/Toaster'
+import { Topbar } from './components/layout/Topbar'
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -72,6 +73,7 @@ function App() {
                 </span>
               </div>
 
+              <Topbar />
               <Toaster />
               <Routes>
                 <Route path="/"                element={<Navigate to="/dashboard" replace />} />

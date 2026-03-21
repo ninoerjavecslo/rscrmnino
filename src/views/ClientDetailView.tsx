@@ -243,6 +243,7 @@ function DomainRowInputs({ rows, onChange }: { rows: DomainRowData[]; onChange: 
 
 interface EditFormState {
   name: string; email: string; phone: string; address: string; vat_id: string
+  website: string
   contact_person: string; contact_email: string; contact_phone: string
 }
 
@@ -320,7 +321,7 @@ export function ClientDetailView() {
   const [showDeleteClient, setShowDeleteClient] = useState(false)
   const [deleteClientSaving, setDeleteClientSaving] = useState(false)
   const [editForm, setEditForm] = useState<EditFormState>({
-    name: '', email: '', phone: '', address: '', vat_id: '',
+    name: '', email: '', phone: '', address: '', vat_id: '', website: '',
     contact_person: '', contact_email: '', contact_phone: '',
   })
   const [editSaving, setEditSaving] = useState(false)
@@ -357,6 +358,11 @@ export function ClientDetailView() {
   const [pipelineSaving, setPipelineSaving] = useState(false)
   const [deletePipelineTarget, setDeletePipelineTarget] = useState<PipelineItem | null>(null)
 
+  // ── AI summary ───────────────────────────────────────────────────────────
+  const [aiSummary, setAiSummary]   = useState<string | null>(null)
+  const [aiIdeas, setAiIdeas]       = useState<{ title: string; description: string }[]>([])
+  const [aiLoading, setAiLoading]   = useState(false)
+
   // ── other income modal ───────────────────────────────────────────────────
   const [showOtherIncome, setShowOtherIncome] = useState(false)
   const [editOtherIncomeTarget, setEditOtherIncomeTarget] = useState<RevenuePlanner | null>(null)
@@ -377,6 +383,63 @@ export function ClientDetailView() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const client = cStore.clients.find(c => c.id === id)
+
+  // ── AI summary generation (cached 24h in localStorage) ───────────────────
+  useEffect(() => {
+    if (!client || !id || aiLoading || aiSummary) return
+    const cacheKey = `ai_client_summary_${id}`
+    const cached = localStorage.getItem(cacheKey)
+    if (cached) {
+      try {
+        const { text, ideas, ts } = JSON.parse(cached)
+        if (Date.now() - ts < 86_400_000) {
+          setAiSummary(text)
+          setAiIdeas(ideas ?? [])
+          return
+        }
+      } catch { /* stale, regenerate */ }
+    }
+
+    async function generate() {
+      setAiLoading(true)
+      try {
+        const edgeUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pixel-chat`
+        const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+        const activeProj = pStore.projects.filter(p => p.client_id === id && p.status === 'active').map(p => p.name)
+        const activeMaint = mStore.maintenances.filter(m => m.client_id === id && m.status === 'active').map(m => m.name)
+        const prompt = `You are a strategic account manager at a digital agency. Based on this client profile, respond with ONLY valid JSON (no markdown, no explanation) in this exact format:
+{"summary":"3-4 sentence strategic account summary focused on business health and relationship quality","ideas":[{"title":"short title","description":"one sentence specific suggestion"},{"title":"short title","description":"one sentence specific suggestion"}]}
+
+Client profile:
+- Name: ${client!.name}
+- Website: ${client!.website || 'unknown'}
+- Active projects: ${activeProj.length > 0 ? activeProj.join(', ') : 'none'}
+- Active maintenance contracts: ${activeMaint.length > 0 ? activeMaint.join(', ') : 'none'}
+- Hosting entries: ${infraStore.hostingClients.filter(h => h.client_id === id).length}
+- Domains: ${dStore.domains.filter(d => d.client_id === id && !d.archived).length}
+- Revenue YTD: ${invoicedYTD}€
+- Revenue last year: ${prevYearInvoiced}€
+- Open pipeline value: ${pipelineTotal}€`
+
+        const res = await fetch(edgeUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${anonKey}`, 'apikey': anonKey },
+          body: JSON.stringify({ message: prompt, conversation_id: null, history: [] }),
+        })
+        const json = await res.json()
+        const content = json.reply ?? json.content ?? ''
+        const parsed = JSON.parse(content)
+        setAiSummary(parsed.summary ?? '')
+        setAiIdeas(parsed.ideas ?? [])
+        localStorage.setItem(`ai_client_summary_${id}`, JSON.stringify({ text: parsed.summary, ideas: parsed.ideas, ts: Date.now() }))
+      } catch {
+        setAiSummary('Unable to generate summary. Check client data and try again.')
+      } finally {
+        setAiLoading(false)
+      }
+    }
+    generate()
+  }, [client?.id]) // eslint-disable-line react-hooks/exhaustive-deps
   const projects = pStore.projects.filter(p => p.client_id === id)
   const projectIds = new Set(projects.map(p => p.id))
   const hostingRows = infraStore.hostingClients.filter(h => h.client_id === id)
@@ -430,6 +493,20 @@ export function ClientDetailView() {
   const invoicedYTD = allClientRpRows
     .filter(r => yearMonths.some(m => m === r.month) && (r.status === 'issued' || r.status === 'paid'))
     .reduce((s, r) => s + (r.actual_amount ?? r.planned_amount ?? 0), 0)
+
+  const prevYearInvoiced = allClientRpRows
+    .filter(r => r.month.startsWith(`${CURRENT_YEAR - 1}-`) && (r.status === 'issued' || r.status === 'paid'))
+    .reduce((s, r) => s + (r.actual_amount ?? r.planned_amount ?? 0), 0)
+
+  const invoiceConsistency = useMemo(() => {
+    const monthsElapsed = new Date().getMonth() + 1
+    const monthsWithInvoice = new Set(
+      allClientRpRows
+        .filter(r => r.month.startsWith(`${CURRENT_YEAR}-`) && (r.status === 'issued' || r.status === 'paid'))
+        .map(r => r.month.slice(0, 7))
+    ).size
+    return monthsElapsed > 0 ? Math.round((monthsWithInvoice / monthsElapsed) * 100) : 0
+  }, [allClientRpRows])
 
   const invoicedByProject = useMemo(() => {
     const map = new Map<string, number>()
@@ -510,6 +587,7 @@ export function ClientDetailView() {
       phone: client.phone ?? '',
       address: client.address ?? '',
       vat_id: client.vat_id ?? '',
+      website: client.website ?? '',
       contact_person: client.contact_person ?? '',
       contact_email: client.contact_email ?? '',
       contact_phone: client.contact_phone ?? '',
@@ -527,6 +605,7 @@ export function ClientDetailView() {
         phone: editForm.phone || null,
         address: editForm.address || null,
         vat_id: editForm.vat_id || null,
+        website: editForm.website || null,
         contact_person: editForm.contact_person || null,
         contact_email: editForm.contact_email || null,
         contact_phone: editForm.contact_phone || null,
@@ -898,29 +977,38 @@ export function ClientDetailView() {
   // ── tab content ──────────────────────────────────────────────────────────
 
   function renderOverview() {
-    const companyFields = [
-      { label: 'Email', value: client!.email },
-      { label: 'Phone', value: client!.phone },
-      { label: 'Address', value: client!.address },
-      { label: 'VAT ID', value: client!.vat_id },
-      { label: 'Notes', value: client!.notes },
-    ].filter(f => f.value)
+    const yoyChange = prevYearInvoiced > 0
+      ? Math.round(((invoicedYTD - prevYearInvoiced) / prevYearInvoiced) * 100)
+      : null
 
-    const contactFields = [
-      { label: 'Contact person', value: client!.contact_person },
-      { label: 'Contact email', value: client!.contact_email },
-      { label: 'Contact phone', value: client!.contact_phone },
-    ].filter(f => f.value)
-
-    const fieldStyle = { fontSize: 13, color: 'var(--c1)' }
-    const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }
-    const sectionLabel: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid var(--c6)' }
+    const quickActions = [
+      {
+        label: 'Issue one-time invoice', sub: 'Add billing entry', bg: '#6366f1',
+        icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
+        onClick: () => setShowOtherIncome(true),
+      },
+      {
+        label: 'View pipeline', sub: 'Open proposals', bg: '#10b981',
+        icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><line x1="12" y1="7" x2="5" y2="17"/><line x1="12" y1="7" x2="19" y2="17"/><line x1="5" y1="19" x2="19" y2="19"/></svg>,
+        onClick: () => setActiveTab('pipeline'),
+      },
+      {
+        label: 'Edit client', sub: 'Update details', bg: '#3b82f6',
+        icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+        onClick: openEdit,
+      },
+      {
+        label: 'Delete client', sub: 'Remove permanently', bg: '#ef4444',
+        icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>,
+        onClick: () => setShowDeleteClient(true),
+      },
+    ]
 
     return (
-      <div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {/* Alerts */}
         {(expiringDomains.length > 0 || endingMaintenances.length > 0) && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {expiringDomains.map(d => (
               <div key={d.id} className="alert alert-amber" style={{ margin: 0 }}>
                 Domain <strong>{d.domain_name}</strong> expires in {daysUntil(d.expiry_date)} days ({fmtDate(d.expiry_date)})
@@ -928,113 +1016,158 @@ export function ClientDetailView() {
             ))}
             {endingMaintenances.map(m => (
               <div key={m.id} className="alert alert-amber" style={{ margin: 0 }}>
-                Maintenance contract <strong>{m.name}</strong> ends in {daysUntil(m.contract_end!)} days ({fmtDate(m.contract_end)})
+                Maintenance <strong>{m.name}</strong> ends in {daysUntil(m.contract_end!)} days
               </div>
             ))}
           </div>
         )}
 
-        {/* Client info card */}
-        <div className="card" style={{ marginBottom: 20 }}>
-          <div className="card-body">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{client!.name}</h3>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button className="btn btn-secondary btn-xs" onClick={openEdit}>Edit</button>
-                <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red)' }} onClick={() => setShowDeleteClient(true)}>Delete client</button>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 270px', gap: 16, minWidth: 0, alignItems: 'start' }}>
+
+          {/* ── Left column ── */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
+
+            {/* Strategic Intelligence – light bg section */}
+            <div style={{ background: '#f5f3ff', borderRadius: 14, padding: '18px 20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5z"/><path d="M19 3l.75 2.25L22 6l-2.25.75L19 9l-.75-2.25L16 6l2.25-.75z"/></svg>
+                <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--c0)' }}>Strategic Intelligence</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20, border: '1px solid rgba(99,102,241,0.35)', color: '#6366f1', background: 'rgba(99,102,241,0.08)', marginLeft: 2 }}>
+                  <svg width="7" height="7" viewBox="0 0 24 24" fill="#6366f1"><circle cx="12" cy="12" r="12"/></svg>
+                  AI ENGINE ONLINE
+                </span>
+              </div>
+              {/* AI Account Summary white card */}
+              <div style={{ background: '#fff', borderRadius: 10, padding: '16px 18px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5z"/></svg>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>AI Account Summary</span>
+                </div>
+                {aiLoading ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--c4)', padding: '4px 0' }}>
+                    <span className="spinner" style={{ borderTopColor: '#6366f1', width: 13, height: 13 }} />
+                    Generating account summary…
+                  </div>
+                ) : aiSummary ? (
+                  <p style={{ margin: 0, fontSize: 13, lineHeight: 1.7, color: 'var(--c1)' }}>{aiSummary}</p>
+                ) : (
+                  <p style={{ margin: 0, fontSize: 13, color: 'var(--c4)' }}>No summary yet.</p>
+                )}
+                <button
+                  onClick={() => { localStorage.removeItem(`ai_client_summary_${id}`); setAiSummary(null); setAiIdeas([]) }}
+                  style={{ marginTop: 10, background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--c4)', padding: 0 }}
+                >↻ Regenerate</button>
               </div>
             </div>
 
-            {companyFields.length === 0 && contactFields.length === 0 ? (
-              <div style={{ fontSize: 13, color: 'var(--c4)' }}>No contact info added. <button className="btn btn-ghost btn-xs" onClick={openEdit} style={{ padding: '0 4px' }}>Add info</button></div>
-            ) : (
-              <div style={{ display: 'flex', gap: 32 }}>
-                {companyFields.length > 0 && (
-                  <div style={{ flex: 1 }}>
-                    <div style={sectionLabel}>Company</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 24px' }}>
-                      {companyFields.map(f => (
-                        <div key={f.label}>
-                          <div style={labelStyle}>{f.label}</div>
-                          <div style={fieldStyle}>{f.value}</div>
-                        </div>
-                      ))}
-                    </div>
+            {/* Growth Metrics */}
+            <div className="card">
+              <div className="card-body" style={{ padding: '16px 20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--c2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--c2)' }}>Growth Metrics</span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13 }}>
+                    <span style={{ color: 'var(--c3)' }}>Revenue YoY</span>
+                    {yoyChange !== null
+                      ? <span style={{ fontWeight: 700, color: yoyChange >= 0 ? 'var(--green)' : 'var(--red)' }}>{yoyChange >= 0 ? '+' : ''}{yoyChange}% vs {CURRENT_YEAR - 1}</span>
+                      : <span style={{ color: 'var(--c4)', fontWeight: 500 }}>No prior year data</span>}
                   </div>
-                )}
-                {contactFields.length > 0 && (
-                  <div style={{ flex: 1 }}>
-                    <div style={sectionLabel}>Contact person</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 24px' }}>
-                      {contactFields.map(f => (
-                        <div key={f.label}>
-                          <div style={labelStyle}>{f.label}</div>
-                          <div style={fieldStyle}>{f.value}</div>
-                        </div>
-                      ))}
-                    </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13 }}>
+                    <span style={{ color: 'var(--c3)' }}>Invoice consistency</span>
+                    <span style={{ fontWeight: 700, color: invoiceConsistency >= 80 ? 'var(--green)' : invoiceConsistency >= 50 ? 'var(--amber)' : 'var(--red)' }}>{invoiceConsistency}% of months billed</span>
                   </div>
-                )}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13 }}>
+                    <span style={{ color: 'var(--c3)' }}>Active services</span>
+                    <span style={{ fontWeight: 700 }}>{activeProjects.length} projects · {maintenances.filter(m => m.status === 'active').length} maintenances · {hostingRows.length} hosting</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13 }}>
+                    <span style={{ color: 'var(--c3)' }}>Domains</span>
+                    <span style={{ fontWeight: 700, color: expiringDomains.length > 0 ? 'var(--amber)' : undefined }}>
+                      {clientDomains.length}{expiringDomains.length > 0 ? ` · ${expiringDomains.length} expiring` : ''}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Growth Opportunities */}
+            {aiIdeas.length > 0 && (
+              <div className="card">
+                <div className="card-body" style={{ padding: '16px 20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--c2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5z"/><path d="M19 3l.75 2.25L22 6l-2.25.75L19 9l-.75-2.25L16 6l2.25-.75z"/></svg>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Growth Opportunities</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    {aiIdeas.map((idea, i) => (
+                      <div key={i} style={{ background: 'var(--c7)', borderRadius: 8, padding: '12px 14px' }}>
+                        <div style={{ fontWeight: 700, fontSize: 11, color: 'var(--c0)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>{idea.title}</div>
+                        <div style={{ fontSize: 12, color: 'var(--c2)', lineHeight: 1.55 }}>{idea.description}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
-          </div>
-        </div>
 
-        {/* Quick stats row */}
-        <div className="stats-strip" style={{ marginBottom: 20 }}>
-          <div className="stat-card" style={{ '--left-color': 'var(--navy)' } as React.CSSProperties}>
-            <div className="stat-card-label">MAINTENANCES</div>
-            <div className="stat-card-value">{maintenances.filter(m => m.status === 'active').length}</div>
-            <div className="stat-card-sub">
-              {maintenances.filter(m => m.status === 'active').length > 0
-                ? fmtEuro(maintenances.filter(m => m.status === 'active').reduce((s, m) => s + m.monthly_retainer, 0)) + '/mo'
-                : 'none active'}
-            </div>
-          </div>
-          <div className="stat-card" style={{ '--left-color': 'var(--blue)' } as React.CSSProperties}>
-            <div className="stat-card-label">HOSTING</div>
-            <div className="stat-card-value" style={{ color: hostingAnnual > 0 ? 'var(--blue)' : undefined }}>{hostingRows.length}</div>
-            <div className="stat-card-sub">{hostingAnnual > 0 ? fmtEuro(hostingAnnual) + '/yr' : 'none'}</div>
-          </div>
-          <div className="stat-card" style={{ '--left-color': expiringDomains.length > 0 ? 'var(--amber, #d97706)' : 'var(--c5)' } as React.CSSProperties}>
-            <div className="stat-card-label">DOMAINS</div>
-            <div className="stat-card-value" style={{ color: expiringDomains.length > 0 ? 'var(--amber, #d97706)' : undefined }}>{clientDomains.length}</div>
-            <div className="stat-card-sub" style={{ color: expiringDomains.length > 0 ? 'var(--amber, #d97706)' : undefined }}>
-              {expiringDomains.length > 0 ? `${expiringDomains.length} expiring soon` : 'all active'}
-            </div>
-          </div>
-        </div>
-
-        {/* Recent invoices preview */}
-        {fullInvoiceHistory.length > 0 && (
-          <>
-            <div className="section-bar" style={{ marginBottom: 8 }}>
-              <h2>Recent Invoices</h2>
-              <button className="btn btn-ghost btn-xs" onClick={() => setActiveTab('invoices')}>View all →</button>
-            </div>
+            {/* Recent Billing */}
             <div className="card">
-              <table>
-                <thead>
-                  <tr>
-                    <th>MONTH</th><th>DESCRIPTION</th><th className="th-right">AMOUNT</th><th>STATUS</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {fullInvoiceHistory.slice(0, 5).map(r => (
-                    <tr key={r.id}>
-                      <td className="text-mono" style={{ fontSize: 13, color: 'var(--c2)' }}>{fmtMonth(r.month)}</td>
-                      <td style={{ fontSize: 13, color: 'var(--c1)' }}>
-                        {r.project?.name ?? r.maintenance?.name ?? r.hosting?.description ?? r.domain?.domain_name ?? '—'}
-                      </td>
-                      <td className="td-right text-mono" style={{ fontWeight: 600, fontSize: 13 }}>{fmtEuro(r.actual_amount)}</td>
-                      <td><span className={`badge ${RP_STATUS_BADGE[r.status] ?? 'badge-gray'}`}>{r.status.charAt(0).toUpperCase() + r.status.slice(1)}</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="card-body" style={{ padding: '16px 20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--c2)' }}>Recent Billing</span>
+                  <button className="btn btn-ghost btn-xs" onClick={() => setActiveTab('invoices')}>All history →</button>
+                </div>
+                {fullInvoiceHistory.length === 0 ? (
+                  <div style={{ fontSize: 12, color: 'var(--c4)', textAlign: 'center', padding: '12px 0' }}>No invoices yet</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {fullInvoiceHistory.slice(0, 5).map(r => (
+                      <div key={r.id} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 11, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 1 }}>{fmtMonthShort(r.month)}</div>
+                          <div style={{ fontSize: 12, color: 'var(--c2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {r.notes || (r.maintenance_id ? 'Retainer' : r.project_id ? 'Project invoice' : 'Other')}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--green)' }}>{fmtEuro(r.actual_amount ?? r.planned_amount)}</div>
+                          <span className={`badge ${STATUS_BADGE[r.status] ?? 'badge-gray'}`} style={{ fontSize: 10 }}>{r.status}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          </>
-        )}
+          </div>
+
+          {/* ── Right column: Quick Actions (dark navy) ── */}
+          <div style={{ background: 'var(--navy)', borderRadius: 14, padding: '20px', position: 'sticky', top: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="#f59e0b"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              <span style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>Quick Actions</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {quickActions.map((action, i) => (
+                <button key={i} onClick={action.onClick}
+                  style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: 10, padding: '12px 14px', cursor: 'pointer', width: '100%', textAlign: 'left' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.11)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
+                >
+                  <div style={{ width: 36, height: 36, borderRadius: 8, background: action.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    {action.icon}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#fff', marginBottom: 1 }}>{action.label}</div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{action.sub}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     )
   }
@@ -1589,9 +1722,15 @@ export function ClientDetailView() {
               <input value={editForm.vat_id} onChange={e => setEditForm(f => ({ ...f, vat_id: e.target.value }))} />
             </div>
           </div>
-          <div className="form-group" style={{ marginBottom: 14 }}>
-            <label className="form-label">Address</label>
-            <input value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} />
+          <div className="form-row" style={{ marginBottom: 14 }}>
+            <div className="form-group">
+              <label className="form-label">Address</label>
+              <input value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Website</label>
+              <input type="url" placeholder="https://example.com" value={editForm.website} onChange={e => setEditForm(f => ({ ...f, website: e.target.value }))} />
+            </div>
           </div>
           <div style={{ borderTop: '1px solid var(--c6)', paddingTop: 14, marginBottom: 14 }}>
             <p style={{ margin: '0 0 12px', fontSize: 12, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Contact Person</p>
@@ -1966,35 +2105,64 @@ export function ClientDetailView() {
         </Modal>
       )}
 
-      {/* ── Page header with tabs on right ── */}
-      <div className="page-header" style={{ alignItems: 'flex-end' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-            <button onClick={() => navigate('/clients')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c3)', fontSize: 13, padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+      {/* ── Page header ── */}
+      <div className="page-header" style={{ alignItems: 'flex-start', flexDirection: 'column', gap: 0, paddingBottom: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', width: '100%', paddingBottom: 14 }}>
+          <div>
+            <button onClick={() => navigate('/clients')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c3)', fontSize: 12, padding: 0, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6, fontFamily: 'Manrope, sans-serif', fontWeight: 600 }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
               Clients
             </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+              <h1 style={{ margin: 0 }}>{client.name}</h1>
+              <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: activeCount > 0 ? 'rgba(22,163,74,0.1)' : 'var(--c7)', color: activeCount > 0 ? 'var(--green)' : 'var(--c4)', border: `1px solid ${activeCount > 0 ? 'rgba(22,163,74,0.25)' : 'var(--c6)'}` }}>
+                {activeCount > 0 ? 'ACTIVE' : 'INACTIVE'}
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 13, color: 'var(--c3)', flexWrap: 'wrap' }}>
+              {client.email && (
+                <a href={`mailto:${client.email}`} style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--c3)', textDecoration: 'none' }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                  {client.email}
+                </a>
+              )}
+              {client.phone && (
+                <a href={`tel:${client.phone}`} style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--c3)', textDecoration: 'none' }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 10.8a19.79 19.79 0 01-3.07-8.67A2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 14.92z"/></svg>
+                  {client.phone}
+                </a>
+              )}
+              {client.website && (
+                <a href={safeUrl(client.website)} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--navy)', textDecoration: 'none', fontWeight: 500 }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+                  {client.website.replace(/^https?:\/\//, '')}
+                </a>
+              )}
+              {client.contact_person && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                  {client.contact_person}
+                </span>
+              )}
+            </div>
           </div>
-          <h1>{client.name}</h1>
-          <p style={{ color: 'var(--c3)', fontSize: 13, margin: 0 }}>
-            Client since {clientSince} · {activeCount} active project{activeCount !== 1 ? 's' : ''}
-          </p>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <button className="btn btn-secondary btn-sm" onClick={openEdit}>Edit</button>
+            <button className="btn btn-primary btn-sm" onClick={() => setShowAddProject(true)}>+ New Project</button>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: 0, alignSelf: 'flex-end' }}>
+
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: 0, borderTop: '1px solid var(--c6)', width: '100%', marginLeft: -28, paddingLeft: 28, marginRight: -28 }}>
           {TABS.map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)}
               style={{
-                background: 'transparent',
-                border: 'none',
+                background: 'transparent', border: 'none',
                 borderBottom: activeTab === tab.id ? '2px solid var(--navy)' : '2px solid transparent',
-                cursor: 'pointer',
-                padding: '8px 16px',
-                fontFamily: 'inherit',
-                fontWeight: 600,
-                fontSize: 13,
+                cursor: 'pointer', padding: '10px 16px',
+                fontFamily: 'inherit', fontWeight: 600, fontSize: 13,
                 color: activeTab === tab.id ? 'var(--navy)' : 'var(--c3)',
-                transition: 'color .12s',
-                whiteSpace: 'nowrap',
+                transition: 'color .12s', whiteSpace: 'nowrap', marginBottom: -1,
               }}>
               {tab.label}
             </button>
@@ -2005,25 +2173,57 @@ export function ClientDetailView() {
       {/* ── Stats strip (Overview only, outside page-content to avoid double padding) ── */}
       {activeTab === 'overview' && (
         <div className="stats-strip">
-          <div className="stat-card" style={{ '--left-color': 'var(--navy)' } as React.CSSProperties}>
-            <div className="stat-card-label">PROJECTS</div>
-            <div className="stat-card-value">{projects.length}</div>
-            <div className="stat-card-sub">{activeCount === projects.length ? 'All active' : `${activeCount} active`}</div>
+          {/* ACTIVE PROJECTS */}
+          <div className="stat-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+              <div className="stat-card-label">ACTIVE PROJECTS</div>
+              <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(139,92,246,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 00-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 012-3.95A12.88 12.88 0 0122 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 01-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <div className="stat-card-value">{projects.length}</div>
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--navy)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>IN DELIVERY</span>
+            </div>
           </div>
-          <div className="stat-card" style={{ '--left-color': 'var(--navy)' } as React.CSSProperties}>
-            <div className="stat-card-label">TOTAL VALUE</div>
-            <div className="stat-card-value" style={{ color: 'var(--navy)' }}>{totalValue ? fmtEuro(totalValue) : '—'}</div>
-            <div className="stat-card-sub">active contracts</div>
+          {/* TOTAL VALUE */}
+          <div className="stat-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+              <div className="stat-card-label">TOTAL VALUE</div>
+              <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(16,185,129,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <div className="stat-card-value" style={{ color: 'var(--navy)' }}>{totalValue ? totalValue.toLocaleString() + ' €' : '—'}</div>
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>LIFETIME</span>
+            </div>
           </div>
-          <div className="stat-card" style={{ '--left-color': 'var(--green)' } as React.CSSProperties}>
-            <div className="stat-card-label">INVOICED YTD</div>
-            <div className="stat-card-value" style={{ color: 'var(--green)' }}>{invoicedYTD ? fmtEuro(invoicedYTD) : '—'}</div>
-            <div className="stat-card-sub">{CURRENT_YEAR} actual revenue</div>
+          {/* INVOICED YTD */}
+          <div className="stat-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+              <div className="stat-card-label">INVOICED YTD</div>
+              <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(59,130,246,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <div className="stat-card-value" style={{ color: 'var(--green)' }}>{invoicedYTD ? invoicedYTD.toLocaleString() + ' €' : '—'}</div>
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>COLLECTED</span>
+            </div>
           </div>
-          <div className="stat-card" style={{ '--left-color': pipelineTotal > 0 ? 'var(--amber, #d97706)' : 'var(--c5)' } as React.CSSProperties}>
-            <div className="stat-card-label">PIPELINE</div>
-            <div className="stat-card-value" style={{ color: pipelineTotal > 0 ? 'var(--amber, #d97706)' : undefined }}>{pipelineTotal > 0 ? fmtEuro(pipelineTotal) : '—'}</div>
-            <div className="stat-card-sub">open proposals</div>
+          {/* PIPELINE */}
+          <div className="stat-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+              <div className="stat-card-label">PIPELINE</div>
+              <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(245,158,11,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><line x1="12" y1="7" x2="5" y2="17"/><line x1="12" y1="7" x2="19" y2="17"/><line x1="5" y1="19" x2="19" y2="19"/></svg>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <div className="stat-card-value" style={{ color: pipelineTotal > 0 ? '#f59e0b' : undefined }}>{pipelineTotal > 0 ? pipelineTotal.toLocaleString() + ' €' : '—'}</div>
+              <span style={{ fontSize: 10, fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>PENDING</span>
+            </div>
           </div>
         </div>
       )}

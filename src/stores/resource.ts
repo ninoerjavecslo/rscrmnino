@@ -19,8 +19,8 @@ interface ResourceState {
 
   // Team members
   fetchMembers: () => Promise<void>
-  addMember: (data: { name: string; role?: string; team_id?: string | null; hours_per_day?: number }) => Promise<void>
-  updateMember: (id: string, data: Partial<Pick<TeamMember, 'name' | 'role' | 'team_id' | 'hours_per_day' | 'display_order' | 'active'>>) => Promise<void>
+  addMember: (data: { name: string; email?: string; role?: string; team_id?: string | null; hours_per_day?: number; skills?: string }) => Promise<void>
+  updateMember: (id: string, data: Partial<Pick<TeamMember, 'name' | 'email' | 'role' | 'team_id' | 'hours_per_day' | 'display_order' | 'active' | 'skills'>>) => Promise<void>
   removeMember: (id: string) => Promise<void>
 
   // Allocations

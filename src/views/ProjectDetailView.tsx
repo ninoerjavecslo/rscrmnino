@@ -7,7 +7,7 @@ import { useSettingsStore } from '../stores/settings'
 import { useResourceStore } from '../stores/resource'
 import { supabase } from '../lib/supabase'
 import { toast } from '../lib/toast'
-import type { RevenuePlanner, Project, ChangeRequest, ProjectDeliverable } from '../lib/types'
+import type { RevenuePlanner, Project, ChangeRequest, ProjectDeliverable, ResourceAllocation } from '../lib/types'
 import { Select } from '../components/Select'
 
 function safeUrl(url: string | null | undefined): string | undefined {
@@ -222,7 +222,7 @@ export function ProjectDetailView() {
   const cStore = useClientsStore()
   const crStore = useChangeRequestsStore()
   const settingsStore = useSettingsStore()
-  const { deliverables, fetchDeliverables, addDeliverable, updateDeliverable, removeDeliverable } = useResourceStore()
+  const { deliverables, fetchDeliverables, addDeliverable, updateDeliverable, removeDeliverable, members, fetchMembers } = useResourceStore()
   const pmOptions = settingsStore.projectManagers.map(m => ({ value: m, label: m }))
 
   // revenue_planner rows fetched directly
@@ -306,7 +306,20 @@ export function ProjectDetailView() {
   const [delTitle, setDelTitle] = useState('')
   const [delDue, setDelDue] = useState('')
   const [delHours, setDelHours] = useState<number | ''>('')
-  const [delTeam, setDelTeam] = useState('')
+  const [delTeam, setDelTeam] = useState<string[]>([])
+
+  // project team members
+  const [projectMembers, setProjectMembers] = useState<Array<{ id: string; member_id: string; member: { id: string; name: string } }>>([])
+  const [showAddMember, setShowAddMember] = useState(false)
+  const [addMemberIds, setAddMemberIds] = useState<string[]>([])
+  const [addMemberSaving, setAddMemberSaving] = useState(false)
+  const [removeMemberTarget, setRemoveMemberTarget] = useState<{ id: string; name: string } | null>(null)
+
+  // tabs
+  const [tab, setTab] = useState<'overview' | 'invoice' | 'resource'>('overview')
+
+  // project allocations (for resource planning tab)
+  const [projectAllocations, setProjectAllocations] = useState<ResourceAllocation[]>([])
 
   useEffect(() => {
     pStore.fetchAll()
@@ -328,11 +341,21 @@ export function ProjectDetailView() {
       })
   }
 
+  const fetchProjectMembers = (projectId: string) => {
+    supabase
+      .from('member_projects')
+      .select('id, member_id, member:team_members(id, name)')
+      .eq('project_id', projectId)
+      .then(({ data }) => setProjectMembers((data ?? []) as Array<{ id: string; member_id: string; member: { id: string; name: string } }>))
+  }
+
   useEffect(() => {
     if (!id) return
     fetchRpRows(id)
     crStore.fetchByProject(id)
     fetchDeliverables(id)
+    fetchProjectMembers(id)
+    fetchMembers()
   }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -340,6 +363,16 @@ export function ProjectDetailView() {
     const onFocus = () => fetchRpRows(id)
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
+  }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!id) return
+    supabase
+      .from('resource_allocations')
+      .select('*, member:team_members(id, name)')
+      .eq('project_id', id)
+      .order('date')
+      .then(({ data }) => setProjectAllocations((data ?? []) as ResourceAllocation[]))
   }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const project = pStore.projects.find(p => p.id === id)
@@ -965,13 +998,13 @@ export function ProjectDetailView() {
         title: delTitle.trim(),
         due_date: delDue,
         estimated_hours: delHours || null,
-        team: delTeam || null,
+        team: delTeam.length > 0 ? delTeam.join(', ') : null,
         status: 'active',
         notes: null,
       })
       toast('success', 'Deliverable added')
       setShowDeliverableModal(false)
-      setDelTitle(''); setDelDue(''); setDelHours(''); setDelTeam('')
+      setDelTitle(''); setDelDue(''); setDelHours(''); setDelTeam([])
     } catch { toast('error', 'Failed to add deliverable') }
   }
 
@@ -1545,32 +1578,17 @@ export function ProjectDetailView() {
       )}
 
       {/* ── Page header ── */}
-      <div className="page-header">
+      <div className="page-header" style={{ alignItems: 'flex-start' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-            <button
-              onClick={() => navigate('/projects')}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                color: 'var(--c3)', fontSize: 13, padding: 0,
-                display: 'flex', alignItems: 'center', gap: 4,
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="15 18 9 12 15 6" />
-              </svg>
-              Projects
-            </button>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <h1 style={{ margin: 0 }}>{project.name}</h1>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, fontSize: 13, color: 'var(--c3)' }}>
-            {clientLink}
-            <span>·</span>
+            {project.pn && <span className="badge badge-gray" style={{ fontFamily: 'monospace', fontSize: 12 }}>{project.pn}</span>}
             {typeBadge}
+            <span className={`badge ${project.status === 'active' ? 'badge-green' : project.status === 'paused' ? 'badge-amber' : 'badge-gray'}`}>
+              {cap(project.status)}
+            </span>
           </div>
+          <div style={{ marginTop: 4, fontSize: 13, color: 'var(--c3)' }}>{clientLink}</div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <div style={{ display: 'flex', gap: 2, background: 'var(--c7)', borderRadius: 8, padding: 3 }}>
@@ -1599,24 +1617,16 @@ export function ProjectDetailView() {
               )
             })}
           </div>
-          <button className="btn btn-secondary btn-sm" onClick={openProjectEdit}>
-            Edit
-          </button>
-          <button className="btn btn-primary btn-sm" onClick={() => { setPlanRows([{ month: '', description: defaultPlanDescription(), planned_amount: '', probability: '100' }]); setShowAddPlan(true) }}>
-            + Add invoice plan
-          </button>
+          <button className="btn btn-secondary btn-sm" onClick={openProjectEdit}>Edit Project</button>
         </div>
       </div>
 
-      <div className="page-content">
-
-        {/* ── Stats strip ── */}
-        <div className="stats-strip" style={{ marginBottom: 24, gridTemplateColumns: 'repeat(6, 1fr)' }}>
+      {/* ── Stats strip ── */}
+      <div style={{ padding: '0 28px' }}>
+        <div className="stats-strip" style={{ padding: '16px 0', gridTemplateColumns: 'repeat(6, 1fr)' }}>
           <div className="stat-card">
             <div className="stat-card-label">Initial Value</div>
-            <div className="stat-card-value">
-              {valueLabel}
-            </div>
+            <div className="stat-card-value">{valueLabel}</div>
             {project.type === 'fixed' && project.initial_contract_value != null && contractVal != null && project.initial_contract_value !== contractVal && (
               <div className="stat-card-sub" style={{ color: contractVal > project.initial_contract_value ? 'var(--green)' : 'var(--red)' }}>
                 current: {fmt(contractVal)}
@@ -1630,74 +1640,241 @@ export function ProjectDetailView() {
           </div>
           <div className="stat-card">
             <div className="stat-card-label">Total Value</div>
-            <div className="stat-card-value" style={{ color: 'var(--navy)' }}>
-              {totalValue > 0 ? fmt(totalValue) : '—'}
-            </div>
-            <div className="stat-card-sub">
-              {project.type === 'fixed' ? 'initial + approved CRs' : 'planned + approved CRs'}
-            </div>
+            <div className="stat-card-value" style={{ color: 'var(--navy)' }}>{totalValue > 0 ? fmt(totalValue) : '—'}</div>
+            <div className="stat-card-sub">{project.type === 'fixed' ? 'initial + approved CRs' : 'planned + approved CRs'}</div>
           </div>
           <div className="stat-card">
             <div className="stat-card-label">Actual Invoiced</div>
-            <div className="stat-card-value" style={{ color: 'var(--green)' }}>
-              {totalInvoiced > 0 ? fmt(totalInvoiced) : '—'}
-            </div>
-            {invoicedPct != null && (
-              <div className="stat-card-sub">{invoicedPct}% of total</div>
-            )}
+            <div className="stat-card-value" style={{ color: 'var(--green)' }}>{totalInvoiced > 0 ? fmt(totalInvoiced) : '—'}</div>
+            {invoicedPct != null && <div className="stat-card-sub">{invoicedPct}% of total</div>}
           </div>
           <div className="stat-card">
             <div className="stat-card-label">Change Requests</div>
-            <div className="stat-card-value">
-              {crTotal > 0 ? fmt(crTotal) : '—'}
-            </div>
-            {crApprovedTotal > 0 && (
-              <div className="stat-card-sub">{fmt(crApprovedTotal)} approved</div>
-            )}
+            <div className="stat-card-value">{crTotal > 0 ? fmt(crTotal) : '—'}</div>
+            {crApprovedTotal > 0 && <div className="stat-card-sub">{fmt(crApprovedTotal)} approved</div>}
           </div>
           <div className="stat-card">
             <div className="stat-card-label">Costs</div>
-            <div className="stat-card-value" style={{ color: totalCosts > 0 ? 'var(--red)' : undefined }}>
-              {totalCosts > 0 ? fmt(totalCosts) : '—'}
-            </div>
+            <div className="stat-card-value" style={{ color: totalCosts > 0 ? 'var(--red)' : undefined }}>{totalCosts > 0 ? fmt(totalCosts) : '—'}</div>
           </div>
           <div className="stat-card">
             <div className="stat-card-label">Left to Invoice</div>
-            <div className="stat-card-value" style={{ color: leftToInvoice > 0 ? 'var(--navy)' : 'var(--c4)' }}>
-              {leftToInvoice > 0 ? fmt(leftToInvoice) : '—'}
-            </div>
+            <div className="stat-card-value" style={{ color: leftToInvoice > 0 ? 'var(--navy)' : 'var(--c4)' }}>{leftToInvoice > 0 ? fmt(leftToInvoice) : '—'}</div>
             <div className="stat-card-sub">planned, not yet issued</div>
           </div>
         </div>
+      </div>
 
-        {/* ── Contract & Notes section ── */}
-        {(project.contract_url || project.notes) && (
-          <div className="card" style={{ marginBottom: 24, padding: '20px 24px' }}>
-            <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-              {project.contract_url && (
-                <div style={{ flex: '0 0 auto' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Contract</div>
-                  <a
-                    href={safeUrl(project.contract_url)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ fontSize: 13, color: 'var(--navy)', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                  >
-                    {project.contract_url.replace(/^https?:\/\//, '').slice(0, 80)}
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                  </a>
+      {/* ── Tabs ── */}
+      <div style={{ padding: '0 28px', display: 'flex', gap: 0, marginTop: 4 }}>
+        {([
+          ['overview', 'Overview'],
+          ['invoice', 'Invoice Planning'],
+          ['resource', 'Resource Planning'],
+        ] as const).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            style={{
+              padding: '10px 20px', border: 'none', background: 'none', cursor: 'pointer',
+              fontFamily: 'inherit', fontSize: 13, fontWeight: tab === key ? 700 : 500,
+              color: tab === key ? 'var(--navy)' : 'var(--c3)',
+              borderBottom: tab === key ? '2px solid var(--navy)' : '2px solid transparent',
+              marginBottom: -2, transition: 'all 0.1s',
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div className="page-content">
+
+        {/* ── Overview tab ── */}
+        {tab === 'overview' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 24, alignItems: 'start' }}>
+            {/* Left column */}
+            <div>
+              {/* Project Details */}
+              <div className="card" style={{ marginBottom: 20 }}>
+                <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--c6)' }}>
+                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Project Details</h3>
                 </div>
-              )}
-              {project.notes && (
-                <div style={{ flex: '1 1 300px' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Notes</div>
-                  <div style={{ fontSize: 13, color: 'var(--c2)', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{project.notes}</div>
+                <div style={{ padding: '20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 32px' }}>
+                  {project.pn && (
+                    <div style={{ gridColumn: '1 / -1', paddingBottom: 16, borderBottom: '1px solid var(--c6)', marginBottom: 0 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Project #</div>
+                      <div className="text-mono" style={{ fontSize: 20, fontWeight: 800, color: 'var(--c0)' }}>{project.pn}</div>
+                    </div>
+                  )}
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Client</div>
+                    <div style={{ fontSize: 14, fontWeight: 600 }}>{clientLink}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Project Manager</div>
+                    <div style={{ fontSize: 14 }}>{project.pm ?? '—'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Initial Value</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--navy)' }}>{valueLabel}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Start Month</div>
+                    <div style={{ fontSize: 14 }}>{project.start_month ? fmtMonth(project.start_month) : '—'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Est. Launch</div>
+                    <div style={{ fontSize: 14 }}>{project.end_month ? fmtMonth(project.end_month) : '—'}</div>
+                  </div>
+                  {project.contract_url && (
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Contract</div>
+                      <a
+                        href={safeUrl(project.contract_url)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ fontSize: 13, color: 'var(--navy)', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                      >
+                        View Contract
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                      </a>
+                    </div>
+                  )}
+                  {project.notes && (
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Notes</div>
+                      <div style={{ fontSize: 13, color: 'var(--c2)', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{project.notes}</div>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
+
+              {/* Budget Utilization */}
+              <div className="card" style={{ marginBottom: 20 }}>
+                <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--c6)' }}>
+                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Budget Utilization</h3>
+                </div>
+                <div style={{ padding: '20px' }}>
+                  {totalValue > 0 ? (
+                    <>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                        <span style={{ fontSize: 13, color: 'var(--c3)' }}>{invoicedPct ?? 0}% invoiced</span>
+                        <span style={{ fontSize: 13, fontWeight: 700 }}>{fmt(totalInvoiced)} / {fmt(totalValue)}</span>
+                      </div>
+                      <div style={{ background: 'var(--c6)', borderRadius: 6, height: 8, overflow: 'hidden', marginBottom: 20 }}>
+                        <div style={{ width: `${Math.min(100, invoicedPct ?? 0)}%`, height: '100%', background: 'var(--navy)', borderRadius: 6 }} />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Total Value</div>
+                          <div style={{ fontSize: 16, fontWeight: 700 }}>{fmt(totalValue)}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Invoiced</div>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--green)' }}>{fmt(totalInvoiced)}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Remaining</div>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: leftToInvoice > 0 ? 'var(--navy)' : 'var(--c4)' }}>{fmt(leftToInvoice)}</div>
+                        </div>
+                      </div>
+                      {totalCosts > 0 && (
+                        <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--c6)', display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                          <span style={{ color: 'var(--c3)' }}>Project costs</span>
+                          <span style={{ color: 'var(--red)', fontWeight: 700 }}>{fmt(totalCosts)}</span>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div style={{ color: 'var(--c4)', fontSize: 13, textAlign: 'center', padding: '12px 0' }}>No invoice data yet</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Team Allocation */}
+              <div className="card">
+                <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--c6)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Team</h3>
+                  <button className="btn btn-primary btn-sm" onClick={() => { setAddMemberIds([]); setShowAddMember(true) }}>+ Add</button>
+                </div>
+                <div style={{ padding: '16px 20px' }}>
+                  {projectMembers.length === 0 ? (
+                    <p style={{ color: 'var(--c4)', fontSize: 13, margin: 0, textAlign: 'center' }}>No team members assigned yet</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                      {projectMembers.map(pm => (
+                        <div key={pm.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--c7)', borderRadius: 8, padding: '6px 10px 6px 6px' }}>
+                          <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--navy)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
+                            {pm.member.name.charAt(0).toUpperCase()}
+                          </div>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--c1)' }}>{pm.member.name}</span>
+                          <button
+                            onClick={() => setRemoveMemberTarget({ id: pm.id, name: pm.member.name })}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c4)', fontSize: 14, lineHeight: 1, padding: '0 0 0 2px', display: 'flex', alignItems: 'center' }}
+                          >×</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Right column */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Quick Actions */}
+              <div className="card" style={{ background: '#0f172a', border: 'none' }}>
+                <div style={{ padding: '16px 20px' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 16 }}>Quick Actions</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <button
+                      onClick={() => { setPlanRows([{ month: '', description: defaultPlanDescription(), planned_amount: '', probability: '100' }]); setShowAddPlan(true) }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(255,255,255,0.07)', border: 'none', borderRadius: 8, padding: '10px 12px', cursor: 'pointer', width: '100%', color: '#fff', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, textAlign: 'left' }}
+                    >
+                      <div style={{ width: 28, height: 28, borderRadius: 6, background: 'rgba(99,102,241,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a5b4fc" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      </div>
+                      Add Invoice Plan
+                    </button>
+                    <button
+                      onClick={openAddCR}
+                      style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(255,255,255,0.07)', border: 'none', borderRadius: 8, padding: '10px 12px', cursor: 'pointer', width: '100%', color: '#fff', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, textAlign: 'left' }}
+                    >
+                      <div style={{ width: 28, height: 28, borderRadius: 6, background: 'rgba(245,158,11,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                      </div>
+                      Add Change Request
+                    </button>
+                    <button
+                      onClick={() => setShowAddCost(true)}
+                      style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(255,255,255,0.07)', border: 'none', borderRadius: 8, padding: '10px 12px', cursor: 'pointer', width: '100%', color: '#fff', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, textAlign: 'left' }}
+                    >
+                      <div style={{ width: 28, height: 28, borderRadius: 6, background: 'rgba(239,68,68,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+                      </div>
+                      Add Cost
+                    </button>
+                    <button
+                      onClick={openProjectEdit}
+                      style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(255,255,255,0.07)', border: 'none', borderRadius: 8, padding: '10px 12px', cursor: 'pointer', width: '100%', color: '#fff', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, textAlign: 'left' }}
+                    >
+                      <div style={{ width: 28, height: 28, borderRadius: 6, background: 'rgba(100,116,139,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      </div>
+                      Edit Project
+                    </button>
+                  </div>
+                </div>
+              </div>
+
             </div>
           </div>
         )}
 
+        {/* ── Invoice Planning tab ── */}
+        {tab === 'invoice' && (
+          <>
         {/* ── Invoice Plans section ── */}
         {(() => {
           const planYears = [...new Set(invoiceRows.map(r => parseInt(r.month.slice(0, 4))))].sort()
@@ -2052,73 +2229,271 @@ export function ProjectDetailView() {
           )}
         </div>
 
-        {/* ── Deliverables ─── */}
-        <div className="card" style={{ marginTop: 20 }}>
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--c6)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Deliverables</h3>
-            <button className="btn btn-primary btn-sm" onClick={() => setShowDeliverableModal(true)}>+ Add</button>
-          </div>
-          <div style={{ padding: deliverables.length ? 0 : '20px' }}>
-            {deliverables.length === 0 ? (
-              <p style={{ color: 'var(--c4)', textAlign: 'center' }}>No deliverables yet</p>
-            ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr>
-                    <th style={{ textAlign: 'left', padding: '10px 20px', fontSize: 12, color: 'var(--c4)', borderBottom: '1px solid var(--c6)' }}>Title</th>
-                    <th style={{ textAlign: 'left', padding: '10px 12px', fontSize: 12, color: 'var(--c4)', borderBottom: '1px solid var(--c6)' }}>Due Date</th>
-                    <th style={{ textAlign: 'left', padding: '10px 12px', fontSize: 12, color: 'var(--c4)', borderBottom: '1px solid var(--c6)' }}>Est. Hours</th>
-                    <th style={{ textAlign: 'left', padding: '10px 12px', fontSize: 12, color: 'var(--c4)', borderBottom: '1px solid var(--c6)' }}>Team</th>
-                    <th style={{ textAlign: 'center', padding: '10px 12px', fontSize: 12, color: 'var(--c4)', borderBottom: '1px solid var(--c6)' }}>Status</th>
-                    <th style={{ width: 80, borderBottom: '1px solid var(--c6)' }}></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {deliverables.map(d => {
-                    const isOverdue = d.status === 'active' && d.due_date < new Date().toISOString().slice(0, 10)
-                    return (
-                      <tr key={d.id}>
-                        <td style={{ padding: '12px 20px', borderBottom: '1px solid var(--c6)', fontWeight: 600, fontSize: 14 }}>{d.title}</td>
-                        <td style={{ padding: '12px', borderBottom: '1px solid var(--c6)', fontSize: 14, color: isOverdue ? 'var(--red)' : undefined, fontWeight: isOverdue ? 700 : undefined }}>
-                          {new Date(d.due_date + 'T00:00:00').toLocaleDateString('en-GB')}
-                          {isOverdue && ' \u26A0'}
-                        </td>
-                        <td style={{ padding: '12px', borderBottom: '1px solid var(--c6)', fontSize: 14 }}>{d.estimated_hours ? `${d.estimated_hours}h` : '\u2014'}</td>
-                        <td style={{ padding: '12px', borderBottom: '1px solid var(--c6)', fontSize: 14 }}>{d.team || '\u2014'}</td>
-                        <td style={{ padding: '12px', borderBottom: '1px solid var(--c6)', textAlign: 'center' }}>
-                          <span className={`badge ${d.status === 'completed' ? 'badge-green' : d.status === 'delayed' ? 'badge-red' : isOverdue ? 'badge-red' : 'badge-blue'}`}>
-                            {d.status === 'active' && isOverdue ? 'overdue' : d.status}
-                          </span>
-                        </td>
-                        <td style={{ padding: '12px', borderBottom: '1px solid var(--c6)', textAlign: 'center' }}>
-                          <button className="btn btn-ghost btn-xs" onClick={() => handleToggleDeliverable(d)} style={{ fontSize: 12 }}>
-                            {d.status === 'completed' ? 'Reopen' : 'Complete'}
-                          </button>
-                          <button className="btn btn-ghost btn-xs" onClick={() => handleRemoveDeliverable(d.id)} style={{ color: 'var(--red)', fontSize: 12 }}>Del</button>
-                        </td>
+          </>
+        )}
+
+        {/* ── Resource Planning tab ── */}
+        {tab === 'resource' && (
+          <div>
+            {/* Actual allocations from grid */}
+            <div className="section-bar" style={{ marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <h2>Resource Allocations</h2>
+                <span style={{ fontSize: 12, color: 'var(--c4)' }}>synced from Allocation Grid</span>
+              </div>
+              <Link to="/resource-planning" className="btn btn-secondary btn-sm">Open Grid →</Link>
+            </div>
+            {projectAllocations.length === 0 ? (
+              <div className="card" style={{ marginBottom: 24 }}>
+                <div style={{ padding: '32px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>
+                  No allocations recorded for this project yet. Allocate time in the <Link to="/resource-planning" style={{ color: 'var(--navy)' }}>Allocation Grid</Link>.
+                </div>
+              </div>
+            ) : (() => {
+              const byMember = projectAllocations.reduce<Record<string, { name: string; totalHours: number; entries: ResourceAllocation[] }>>((acc, a) => {
+                const mid = a.member_id
+                const name = (a.member as unknown as { name: string } | null)?.name ?? mid
+                if (!acc[mid]) acc[mid] = { name, totalHours: 0, entries: [] }
+                acc[mid].totalHours += a.hours
+                acc[mid].entries.push(a)
+                return acc
+              }, {})
+              return (
+                <div className="card" style={{ marginBottom: 24 }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>TEAM MEMBER</th>
+                        <th className="th-right">TOTAL HOURS</th>
+                        <th className="th-right">ENTRIES</th>
+                        <th className="th-right">DATE RANGE</th>
                       </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            )}
+                    </thead>
+                    <tbody>
+                      {Object.values(byMember).sort((a, b) => b.totalHours - a.totalHours).map(({ name, totalHours, entries }) => {
+                        const dates = entries.map(e => e.date).sort()
+                        const fromDate = dates[0]
+                        const toDate = dates[dates.length - 1]
+                        return (
+                          <tr key={name}>
+                            <td style={{ fontWeight: 600, fontSize: 14 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--navy)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
+                                  {name.charAt(0).toUpperCase()}
+                                </div>
+                                {name}
+                              </div>
+                            </td>
+                            <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)', fontSize: 14 }}>{totalHours}h</td>
+                            <td className="td-right" style={{ color: 'var(--c3)', fontSize: 13 }}>{entries.length}</td>
+                            <td className="td-right" style={{ color: 'var(--c3)', fontSize: 12, fontFamily: 'monospace' }}>
+                              {fromDate === toDate ? fromDate : `${fromDate} — ${toDate}`}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ background: 'var(--c7)', borderTop: '2px solid var(--c6)' }}>
+                        <td style={{ fontWeight: 700, fontSize: 12, color: 'var(--c2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total</td>
+                        <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)' }}>
+                          {projectAllocations.reduce((s, a) => s + a.hours, 0)}h
+                        </td>
+                        <td className="td-right" style={{ color: 'var(--c3)', fontSize: 13 }}>{projectAllocations.length}</td>
+                        <td />
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )
+            })()}
+
+            {/* Deliverables / estimates */}
+            <div className="section-bar" style={{ marginBottom: 16 }}>
+              <h2>Deliverables &amp; Estimates</h2>
+              <button className="btn btn-primary btn-sm" onClick={() => setShowDeliverableModal(true)}>+ Add</button>
+            </div>
+            <div className="card" style={{ marginBottom: 24 }}>
+              {deliverables.length === 0 ? (
+                <div style={{ padding: '28px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>
+                  No deliverables yet. Add deliverables with team assignments and estimated hours to plan resource requirements.
+                </div>
+              ) : (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>DELIVERABLE</th>
+                      <th>TEAM</th>
+                      <th className="th-right">EST. HOURS</th>
+                      <th>DUE DATE</th>
+                      <th>STATUS</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {deliverables.map(d => {
+                      const isOverdue = d.status === 'active' && d.due_date < new Date().toISOString().slice(0, 10)
+                      return (
+                        <tr key={d.id}>
+                          <td style={{ fontWeight: 600, fontSize: 14 }}>{d.title}</td>
+                          <td>{d.team ? <span className="badge badge-gray">{d.team}</span> : <span className="text-muted">—</span>}</td>
+                          <td className="td-right text-mono" style={{ fontWeight: 700, color: d.estimated_hours ? 'var(--navy)' : 'var(--c4)' }}>
+                            {d.estimated_hours ? `${d.estimated_hours}h` : '—'}
+                          </td>
+                          <td style={{ fontSize: 13, color: isOverdue ? 'var(--red)' : 'var(--c2)', fontWeight: isOverdue ? 700 : undefined }}>
+                            {new Date(d.due_date + 'T00:00:00').toLocaleDateString('en-GB')}
+                            {isOverdue && ' ⚠'}
+                          </td>
+                          <td>
+                            <span className={`badge ${d.status === 'completed' ? 'badge-green' : isOverdue ? 'badge-red' : 'badge-blue'}`}>
+                              {d.status === 'active' && isOverdue ? 'Overdue' : d.status === 'completed' ? 'Done' : 'Active'}
+                            </span>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                              <button className="btn btn-ghost btn-xs" onClick={() => handleToggleDeliverable(d)}>
+                                {d.status === 'completed' ? 'Reopen' : 'Complete'}
+                              </button>
+                              <button className="btn btn-ghost btn-xs" onClick={() => handleRemoveDeliverable(d.id)} style={{ color: 'var(--red)' }}>Del</button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                  {deliverables.some(d => d.estimated_hours) && (
+                    <tfoot>
+                      <tr style={{ background: 'var(--c7)', borderTop: '2px solid var(--c6)' }}>
+                        <td colSpan={2} style={{ fontWeight: 700, fontSize: 12, color: 'var(--c2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total</td>
+                        <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)' }}>
+                          {deliverables.reduce((s, d) => s + (d.estimated_hours ?? 0), 0)}h
+                        </td>
+                        <td colSpan={3} />
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              )}
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* ── Remove Team Member Confirm ─── */}
+        {removeMemberTarget && (
+          <div className="modal-overlay" onClick={() => setRemoveMemberTarget(null)}>
+            <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 360 }}>
+              <div className="modal-header">
+                <div className="modal-title">Remove from project?</div>
+                <button className="modal-close" onClick={() => setRemoveMemberTarget(null)}>×</button>
+              </div>
+              <div className="modal-body">
+                <p style={{ margin: 0, fontSize: 14, color: 'var(--c1)' }}>
+                  Remove <strong>{removeMemberTarget.name}</strong> from this project?
+                </p>
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-secondary btn-sm" onClick={() => setRemoveMemberTarget(null)}>Cancel</button>
+                <button
+                  className="btn btn-sm"
+                  style={{ background: 'var(--red)', color: '#fff', border: 'none' }}
+                  onClick={async () => {
+                    await supabase.from('member_projects').delete().eq('id', removeMemberTarget.id)
+                    if (id) fetchProjectMembers(id)
+                    setRemoveMemberTarget(null)
+                  }}
+                >Remove</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Add Team Member Modal ─── */}
+        {showAddMember && (
+          <div className="modal-overlay" onClick={() => setShowAddMember(false)}>
+            <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 560 }}>
+              <div className="modal-header">
+                <h3>Add Team Members</h3>
+                <button className="modal-close" onClick={() => setShowAddMember(false)}>&times;</button>
+              </div>
+              <div className="modal-body">
+                {(() => {
+                  const available = members.filter(m => !projectMembers.some(pm => pm.member_id === m.id))
+                  if (available.length === 0) return (
+                    <p style={{ color: 'var(--c4)', fontSize: 13, margin: 0 }}>All team members are already assigned to this project.</p>
+                  )
+                  return (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      {available.map(m => {
+                        const checked = addMemberIds.includes(m.id)
+                        return (
+                          <label
+                            key={m.id}
+                            onClick={() => setAddMemberIds(prev => checked ? prev.filter(x => x !== m.id) : [...prev, m.id])}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 12,
+                              padding: '10px 14px', borderRadius: 8, cursor: 'pointer',
+                              border: `2px solid ${checked ? 'var(--navy)' : 'var(--c6)'}`,
+                              background: checked ? 'rgba(15,23,42,0.05)' : '#fff',
+                              transition: 'all 0.1s',
+                            }}
+                          >
+                            <div style={{ width: 32, height: 32, borderRadius: '50%', background: checked ? 'var(--navy)' : 'var(--c5)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
+                              {m.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--c0)' }}>{m.name}</div>
+                              {m.role && <div style={{ fontSize: 11, color: 'var(--c4)' }}>{m.role}</div>}
+                            </div>
+                            {checked && (
+                              <div style={{ marginLeft: 'auto', color: 'var(--navy)' }}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                              </div>
+                            )}
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )
+                })()}
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-secondary btn-sm" onClick={() => setShowAddMember(false)}>Cancel</button>
+                <button
+                  className="btn btn-primary btn-sm"
+                  disabled={addMemberIds.length === 0 || addMemberSaving}
+                  onClick={async () => {
+                    if (!id || addMemberIds.length === 0) return
+                    setAddMemberSaving(true)
+                    try {
+                      await supabase.from('member_projects').insert(addMemberIds.map(mid => ({ project_id: id, member_id: mid })))
+                      fetchProjectMembers(id)
+                      setShowAddMember(false)
+                    } finally {
+                      setAddMemberSaving(false)
+                    }
+                  }}
+                >
+                  {addMemberSaving ? 'Adding…' : `Add${addMemberIds.length > 0 ? ` ${addMemberIds.length}` : ''}`}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Add Deliverable Modal ─── */}
         {showDeliverableModal && (
           <div className="modal-overlay" onClick={() => setShowDeliverableModal(false)}>
-            <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 480 }}>
+            <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 600 }}>
               <div className="modal-header">
                 <h3>Add Deliverable</h3>
                 <button className="modal-close" onClick={() => setShowDeliverableModal(false)}>&times;</button>
               </div>
               <div className="modal-body">
-                <div className="form-group">
+                <div className="form-group" style={{ marginBottom: 16 }}>
                   <label className="form-label">Title</label>
-                  <input value={delTitle} onChange={e => setDelTitle(e.target.value)} placeholder="e.g. UX/UI Design delivery" />
+                  <input value={delTitle} onChange={e => setDelTitle(e.target.value)} placeholder="e.g. UX/UI Design delivery" autoFocus />
                 </div>
-                <div className="form-row">
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
                   <div className="form-group">
                     <label className="form-label">Due Date</label>
                     <input type="date" value={delDue} onChange={e => setDelDue(e.target.value)} />
@@ -2130,14 +2505,32 @@ export function ProjectDetailView() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Team</label>
-                  <select value={delTeam} onChange={e => setDelTeam(e.target.value)}>
-                    <option value="">Any team</option>
-                    <option value="ux/ui">UX/UI</option>
-                    <option value="dev">Dev</option>
-                    <option value="content">Content</option>
-                    <option value="pm">PM</option>
-                    <option value="analytics">Analytics</option>
-                  </select>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+                    {['ux/ui', 'dev', 'content', 'pm', 'analytics'].map(t => {
+                      const sel = delTeam.includes(t)
+                      return (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => setDelTeam(prev => sel ? prev.filter(x => x !== t) : [...prev, t])}
+                          style={{
+                            padding: '5px 14px',
+                            borderRadius: 20,
+                            border: sel ? '2px solid var(--navy)' : '2px solid var(--c5)',
+                            background: sel ? 'var(--navy)' : '#fff',
+                            color: sel ? '#fff' : 'var(--c2)',
+                            fontWeight: 600,
+                            fontSize: 13,
+                            cursor: 'pointer',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.04em',
+                          }}
+                        >
+                          {t === 'ux/ui' ? 'UX/UI' : t.charAt(0).toUpperCase() + t.slice(1)}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
               </div>
               <div className="modal-footer">

@@ -4,21 +4,43 @@ import DOMPurify from 'dompurify'
 import { usePixelStore } from '../stores/pixel'
 import type { PixelMessage } from '../lib/types'
 
-const SUGGESTED = [
-  "What's our revenue this month?",
-  'Which domains expire soon?',
-  'Active hosting clients?',
-  'Pipeline summary',
-  'Draft a client follow-up email',
-]
-
 type ModelChoice = 'auto' | 'claude' | 'gpt4o'
 
-const MODEL_TABS: { value: ModelChoice; label: string }[] = [
+const MODEL_PILLS: { value: ModelChoice; label: string }[] = [
   { value: 'auto', label: 'Auto' },
   { value: 'claude', label: 'Claude' },
   { value: 'gpt4o', label: 'GPT-4o' },
 ]
+
+const CHIPS: { text: string }[] = [
+  { text: "What's our revenue this month?" },
+  { text: 'Which domains expire soon?' },
+  { text: 'Active hosting clients?' },
+  { text: 'Pipeline summary' },
+  { text: 'Draft a client follow-up email' },
+]
+
+// ── Icons ────────────────────────────────────────────────────────────────────
+
+function SparkleIcon({ size = 20, color = '#fff' }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke="none">
+      <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5z"/>
+      <path d="M19 3l.75 2.25L22 6l-2.25.75L19 9l-.75-2.25L16 6l2.25-.75z"/>
+    </svg>
+  )
+}
+
+function ChipIcon({ index }: { index: number }) {
+  const icons = [
+    <svg key={0} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
+    <svg key={1} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>,
+    <svg key={2} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>,
+    <svg key={3} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>,
+    <svg key={4} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>,
+  ]
+  return icons[index] ?? icons[0]
+}
 
 // ── Markdown renderer ───────────────────────────────────────────────────────
 
@@ -26,8 +48,9 @@ marked.setOptions({ breaks: true })
 
 function MarkdownContent({ content }: { content: string }) {
   const raw = marked.parse(content) as string
-  const html = DOMPurify.sanitize(raw)
-  return <div className="pixel-md" dangerouslySetInnerHTML={{ __html: html }} />
+  const clean = DOMPurify.sanitize(raw)
+  // DOMPurify-sanitized output rendered safely
+  return <div className="pixel-md" dangerouslySetInnerHTML={{ __html: clean }} />
 }
 
 // ── Animated dots ──────────────────────────────────────────────────────────
@@ -38,18 +61,11 @@ function ThinkingDots() {
       {[0, 1, 2].map(i => (
         <span key={i} style={{
           width: 6, height: 6, borderRadius: '50%',
-          background: 'var(--c4)',
-          display: 'inline-block',
+          background: 'var(--c4)', display: 'inline-block',
           animation: 'pixelDot 1.2s ease-in-out infinite',
           animationDelay: `${i * 0.2}s`,
         }} />
       ))}
-      <style>{`
-        @keyframes pixelDot {
-          0%, 80%, 100% { opacity: 0.25; transform: scale(0.8); }
-          40% { opacity: 1; transform: scale(1); }
-        }
-      `}</style>
     </span>
   )
 }
@@ -61,9 +77,9 @@ function ModelBadge({ model }: { model: PixelMessage['model'] }) {
   const isClaude = model === 'claude'
   return (
     <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 3,
+      display: 'inline-flex', alignItems: 'center',
       fontSize: 9, fontWeight: 700, letterSpacing: '0.03em',
-      padding: '2px 6px', borderRadius: 4,
+      padding: '2px 6px', borderRadius: 3,
       background: isClaude ? '#fef3c7' : '#dcfce7',
       color: isClaude ? '#92400e' : '#14532d',
       marginLeft: 8, verticalAlign: 'middle', textTransform: 'uppercase',
@@ -73,17 +89,28 @@ function ModelBadge({ model }: { model: PixelMessage['model'] }) {
   )
 }
 
-// ── Avatar ─────────────────────────────────────────────────────────────────
+// ── Avatars ────────────────────────────────────────────────────────────────
 
-function PixelAvatar({ size = 30 }: { size?: number }) {
+function AIAvatar({ size = 30 }: { size?: number }) {
+  return (
+    <div style={{
+      width: size, height: size, background: 'var(--navy)',
+      borderRadius: 6, display: 'flex', alignItems: 'center',
+      justifyContent: 'center', flexShrink: 0,
+    }}>
+      <SparkleIcon size={Math.round(size * 0.55)} color="#fff" />
+    </div>
+  )
+}
+
+function UserAvatar({ size = 30 }: { size?: number }) {
   return (
     <div style={{
       width: size, height: size, borderRadius: '50%', flexShrink: 0,
-      background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+      background: 'var(--navy-light)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      color: '#fff', fontWeight: 800, fontSize: size * 0.38,
-      boxShadow: '0 2px 8px rgba(99,102,241,0.35)',
-    }}>P</div>
+      fontSize: Math.round(size * 0.37), fontWeight: 700, color: 'var(--navy)',
+    }}>N</div>
   )
 }
 
@@ -93,116 +120,80 @@ function MessageBubble({ msg }: { msg: PixelMessage }) {
   const isUser = msg.role === 'user'
   return (
     <div style={{
-      display: 'flex',
-      justifyContent: isUser ? 'flex-end' : 'flex-start',
-      alignItems: 'flex-end',
-      gap: 10, marginBottom: 20,
-      animation: 'slideIn 0.18s ease-out',
+      display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start',
+      alignItems: 'flex-end', gap: 10, marginBottom: 20,
     }}>
-      {!isUser && <PixelAvatar size={30} />}
+      {!isUser && <AIAvatar size={30} />}
       <div style={{ maxWidth: isUser ? '72%' : '82%' }}>
         <div style={{
-          fontSize: 13, lineHeight: 1.65,
-          wordBreak: 'break-word',
+          fontSize: 13, lineHeight: 1.65, wordBreak: 'break-word',
           ...(isUser ? {
-            padding: '11px 16px',
-            whiteSpace: 'pre-wrap',
-            background: 'var(--navy)',
-            color: '#fff',
-            borderRadius: '18px 18px 4px 18px',
-            boxShadow: '0 2px 8px rgba(26,58,108,0.18)',
+            padding: '11px 16px', whiteSpace: 'pre-wrap',
+            background: 'var(--navy)', color: '#fff',
+            borderRadius: '12px 12px 3px 12px',
           } : {
-            padding: '12px 16px',
-            background: '#fff',
-            color: 'var(--c1)',
-            borderRadius: '4px 18px 18px 18px',
+            padding: '12px 16px', background: '#fff', color: 'var(--c1)',
+            borderRadius: '3px 12px 12px 12px',
             boxShadow: '0 1px 4px rgba(0,0,0,0.07), 0 0 0 1px rgba(0,0,0,0.05)',
           }),
         }}>
-          {isUser
-            ? msg.content
-            : (
-              <>
-                <MarkdownContent content={msg.content} />
-                <ModelBadge model={msg.model} />
-              </>
-            )
-          }
+          {isUser ? msg.content : <><MarkdownContent content={msg.content} /><ModelBadge model={msg.model} /></>}
         </div>
       </div>
-      {isUser && (
-        <div style={{
-          width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
-          background: 'var(--navy-light)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 11, fontWeight: 700, color: 'var(--navy)',
-        }}>N</div>
-      )}
+      {isUser && <UserAvatar size={30} />}
     </div>
   )
 }
 
-// ── Model tab strip ─────────────────────────────────────────────────────────
+// ── History controls (rendered once, outside isEmpty branch) ───────────────
 
-function ModelTabStrip({ value, onChange }: { value: ModelChoice; onChange: (v: ModelChoice) => void }) {
+function HistoryControls({ store, showHistory, setShowHistory }: {
+  store: ReturnType<typeof usePixelStore>
+  showHistory: boolean
+  setShowHistory: (v: boolean) => void
+}) {
   return (
-    <div style={{
-      display: 'flex', gap: 2,
-      background: '#f0f0f8', borderRadius: 20, padding: 2,
-      border: '1px solid #e0e0f0',
-    }}>
-      {MODEL_TABS.map(tab => (
-        <button
-          key={tab.value}
-          onClick={() => onChange(tab.value)}
-          style={{
-            padding: '3px 10px', borderRadius: 16,
-            fontSize: 10, fontWeight: 600,
-            border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-            transition: 'background 0.12s, color 0.12s, box-shadow 0.12s',
-            ...(value === tab.value ? {
-              background: '#fff',
-              color: 'var(--c1)',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.10)',
-            } : {
-              background: 'transparent',
-              color: 'var(--c4)',
-            }),
-          }}
-        >
-          {tab.label}
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+      {store.activeConversationId && (
+        <button className="btn btn-ghost btn-sm" onClick={store.newConversation} style={{ color: 'var(--c3)' }}>
+          + New chat
         </button>
-      ))}
+      )}
+      <div style={{ position: 'relative' }}>
+        <button className="btn btn-ghost btn-sm" onClick={() => setShowHistory(!showHistory)} style={{ color: 'var(--c3)', gap: 4 }}>
+          History
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+        {showHistory && (
+          <>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 99 }} onClick={() => setShowHistory(false)} />
+            <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', background: '#fff', border: '1px solid var(--c6)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.10)', minWidth: 260, zIndex: 100, overflow: 'hidden' }}>
+              <div style={{ padding: '8px 8px 4px', borderBottom: '1px solid var(--c6)' }}>
+                <button className="btn btn-ghost btn-xs" style={{ width: '100%', justifyContent: 'flex-start', gap: 6, color: 'var(--c2)', fontWeight: 600 }}
+                  onClick={() => { store.newConversation(); setShowHistory(false) }}>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                  New conversation
+                </button>
+              </div>
+              <div style={{ maxHeight: 280, overflowY: 'auto', padding: '4px 8px 8px' }}>
+                {store.conversations.length === 0 && (
+                  <div style={{ fontSize: 11, color: 'var(--c4)', padding: '8px 6px' }}>No conversations yet</div>
+                )}
+                {store.conversations.map(c => (
+                  <button key={c.id} className="btn btn-ghost btn-xs"
+                    style={{ width: '100%', justifyContent: 'flex-start', fontWeight: store.activeConversationId === c.id ? 600 : 400, color: store.activeConversationId === c.id ? 'var(--navy)' : 'var(--c2)', background: store.activeConversationId === c.id ? 'var(--navy-light)' : 'transparent', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                    onClick={() => { store.loadConversation(c.id); setShowHistory(false) }}>
+                    {c.title ?? 'Untitled'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }
-
-// ── Markdown styles ─────────────────────────────────────────────────────────
-
-const MD_STYLES = `
-  .pixel-md { font-size: 13px; line-height: 1.65; color: var(--c1); }
-  .pixel-md p { margin: 0 0 8px; }
-  .pixel-md p:last-child { margin-bottom: 0; }
-  .pixel-md strong { font-weight: 700; color: var(--c0); }
-  .pixel-md em { font-style: italic; }
-  .pixel-md h1, .pixel-md h2, .pixel-md h3 { font-weight: 700; color: var(--c0); margin: 12px 0 5px; line-height: 1.3; }
-  .pixel-md h1:first-child, .pixel-md h2:first-child, .pixel-md h3:first-child { margin-top: 0; }
-  .pixel-md h1 { font-size: 15px; }
-  .pixel-md h2 { font-size: 14px; }
-  .pixel-md h3 { font-size: 13px; }
-  .pixel-md ul, .pixel-md ol { padding-left: 18px; margin: 6px 0 8px; }
-  .pixel-md li { margin-bottom: 3px; }
-  .pixel-md hr { border: none; border-top: 1px solid var(--c6); margin: 10px 0; }
-  .pixel-md code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 11.5px; background: #f4f4f8; padding: 1px 5px; border-radius: 4px; color: #6366f1; }
-  .pixel-md pre { background: #f4f4f8; border-radius: 8px; padding: 12px 14px; overflow-x: auto; margin: 8px 0; }
-  .pixel-md pre code { background: none; padding: 0; color: var(--c1); }
-  .pixel-md table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 8px 0; }
-  .pixel-md thead th { text-align: left; padding: 5px 10px; background: #f4f4f8; font-weight: 700; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--c3); border-bottom: 2px solid #e8e8f0; }
-  .pixel-md tbody td { padding: 5px 10px; border-bottom: 1px solid #f0f0f5; color: var(--c2); }
-  .pixel-md tbody tr:last-child td { border-bottom: none; }
-  .pixel-md tbody tr:hover td { background: #fafafd; }
-  .pixel-md blockquote { border-left: 3px solid var(--c5); margin: 8px 0; padding: 4px 12px; color: var(--c3); font-style: italic; }
-`
 
 // ── Main view ──────────────────────────────────────────────────────────────
 
@@ -229,216 +220,144 @@ export function PixelView() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
   }
 
-  function handleInput(e: React.ChangeEvent<HTMLTextAreaElement>) {
+  function handleInputChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     setInput(e.target.value)
     const ta = e.target
     ta.style.height = 'auto'
-    ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'
+    ta.style.height = Math.min(ta.scrollHeight, 120) + 'px'
   }
 
   const isEmpty = store.messages.length === 0
   const canSend = input.trim().length > 0 && !store.sending
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: '#f9f9fb' }}>
-      <style>{MD_STYLES}</style>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100vh - 52px)', paddingBottom: 120 }}>
 
-      {/* Header */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '0 24px', height: 56, flexShrink: 0,
-        background: '#fff', borderBottom: '1px solid var(--c6)',
-        boxShadow: '0 1px 0 var(--c6)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <PixelAvatar size={30} />
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--c1)', lineHeight: 1.2 }}>Pixel AI</div>
-            <div style={{ fontSize: 10, color: 'var(--c3)', display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
-              Agency Intelligence Assistant
-            </div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          {store.activeConversationId && (
-            <button className="btn btn-ghost btn-sm" onClick={store.newConversation}
-              style={{ fontSize: 11, color: 'var(--c3)' }}>
-              + New chat
-            </button>
-          )}
-          <div style={{ position: 'relative' }}>
-            <button className="btn btn-ghost btn-sm" onClick={() => setShowHistory(h => !h)}
-              style={{ fontSize: 11, color: 'var(--c3)', gap: 4 }}>
-              History
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
-            {showHistory && (
-              <>
-                <div style={{ position: 'fixed', inset: 0, zIndex: 99 }} onClick={() => setShowHistory(false)} />
-                <div style={{
-                  position: 'absolute', right: 0, top: 'calc(100% + 6px)',
-                  background: '#fff', border: '1px solid var(--c6)', borderRadius: 10,
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.10)', minWidth: 260, zIndex: 100, overflow: 'hidden',
-                }}>
-                  <div style={{ padding: '8px 8px 4px', borderBottom: '1px solid var(--c6)' }}>
-                    <button className="btn btn-ghost btn-xs"
-                      style={{ width: '100%', justifyContent: 'flex-start', gap: 6, color: 'var(--c2)', fontWeight: 600 }}
-                      onClick={() => { store.newConversation(); setShowHistory(false) }}>
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                        <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                      </svg>
-                      New conversation
-                    </button>
-                  </div>
-                  <div style={{ maxHeight: 280, overflowY: 'auto', padding: '4px 8px 8px' }}>
-                    {store.conversations.length === 0 && (
-                      <div style={{ fontSize: 11, color: 'var(--c4)', padding: '8px 6px' }}>No conversations yet</div>
-                    )}
-                    {store.conversations.map(c => (
-                      <button key={c.id} className="btn btn-ghost btn-xs"
-                        style={{
-                          width: '100%', justifyContent: 'flex-start',
-                          fontWeight: store.activeConversationId === c.id ? 600 : 400,
-                          color: store.activeConversationId === c.id ? 'var(--navy)' : 'var(--c2)',
-                          background: store.activeConversationId === c.id ? 'var(--navy-light)' : 'transparent',
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        }}
-                        onClick={() => { store.loadConversation(c.id); setShowHistory(false) }}>
-                        {c.title ?? 'Untitled'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+      {/* History controls — floated top right regardless of state */}
+      <div style={{ position: 'absolute', top: 60, right: 24, zIndex: 10 }}>
+        <HistoryControls store={store} showHistory={showHistory} setShowHistory={setShowHistory} />
       </div>
 
-      {/* Messages area */}
+      {/* Messages / Empty state */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 24px' }}>
         {isEmpty ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '65vh', gap: 20 }}>
-            <div style={{ position: 'relative' }}>
-              <div style={{
-                width: 72, height: 72, borderRadius: '50%',
-                background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: '#fff', fontWeight: 800, fontSize: 28,
-                boxShadow: '0 8px 24px rgba(99,102,241,0.30)',
-              }}>P</div>
-              <div style={{
-                position: 'absolute', bottom: 2, right: 2,
-                width: 14, height: 14, borderRadius: '50%',
-                background: '#22c55e', border: '2px solid #f9f9fb',
-              }} />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 60 }}>
+
+            {/* Navy square icon */}
+            <div style={{ width: 56, height: 56, background: 'var(--navy)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <SparkleIcon size={28} color="#fff" />
             </div>
-            <div style={{ textAlign: 'center', maxWidth: 360 }}>
-              <div style={{ fontWeight: 700, fontSize: 20, color: 'var(--c1)', marginBottom: 6 }}>Hello, Nino 👋</div>
-              <div style={{ fontSize: 13, color: 'var(--c3)', lineHeight: 1.6 }}>
-                Ask me anything about your agency — revenue, clients, domains, pipeline, or let me draft something for you.
-              </div>
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', maxWidth: 500 }}>
-              {SUGGESTED.map(s => (
-                <button key={s}
-                  onClick={() => { setInput(s); textareaRef.current?.focus() }}
+
+            <h1 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 800, fontSize: 32, color: 'var(--navy)', marginTop: 20, textAlign: 'center' }}>
+              Hello, Nino 👋
+            </h1>
+            <p style={{ fontSize: 14, color: 'var(--c3)', textAlign: 'center', lineHeight: 1.6, marginTop: 8, maxWidth: 440 }}>
+              Ask me anything about your agency — revenue, clients, domains, pipeline, or let me draft something for you.
+            </p>
+
+            {/* 2×2 + 1 full-width chip grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 32, width: '100%', maxWidth: 600 }}>
+              {CHIPS.map((chip, i) => (
+                <button
+                  key={chip.text}
+                  onClick={() => { setInput(chip.text); textareaRef.current?.focus() }}
                   style={{
-                    padding: '7px 14px', fontSize: 12, fontWeight: 500,
-                    background: '#fff', border: '1px solid var(--c6)',
-                    borderRadius: 20, cursor: 'pointer', color: 'var(--c2)',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                    transition: 'border-color 0.15s, box-shadow 0.15s',
-                    fontFamily: 'inherit',
+                    background: '#fff', border: '1px solid var(--c6)', borderRadius: 8,
+                    padding: '14px 18px', cursor: 'pointer', display: 'flex',
+                    alignItems: 'center', gap: 10, transition: 'background .12s, border-color .12s',
+                    fontFamily: 'inherit', textAlign: 'left',
+                    gridColumn: i === CHIPS.length - 1 ? '1 / -1' : undefined,
                   }}
-                  onMouseEnter={e => { (e.target as HTMLElement).style.borderColor = '#6366f1'; (e.target as HTMLElement).style.color = '#6366f1' }}
-                  onMouseLeave={e => { (e.target as HTMLElement).style.borderColor = 'var(--c6)'; (e.target as HTMLElement).style.color = 'var(--c2)' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#f8f7f9'; e.currentTarget.style.borderColor = '#d9d3dc' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = 'var(--c6)' }}
                 >
-                  {s}
+                  <span style={{ color: 'var(--c3)', flexShrink: 0 }}><ChipIcon index={i} /></span>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--c0)', lineHeight: 1.4 }}>{chip.text}</span>
                 </button>
               ))}
             </div>
+
           </div>
         ) : (
-          <div style={{ maxWidth: 700, margin: '0 auto', paddingTop: 28, paddingBottom: 12 }}>
+          <div style={{ maxWidth: 640, margin: '0 auto', paddingTop: 60, paddingBottom: 12 }}>
             {store.messages.map(msg => <MessageBubble key={msg.id} msg={msg} />)}
-
             {store.sending && (
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginBottom: 20 }}>
-                <PixelAvatar size={30} />
-                <div style={{
-                  padding: '12px 16px',
-                  background: '#fff',
-                  borderRadius: '4px 18px 18px 18px',
-                  boxShadow: '0 1px 4px rgba(0,0,0,0.07), 0 0 0 1px rgba(0,0,0,0.05)',
-                }}>
+                <AIAvatar size={30} />
+                <div style={{ padding: '12px 16px', background: '#fff', borderRadius: '3px 12px 12px 12px', boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
                   <ThinkingDots />
                 </div>
               </div>
             )}
-
-            {store.error && (
-              <div className="alert alert-red" style={{ marginBottom: 16, fontSize: 12 }}>{store.error}</div>
-            )}
+            {store.error && <div className="alert alert-red" style={{ marginBottom: 16, fontSize: 12 }}>{store.error}</div>}
             <div ref={bottomRef} />
           </div>
         )}
       </div>
 
-      {/* Input bar */}
-      <div style={{ padding: '12px 24px 24px', flexShrink: 0 }}>
-        <div style={{
-          maxWidth: 700, margin: '0 auto',
-          background: '#fff',
-          border: '1px solid var(--c6)',
-          borderRadius: 16,
-          boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
-          overflow: 'hidden',
-        }}>
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={handleInput}
-            onKeyDown={handleKey}
-            placeholder="Ask Pixel AI anything..."
-            rows={1}
-            style={{
-              display: 'block', width: '100%',
-              resize: 'none', padding: '14px 16px 0',
-              fontSize: 13, fontFamily: 'inherit',
-              border: 'none', outline: 'none',
-              background: 'transparent', color: 'var(--c1)',
-              lineHeight: 1.6, minHeight: 48, maxHeight: 160,
-              overflowY: 'auto',
-            }}
-          />
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px 10px' }}>
-            <ModelTabStrip value={model} onChange={setModel} />
+      {/* Fixed input bar */}
+      <div style={{
+        position: 'fixed', bottom: 0, left: 'var(--sidebar-w)', right: 0,
+        background: 'rgba(240,238,242,0.95)', backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)', borderTop: '1px solid var(--c6)',
+        padding: '16px 32px', zIndex: 80,
+      }}>
+        <div style={{ maxWidth: 600, margin: '0 auto' }}>
+          <div style={{ background: '#fff', border: '1px solid var(--c6)', borderRadius: 10, padding: '14px 54px 42px 18px', position: 'relative' }}>
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={handleInputChange}
+              onKeyDown={handleKey}
+              placeholder="Message Pixel AI…"
+              rows={1}
+              style={{
+                border: 'none', outline: 'none', background: 'transparent',
+                fontFamily: 'inherit', fontSize: 14, color: 'var(--c0)',
+                width: '100%', resize: 'none', minHeight: 20, maxHeight: 120,
+                lineHeight: 1.5, overflowY: 'auto',
+              }}
+            />
+            {/* Model pills */}
+            <div style={{ position: 'absolute', bottom: 10, left: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+              {MODEL_PILLS.map(pill => (
+                <button
+                  key={pill.value}
+                  onClick={() => setModel(pill.value)}
+                  style={{
+                    background: model === pill.value ? 'var(--navy)' : 'transparent',
+                    border: `1px solid ${model === pill.value ? 'var(--navy)' : 'var(--c6)'}`,
+                    borderRadius: 3, padding: '3px 10px',
+                    fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: 10,
+                    color: model === pill.value ? '#fff' : 'var(--c3)',
+                    cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '.04em', lineHeight: 1.4,
+                  }}
+                >
+                  {pill.label}
+                </button>
+              ))}
+            </div>
+            {/* Send button */}
             <button
               onClick={handleSend}
               disabled={!canSend}
               style={{
-                width: 32, height: 32, borderRadius: 10, border: 'none',
-                cursor: canSend ? 'pointer' : 'default',
-                background: canSend ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'var(--c6)',
-                color: canSend ? '#fff' : 'var(--c4)',
+                position: 'absolute', bottom: 10, right: 10,
+                width: 36, height: 36, background: canSend ? 'var(--navy)' : 'var(--c6)',
+                border: 'none', borderRadius: 6,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'background 0.15s, box-shadow 0.15s',
-                boxShadow: canSend ? '0 2px 8px rgba(99,102,241,0.35)' : 'none',
-                flexShrink: 0,
+                cursor: canSend ? 'pointer' : 'default', opacity: canSend ? 1 : 0.6,
+                transition: 'background .12s',
               }}
             >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <path d="M7 12V2M3 6l4-4 4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={canSend ? '#fff' : 'var(--c4)'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>
               </svg>
             </button>
           </div>
-        </div>
-        <div style={{ maxWidth: 700, margin: '6px auto 0', fontSize: 10, color: 'var(--c5)', textAlign: 'center' }}>
-          Press Enter to send · Shift+Enter for new line
+          <p style={{ textAlign: 'center', marginTop: 8, fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: 9, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--c4)' }}>
+            Pixel AI may produce inaccurate information · Enter to send · Shift+Enter for new line
+          </p>
         </div>
       </div>
     </div>

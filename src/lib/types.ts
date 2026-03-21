@@ -10,6 +10,7 @@ export interface Client {
   address?: string | null
   vat_id?: string | null
   notes?: string | null
+  website?: string | null
   contact_person?: string | null
   contact_email?: string | null
   contact_phone?: string | null
@@ -400,8 +401,10 @@ export interface Team {
 export interface TeamMember {
   id: string
   name: string
+  email?: string | null
   role?: string | null
   team_id?: string | null
+  skills?: string | null
   hours_per_day: number
   display_order: number
   active: boolean

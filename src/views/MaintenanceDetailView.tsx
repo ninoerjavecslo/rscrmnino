@@ -194,6 +194,11 @@ export function MaintenanceDetailView() {
   // Delete cost confirmation
   const [deleteCostRow, setDeleteCostRow] = useState<RevenuePlanner | null>(null)
 
+  // Create invoice
+  const [showCreateInvoice, setShowCreateInvoice] = useState(false)
+  const [createInvoiceMonth, setCreateInvoiceMonth] = useState('')
+  const [createInvoiceAmount, setCreateInvoiceAmount] = useState('')
+
   // Change requests
   const [showAddCR, setShowAddCR] = useState(false)
   const [showEditCR, setShowEditCR] = useState(false)
@@ -646,6 +651,32 @@ export function MaintenanceDetailView() {
     } catch (e) { toast('error', (e as Error).message) }
   }
 
+  // ── Create invoice row ──────────────────────────────────────────────────────
+
+  async function handleCreateInvoice() {
+    if (!createInvoiceMonth || !id) return
+    setSaving(true)
+    try {
+      const amount = parseFloat(createInvoiceAmount) || (maint?.monthly_retainer ?? 0)
+      const { error } = await supabase.from('revenue_planner').insert({
+        maintenance_id: id,
+        month: createInvoiceMonth + '-01',
+        planned_amount: amount,
+        actual_amount: null,
+        status: 'planned' as const,
+        probability: 100,
+        notes: null,
+      })
+      if (error) throw error
+      await fetchRows()
+      setShowCreateInvoice(false)
+      setCreateInvoiceMonth('')
+      setCreateInvoiceAmount('')
+      toast('success', 'Invoice row added to plan')
+    } catch (e) { toast('error', (e as Error).message) }
+    finally { setSaving(false) }
+  }
+
   // ── Render ──────────────────────────────────────────────────────────────────
 
   if (!store.loading && !maint) {
@@ -667,23 +698,11 @@ export function MaintenanceDetailView() {
 
   return (
     <div>
-      {/* Header */}
-      <div className="page-header">
+      {/* ── Page header ───────────────────────────────────────────────────────── */}
+      <div className="page-header" style={{ alignItems: 'flex-start', marginBottom: 20 }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <button className="btn btn-ghost btn-sm" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => navigate('/maintenances')}>
-              ← Maintenances
-            </button>
-          </div>
-          <h1 style={{ marginBottom: 4 }}>{maint.name}</h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span
-              className="table-link"
-              style={{ fontSize: 13, fontWeight: 600, color: 'var(--navy)' }}
-              onClick={() => maint.client?.id && navigate(`/clients/${maint.client.id}`)}
-            >
-              {maint.client?.name ?? '—'}
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+            <h1 style={{ margin: 0 }}>{maint.name}</h1>
             {editingStatus ? (
               <Select
                 value={maint.status}
@@ -697,165 +716,215 @@ export function MaintenanceDetailView() {
             ) : (
               <span
                 className={`badge ${MAINT_STATUS_BADGE[maint.status] ?? 'badge-gray'}`}
-                style={{ cursor: 'pointer' }}
+                style={{ cursor: 'pointer', fontSize: 11 }}
                 onClick={() => setEditingStatus(true)}
                 title="Click to change status"
               >
-                {maint.status.charAt(0).toUpperCase() + maint.status.slice(1)}
+                {maint.status.toUpperCase()}
               </span>
+            )}
+            {expiringSoon && (
+              <span style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 700, color: 'var(--red)' }}>
+                ⚠ Expires in {daysUntilEnd}d
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--c3)' }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            Contract Period: {fmtDate(maint.contract_start)} — {maint.contract_end ? fmtDate(maint.contract_end) : 'Open-ended'}
+            {maint.contract_url && (
+              <>
+                <span style={{ color: 'var(--c5)' }}>·</span>
+                <a href={safeUrl(maint.contract_url)} target="_blank" rel="noreferrer" style={{ color: 'var(--navy)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  View contract
+                </a>
+              </>
             )}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-secondary btn-sm" onClick={openEdit}>Edit contract</button>
+          <button className="btn btn-secondary btn-sm" onClick={openEdit}>Edit Contract</button>
         </div>
       </div>
 
-      {/* Stats strip */}
-      <div className="stats-strip" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
-        <div className="stat-card" style={{ '--left-color': 'var(--green)' } as React.CSSProperties}>
-          <div className="stat-card-label">TOTAL INVOICED</div>
-          <div className="stat-card-value" style={{ color: 'var(--green)' }}>{fmtEuro(totalInvoiced)}</div>
-          <div className="stat-card-sub">issued + paid</div>
-        </div>
-        <div className="stat-card" style={{ '--left-color': 'var(--navy)' } as React.CSSProperties}>
-          <div className="stat-card-label">{hosting ? 'TOTAL / MO (INCL. HOSTING)' : 'RETAINER VALUE'}</div>
-          <div className="stat-card-value">
-            {fmtEuro(maint.monthly_retainer + (hosting?.cycle === 'monthly' ? hosting.amount : 0))}
-            <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--c3)' }}>/mo</span>
+      {/* ── KPI cards + terms section (padded to match page-header/page-content) */}
+      <div style={{ padding: '0 28px 20px' }}>
+
+      {/* ── KPI cards ─────────────────────────────────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, marginBottom: 20 }}>
+        {/* Total Invoiced */}
+        <div className="card">
+          <div className="card-body" style={{ padding: '18px 20px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--c3)' }}>Total Invoiced</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--c5)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            </div>
+            <div style={{ fontSize: 26, fontWeight: 800, fontFamily: 'Manrope, sans-serif', color: totalInvoiced > 0 ? 'var(--green)' : 'var(--c1)', marginBottom: 4 }}>{fmtEuro(totalInvoiced)}</div>
+            <div style={{ fontSize: 11, color: 'var(--c4)' }}>{totalInvoiced > 0 ? 'issued + paid' : 'No invoices issued yet'}</div>
           </div>
-          <div className="stat-card-sub">{fmtDate(maint.contract_start)} → {maint.contract_end ? fmtDate(maint.contract_end) : 'open-ended'}</div>
         </div>
-        <div className="stat-card" style={{ '--left-color': extraBilled > 0 ? 'var(--blue)' : 'var(--c5)' } as React.CSSProperties}>
-          <div className="stat-card-label">EXTRA BILLED</div>
-          <div className="stat-card-value" style={{ color: extraBilled > 0 ? 'var(--blue)' : 'var(--c4)' }}>
-            {extraBilled > 0 ? fmtEuro(extraBilled) : '—'}
+
+        {/* Total / Mo */}
+        <div className="card">
+          <div className="card-body" style={{ padding: '18px 20px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--c3)' }}>{hosting ? 'Total / Mo (Incl. Hosting)' : 'Monthly Retainer'}</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--c5)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
+            </div>
+            <div style={{ fontSize: 26, fontWeight: 800, fontFamily: 'Manrope, sans-serif', color: 'var(--c1)', marginBottom: 4 }}>
+              {fmtEuro(maint.monthly_retainer + (hosting?.cycle === 'monthly' ? hosting.amount : 0))}
+              <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--c4)', marginLeft: 2 }}>/mo</span>
+            </div>
+            <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 600 }}>→ {hosting ? 'Incl. Hosting' : 'Fixed Monthly'}</div>
           </div>
-          <div className="stat-card-sub">above retainer</div>
         </div>
-        <div className="stat-card" style={{ '--left-color': totalCosts > 0 ? 'var(--red)' : 'var(--c5)' } as React.CSSProperties}>
-          <div className="stat-card-label">TOTAL COSTS</div>
-          <div className="stat-card-value" style={{ color: totalCosts > 0 ? 'var(--red)' : 'var(--c4)' }}>
-            {totalCosts > 0 ? fmtEuro(totalCosts) : '—'}
+
+        {/* Extra Billed */}
+        <div className="card">
+          <div className="card-body" style={{ padding: '18px 20px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--c3)' }}>Extra Billed</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--c5)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+            </div>
+            <div style={{ fontSize: 26, fontWeight: 800, fontFamily: 'Manrope, sans-serif', color: extraBilled > 0 ? 'var(--blue)' : 'var(--c1)', marginBottom: 4 }}>{fmtEuro(extraBilled)}</div>
+            <div style={{ fontSize: 11, color: 'var(--c4)' }}>{extraBilled > 0 ? 'above retainer' : 'No extra items added'}</div>
           </div>
-          <div className="stat-card-sub">project expenses</div>
+        </div>
+
+        {/* Total Costs */}
+        <div className="card">
+          <div className="card-body" style={{ padding: '18px 20px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--c3)' }}>Total Costs</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--c5)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
+            </div>
+            <div style={{ fontSize: 26, fontWeight: 800, fontFamily: 'Manrope, sans-serif', color: totalCosts > 0 ? 'var(--red)' : 'var(--c1)', marginBottom: 4 }}>{fmtEuro(totalCosts)}</div>
+            <div style={{ fontSize: 11, color: 'var(--c4)' }}>{totalCosts > 0 ? 'project expenses' : 'Tracking cumulative spend'}</div>
+          </div>
         </div>
       </div>
 
-      <div className="page-content">
-        {/* Info card */}
-        <div className="card" style={{ marginBottom: 20 }}>
+      {/* ── Maintenance Terms + Hosting (two-column) ──────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: hosting ? '1fr 280px' : '1fr', gap: 16, marginBottom: 20, minWidth: 0 }}>
+        {/* Maintenance Terms card */}
+        <div className="card">
           <div className="card-body">
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px 32px', fontSize: 13 }}>
-              <div>
-                <div style={{ color: 'var(--c4)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>
-                  {hosting ? 'Monthly total' : 'Monthly retainer'}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Maintenance Terms</h2>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--c4)" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            </div>
+            {/* Metric chips */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 }}>
+              <div style={{ background: 'var(--c7)', borderRadius: 10, padding: '14px 16px', textAlign: 'center' }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--c2)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 8 }}><circle cx="12" cy="12" r="10"/><path d="M14.31 8a4 4 0 0 0-4.62 0C8.01 9.06 8 11 8 12s.01 2.94 1.69 4a4 4 0 0 0 4.62 0"/><line x1="12" y1="6" x2="12" y2="7"/><line x1="12" y1="17" x2="12" y2="18"/></svg>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--c3)', marginBottom: 4 }}>Monthly Total</div>
+                <div style={{ fontSize: 20, fontWeight: 800, fontFamily: 'Manrope, sans-serif', color: 'var(--c0)' }}>
+                  {fmtEuro(maint.monthly_retainer)}
                 </div>
-                <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--green)' }}>
-                  {fmtEuro(maint.monthly_retainer + (hosting?.cycle === 'monthly' ? hosting.amount : 0))}
+              </div>
+              <div style={{ background: 'var(--c7)', borderRadius: 10, padding: '14px 16px', textAlign: 'center' }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--c2)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 8 }}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--c3)', marginBottom: 4 }}>Hours / Mo</div>
+                <div style={{ fontSize: 20, fontWeight: 800, fontFamily: 'Manrope, sans-serif', color: 'var(--c0)' }}>{maint.hours_included}h</div>
+              </div>
+              <div style={{ background: 'var(--c7)', borderRadius: 10, padding: '14px 16px', textAlign: 'center' }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--c2)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 8 }}><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--c3)', marginBottom: 4 }}>Requests / Mo</div>
+                <div style={{ fontSize: 20, fontWeight: 800, fontFamily: 'Manrope, sans-serif', color: 'var(--c0)' }}>{maint.help_requests_included}</div>
+              </div>
+            </div>
+
+            {/* Contract Details */}
+            <div style={{ borderTop: '1px solid var(--c6)', paddingTop: 14 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--c1)', marginBottom: 10 }}>Contract Details</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                  <span style={{ color: 'var(--c3)' }}>Client Name</span>
+                  <span
+                    style={{ fontWeight: 700, color: 'var(--navy)', cursor: 'pointer' }}
+                    onClick={() => maint.client?.id && navigate(`/clients/${maint.client.id}`)}
+                  >{maint.client?.name ?? '—'}</span>
                 </div>
-                {hosting && (
-                  <div style={{ fontSize: 11, color: 'var(--c4)', marginTop: 2 }}>
-                    {fmtEuro(maint.monthly_retainer)} work + {fmtEuro(hosting.amount)} hosting
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                  <span style={{ color: 'var(--c3)' }}>Contract Start</span>
+                  <span style={{ fontWeight: 700 }}>{fmtDate(maint.contract_start)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                  <span style={{ color: 'var(--c3)' }}>Contract End</span>
+                  <span style={{ fontWeight: 700, color: expiringSoon ? 'var(--red)' : undefined }}>
+                    {maint.contract_end ? fmtDate(maint.contract_end) : 'Open-ended'}
+                  </span>
+                </div>
+                {maint.notes && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, alignItems: 'flex-start', gap: 16 }}>
+                    <span style={{ color: 'var(--c3)', flexShrink: 0 }}>Notes</span>
+                    <span style={{ fontWeight: 500, color: 'var(--c2)', textAlign: 'right' }}>{maint.notes}</span>
                   </div>
                 )}
               </div>
-              <div>
-                <div style={{ color: 'var(--c4)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Hours / mo</div>
-                <div style={{ fontWeight: 600 }}>{maint.hours_included}h</div>
-              </div>
-              <div>
-                <div style={{ color: 'var(--c4)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Requests / mo</div>
-                <div style={{ fontWeight: 600 }}>{maint.help_requests_included}</div>
-              </div>
-              <div>
-                <div style={{ color: 'var(--c4)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Contract start</div>
-                <div>{fmtDate(maint.contract_start)}</div>
-              </div>
-              <div>
-                <div style={{ color: 'var(--c4)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Contract end</div>
-                <div style={{ color: expiringSoon ? 'var(--red)' : undefined, fontWeight: expiringSoon ? 700 : 400 }}>
-                  {maint.contract_end ? fmtDate(maint.contract_end) : 'Open-ended'}
-                  {expiringSoon && <span style={{ marginLeft: 8, fontSize: 11 }}>({daysUntilEnd}d)</span>}
-                </div>
-              </div>
-              {maint.contract_url && (
-                <div>
-                  <div style={{ color: 'var(--c4)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Contract</div>
-                  <a href={safeUrl(maint.contract_url)} target="_blank" rel="noreferrer" style={{ color: 'var(--navy)', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                    View contract
-                  </a>
-                </div>
-              )}
-              {maint.notes && (
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <div style={{ color: 'var(--c4)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Notes</div>
-                  <div style={{ color: 'var(--c2)', whiteSpace: 'pre-wrap' }}>{maint.notes}</div>
-                </div>
-              )}
             </div>
           </div>
         </div>
 
-        {/* Hosting info */}
+        {/* Hosting Attachment card */}
         {hosting && (
-          <>
-            <div className="section-bar" style={{ marginBottom: 10 }}>
-              <h2>Hosting</h2>
-              <span style={{ fontSize: 12, color: 'var(--c4)' }}>Billed together with this maintenance contract</span>
+          <div style={{ background: 'linear-gradient(145deg, #4f46e5 0%, #3b82f6 100%)', borderRadius: 12, padding: '20px 22px', color: '#fff', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontWeight: 700, fontSize: 15 }}>Hosting Attachment</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
             </div>
-            <div className="card" style={{ marginBottom: 20 }}>
-              <div className="card-body">
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px 32px', fontSize: 13 }}>
-                  <div>
-                    <div style={{ color: 'var(--c4)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Project #</div>
-                    <div style={{ fontWeight: 600 }}>{hosting.project_pn || '—'}</div>
-                  </div>
-                  {hosting.description && (
-                    <div>
-                      <div style={{ color: 'var(--c4)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Description</div>
-                      <div>{hosting.description}</div>
-                    </div>
-                  )}
-                  <div>
-                    <div style={{ color: 'var(--c4)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Amount</div>
-                    <div style={{ fontWeight: 700 }}>
-                      {fmtEuro(hosting.amount)}
-                      <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--c4)', marginLeft: 4 }}>/ {hosting.cycle}</span>
-                    </div>
-                  </div>
-                  {hosting.contract_id && (
-                    <div>
-                      <div style={{ color: 'var(--c4)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Contract / Order ID</div>
-                      <div style={{ fontFamily: 'monospace', fontSize: 12 }}>{hosting.contract_id}</div>
-                    </div>
-                  )}
-                  {hosting.billing_since && (
-                    <div>
-                      <div style={{ color: 'var(--c4)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Billing since</div>
-                      <div>{fmtDate(hosting.billing_since)}</div>
-                    </div>
-                  )}
-                  <div>
-                    <div style={{ color: 'var(--c4)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Status</div>
-                    <span className={`badge ${hosting.status === 'active' ? 'badge-green' : hosting.status === 'cancelled' ? 'badge-red' : 'badge-amber'}`} style={{ textTransform: 'capitalize' }}>
-                      {hosting.cancelled_from
-                        ? `Cancelled / from ${new Date(hosting.cancelled_from + 'T00:00:00').toLocaleString('en', { month: 'short', year: 'numeric' })}`
-                        : hosting.status}
-                    </span>
-                  </div>
-                  {hosting.notes && (
-                    <div style={{ gridColumn: '1 / -1' }}>
-                      <div style={{ color: 'var(--c4)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Notes</div>
-                      <div style={{ color: 'var(--c2)' }}>{hosting.notes}</div>
-                    </div>
-                  )}
+
+            <div style={{ background: 'rgba(255,255,255,0.12)', borderRadius: 8, padding: '12px 14px' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.55)', marginBottom: 6 }}>Active Project</div>
+              <div style={{ fontSize: 18, fontWeight: 800, fontFamily: 'Manrope, sans-serif', marginBottom: 4 }}>
+                {hosting.description || (hosting.project_pn ? `Project #${hosting.project_pn}` : '—')}
+              </div>
+              {hosting.project_pn && (
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', fontFamily: 'monospace' }}>PN #{hosting.project_pn}</div>
+              )}
+            </div>
+
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.45)', marginBottom: 6 }}>Service Amount</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ fontSize: 22, fontWeight: 800, fontFamily: 'Manrope, sans-serif' }}>
+                  {fmtEuro(hosting.amount)}
+                  <span style={{ fontSize: 13, fontWeight: 400, color: 'rgba(255,255,255,0.5)', marginLeft: 4 }}>/ {hosting.cycle}</span>
                 </div>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: 12 }}
+                  onClick={() => navigate('/infrastructure')}
+                >
+                  Manage
+                </button>
               </div>
             </div>
-          </>
+
+            {(hosting.billing_since || hosting.contract_id) && (
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {hosting.billing_since && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                    <span style={{ color: 'rgba(255,255,255,0.45)' }}>Billing since</span>
+                    <span style={{ fontWeight: 600 }}>{fmtDate(hosting.billing_since)}</span>
+                  </div>
+                )}
+                {hosting.contract_id && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                    <span style={{ color: 'rgba(255,255,255,0.45)' }}>Contract ID</span>
+                    <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{hosting.contract_id}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
+      </div>
+
+      </div>{/* end padded wrapper */}
+
+      <div className="page-content">
 
         {/* Not-billed alert */}
         {notBilledRows.length > 0 && (
@@ -1174,6 +1243,25 @@ export function MaintenanceDetailView() {
           )}
         </div>
       </div>
+
+      {/* Create Invoice modal */}
+      <Modal open={showCreateInvoice} title="Create Invoice" maxWidth={380} onClose={() => setShowCreateInvoice(false)}
+        footer={<>
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowCreateInvoice(false)}>Cancel</button>
+          <button className="btn btn-primary btn-sm" onClick={handleCreateInvoice} disabled={saving || !createInvoiceMonth}>
+            {saving ? <span className="spinner" /> : null} Add to Plan
+          </button>
+        </>}>
+        <div className="form-group" style={{ marginBottom: 14 }}>
+          <label className="form-label">Month</label>
+          <input type="month" value={createInvoiceMonth} onChange={e => setCreateInvoiceMonth(e.target.value)} />
+        </div>
+        <div className="form-group">
+          <label className="form-label">Amount (€)</label>
+          <input type="number" value={createInvoiceAmount} onChange={e => setCreateInvoiceAmount(e.target.value)} placeholder={String(maint.monthly_retainer)} />
+          <div className="form-hint">Defaults to monthly retainer ({fmtEuro(maint.monthly_retainer)})</div>
+        </div>
+      </Modal>
 
       {/* Edit Contract modal */}
       <Modal open={showEdit} title="Edit Contract" maxWidth={560} onClose={() => setShowEdit(false)}

@@ -8,7 +8,7 @@ import { useDomainsStore } from '../stores/domains'
 import { useRevenuePlannerStore } from '../stores/revenuePlanner'
 import { usePipelineStore } from '../stores/pipeline'
 import { usePixelStore } from '../stores/pixel'
-import type { RevenuePlanner, Domain, Maintenance, HostingClient } from '../lib/types'
+import type { RevenuePlanner } from '../lib/types'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -17,15 +17,29 @@ function getMonthStr(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
 }
 
+function getPrevMonthStr(): string {
+  const d = new Date()
+  d.setDate(1)
+  d.setMonth(d.getMonth() - 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+}
+
+function getMonthLabel(): string {
+  return new Date().toLocaleString('en', { month: 'long', year: 'numeric' })
+}
+
+function getPrevMonthLabel(): string {
+  const d = new Date()
+  d.setDate(1)
+  d.setMonth(d.getMonth() - 1)
+  return d.toLocaleString('en', { month: 'short', year: 'numeric' })
+}
+
 function greeting(): string {
   const h = new Date().getHours()
   if (h < 12) return 'Good morning'
   if (h < 18) return 'Good afternoon'
   return 'Good evening'
-}
-
-function fmtTodayLabel(): string {
-  return new Date().toLocaleString('en', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 function daysUntil(d: string): number {
@@ -36,98 +50,34 @@ function daysSince(d: string): number {
   return Math.floor((Date.now() - new Date(d).getTime()) / 86_400_000)
 }
 
-function fmtDate(d: string): string {
-  const dt = new Date(d + 'T00:00:00')
-  return `${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')}/${dt.getFullYear()}`
-}
-
 function fmtEur(n: number): string {
   return n.toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' €'
 }
 
 function probBadge(p: number): string {
-  if (p >= 100) return 'badge badge-green'
-  if (p >= 75) return 'badge badge-blue'
+  if (p >= 75) return 'badge badge-green'
   if (p >= 50) return 'badge badge-navy'
   return 'badge badge-amber'
 }
 
-// ── Quick link icons ──────────────────────────────────────────────────────────
-
-function IconCalendar() {
-  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-}
-function IconUsers() {
-  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-}
-function IconFolder() {
-  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-}
-function IconTrendingUp() {
-  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-}
-function IconTool() {
-  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+function statusBadge(s: string): string {
+  if (s === 'retainer') return 'badge badge-navy'
+  return 'badge badge-amber'
 }
 
-const QUICK_LINKS = [
-  { label: 'This Month', sub: 'issue invoices', to: '/this-month', Icon: IconCalendar, color: 'var(--navy)' },
-  { label: 'Clients', sub: 'manage clients', to: '/clients', Icon: IconUsers, color: 'var(--green)' },
-  { label: 'Projects', sub: 'all projects', to: '/projects', Icon: IconFolder, color: 'var(--amber)' },
-  { label: 'Forecast', sub: 'pipeline & revenue', to: '/forecast', Icon: IconTrendingUp, color: 'var(--red)' },
-  { label: 'Maintenances', sub: 'contracts & retainers', to: '/maintenances', Icon: IconTool, color: 'var(--blue)' },
-]
-
-function QuickLinkCard({ label, sub, to, Icon, color }: typeof QUICK_LINKS[0]) {
-  return (
-    <Link to={to} style={{ textDecoration: 'none' }}>
-      <div className="card card-body" style={{
-        textAlign: 'center', cursor: 'pointer', padding: '16px 12px',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
-        transition: 'box-shadow 0.15s, transform 0.15s',
-      }}
-        onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 16px rgba(0,0,0,0.10)'; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)' }}
-        onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = ''; (e.currentTarget as HTMLDivElement).style.transform = '' }}
-      >
-        <div style={{ color }}><Icon /></div>
-        <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--c1)' }}>{label}</div>
-        <div style={{ fontSize: 11, color: 'var(--c4)' }}>{sub}</div>
-      </div>
-    </Link>
-  )
+function statusLabel(s: string): string {
+  if (s === 'retainer') return 'Retainer'
+  return 'Planned'
 }
 
-// ── Pixel avatar ──────────────────────────────────────────────────────────────
+// ── Expiring item type ─────────────────────────────────────────────────────────
 
-function PixelAvatar({ size = 32 }: { size?: number }) {
-  return (
-    <div style={{
-      width: size, height: size, borderRadius: '50%', flexShrink: 0,
-      background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      color: '#fff', fontWeight: 800, fontSize: size * 0.38,
-      boxShadow: '0 2px 8px rgba(99,102,241,0.28)',
-    }}>P</div>
-  )
-}
-
-// ── Expiration row ────────────────────────────────────────────────────────────
-
-function ExpirationRow({ name, sub, days, date, isCritical }: { name: string; sub?: string; days: number; date: string; isCritical: boolean }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid var(--c7)' }}>
-      <div>
-        <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--c0)' }}>{name}</div>
-        {sub && <div style={{ fontSize: 11, color: 'var(--c4)' }}>{sub}</div>}
-      </div>
-      <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
-        <span className={isCritical ? 'badge badge-red' : 'badge badge-amber'} style={{ fontSize: 11 }}>
-          {days <= 0 ? 'Expired' : `${days}d`}
-        </span>
-        <div style={{ fontSize: 10, color: 'var(--c4)', marginTop: 2 }}>{fmtDate(date)}</div>
-      </div>
-    </div>
-  )
+interface ExpiringItem {
+  id: string
+  name: string
+  sub: string
+  days: number
+  to: string
 }
 
 // ── Main component ─────────────────────────────────────────────────────────────
@@ -144,7 +94,9 @@ export function DashboardView() {
   const pixelStore = usePixelStore()
 
   const [invoicePage, setInvoicePage] = useState(1)
+  const [expirePage, setExpirePage] = useState(1)
   const currentMonth = getMonthStr()
+  const prevMonth = getPrevMonthStr()
 
   useEffect(() => {
     pStore.fetchAll()
@@ -152,39 +104,104 @@ export function DashboardView() {
     mStore.fetchAll()
     infraStore.fetchAll()
     domainsStore.fetchAll()
-    rStore.fetchByMonths([currentMonth])
+    rStore.fetchByMonths([currentMonth, prevMonth])
     pipeStore.fetchAll()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ── Derived ─────────────────────────────────────────────────────────────────
+  // ── Revenue planner derived ──────────────────────────────────────────────────
 
+  const currentRows = rStore.rows.filter(r => r.month === currentMonth)
+  const prevRows = rStore.rows.filter(r => r.month === prevMonth)
+
+  const nonCostRows = currentRows.filter(r => r.status !== 'cost')
+  const totalTarget = nonCostRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0)
+  const issuedAmount = currentRows
+    .filter(r => r.status === 'issued' || r.status === 'paid')
+    .reduce((s, r) => s + (r.planned_amount ?? 0), 0)
+  const pendingAmount = currentRows
+    .filter(r => r.status === 'planned' || r.status === 'retainer')
+    .reduce((s, r) => s + (r.planned_amount ?? 0), 0)
+  const gapAmount = Math.max(0, totalTarget - issuedAmount - pendingAmount)
+  const pctAchieved = totalTarget > 0 ? Math.round(issuedAmount / totalTarget * 100) : 0
+  const pctPending = totalTarget > 0 ? Math.round(pendingAmount / totalTarget * 100) : 0
+
+  const prevIssuedAmount = prevRows
+    .filter(r => r.status === 'issued' || r.status === 'paid')
+    .reduce((s, r) => s + (r.planned_amount ?? 0), 0)
+  const revenueChange = prevIssuedAmount > 0
+    ? Math.round(((issuedAmount - prevIssuedAmount) / prevIssuedAmount) * 100)
+    : null
+
+  const invoicesToIssue: RevenuePlanner[] = currentRows.filter(
+    r => r.status === 'planned' || r.status === 'retainer'
+  )
+
+  // ── KPI derived ─────────────────────────────────────────────────────────────
+
+  const activeProjects = pStore.projects.filter(p => p.status === 'active')
   const activeMaintenances = mStore.maintenances.filter(m => m.status === 'active')
-
-  const invoicesToIssue: RevenuePlanner[] = rStore.rows.filter(r => r.status === 'planned' || r.status === 'retainer')
-  const invoiceTotal = invoicesToIssue.reduce((s, r) => s + (r.planned_amount ?? 0), 0)
-
-  const activeDeals = pipeStore.items.filter(i => i.status === 'proposal')
-  const pipelineValue = activeDeals.reduce((s, i) => s + (i.estimated_amount ?? 0), 0)
-  const staleDeals = activeDeals.filter(i => daysSince(i.created_at) > 30)
-
-  const criticalDomains: Domain[] = domainsStore.critical()
-  const warningSoonDomains: Domain[] = domainsStore.warningSoon()
-  const expiringDomains: Domain[] = [...criticalDomains, ...warningSoonDomains]
-
-  const expiringMaintenances: Maintenance[] = activeMaintenances.filter(m => {
+  const expiringMaintenances = activeMaintenances.filter(m => {
     if (!m.contract_end) return false
     const d = daysUntil(m.contract_end)
     return d >= 0 && d <= 30
   })
 
-  const expiringHosting: HostingClient[] = infraStore.hostingClients.filter(h => {
-    if (h.status !== 'active' || !h.contract_expiry) return false
-    const d = daysUntil(h.contract_expiry)
-    return d >= 0 && d <= 30
+  // ── Pipeline derived ─────────────────────────────────────────────────────────
+
+  const proposalItems = pipeStore.items.filter(i => i.status === 'proposal')
+  const pipelineValue = proposalItems.reduce((s, i) => s + (i.estimated_amount ?? 0), 0)
+  const staleDeals = proposalItems.filter(i => daysSince(i.created_at) > 30)
+
+  // ── Expiring soon (14 days) ──────────────────────────────────────────────────
+
+  const expiringItems: ExpiringItem[] = []
+
+  domainsStore.domains?.forEach(d => {
+    if (!d.expiry_date) return
+    const days = daysUntil(d.expiry_date)
+    if (days >= 0 && days <= 14) {
+      expiringItems.push({
+        id: 'domain-' + d.id,
+        name: d.domain_name,
+        sub: d.client?.name ?? 'Domain',
+        days,
+        to: '/domains',
+      })
+    }
   })
 
-  const totalExpirations = expiringDomains.length + expiringMaintenances.length + expiringHosting.length
+  activeMaintenances.forEach(m => {
+    if (!m.contract_end) return
+    const days = daysUntil(m.contract_end)
+    if (days >= 0 && days <= 14) {
+      expiringItems.push({
+        id: 'maint-' + m.id,
+        name: m.name,
+        sub: m.client?.name ?? 'Maintenance',
+        days,
+        to: '/maintenances',
+      })
+    }
+  })
+
+  infraStore.hostingClients.forEach(h => {
+    if (h.status !== 'active' || !h.contract_expiry) return
+    const days = daysUntil(h.contract_expiry)
+    if (days >= 0 && days <= 14) {
+      expiringItems.push({
+        id: 'hosting-' + h.id,
+        name: h.description ?? h.project_pn ?? '—',
+        sub: h.client?.name ?? 'Hosting',
+        days,
+        to: '/infrastructure',
+      })
+    }
+  })
+
+  expiringItems.sort((a, b) => a.days - b.days)
+  const expirePageCount = Math.ceil(expiringItems.length / 2)
+  const expirePage2 = expiringItems.slice((expirePage - 1) * 2, expirePage * 2)
 
   // ── Row label helpers ────────────────────────────────────────────────────────
 
@@ -207,328 +224,388 @@ export function DashboardView() {
     return '—'
   }
 
-  // ── Pixel suggestions ────────────────────────────────────────────────────────
+  // ── Pixel suggestion handling ─────────────────────────────────────────────────
 
-  function buildSuggestions(): string[] {
-    const s: string[] = []
-    if (invoicesToIssue.length > 0) {
-      const label = getRowLabel(invoicesToIssue[0])
-      s.push(`Should I issue the "${label}" invoice this month?`)
-    }
-    if (staleDeals.length > 0) {
-      s.push(`I have ${staleDeals.length} stale deal${staleDeals.length > 1 ? 's' : ''} — what should I follow up on?`)
-    }
-    if (expiringDomains.length > 0) {
-      s.push(`${expiringDomains[0].domain_name} expires soon — what do I need to do?`)
-    }
-    s.push("What's my revenue outlook for this month?")
-    s.push('Give me a summary of the active pipeline.')
-    return s.slice(0, 4)
-  }
-
-  function handleSuggestion(text: string) {
+  function handlePixelSuggestion(text: string) {
     pixelStore.sendMessage(text)
     navigate('/pixel')
   }
 
-  // ── Welcome summary text ─────────────────────────────────────────────────────
+  // ── Pixel summary text ────────────────────────────────────────────────────────
 
-  function summaryText(): string {
+  function pixelSummary(): string {
     const parts: string[] = []
     if (invoicesToIssue.length > 0) {
-      parts.push(`${invoicesToIssue.length} invoice${invoicesToIssue.length > 1 ? 's' : ''} to issue (${fmtEur(invoiceTotal)})`)
+      parts.push(`${invoicesToIssue.length} invoice${invoicesToIssue.length > 1 ? 's' : ''} ready to issue`)
     }
     if (staleDeals.length > 0) {
       parts.push(`${staleDeals.length} stalled deal${staleDeals.length > 1 ? 's' : ''}`)
     }
-    if (totalExpirations > 0) {
-      parts.push(`${totalExpirations} expiration${totalExpirations > 1 ? 's' : ''} coming up`)
+    if (expiringItems.length > 0) {
+      parts.push(`${expiringItems.length} item${expiringItems.length > 1 ? 's' : ''} expiring soon`)
     }
     if (parts.length === 0) return "Everything's up to date. Have a great day."
     return parts.join(' · ') + '.'
   }
 
+  const INVOICE_PAGE_SIZE = 8
+
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div>
-      <div className="page-header">
-        <div>
-          <h1>Dashboard</h1>
-          <p className="text-muted">{fmtTodayLabel()}</p>
-        </div>
+    <div className="page-content" style={{ paddingTop: 28, paddingBottom: 60 }}>
+
+      {/* Greeting */}
+      <div style={{ marginBottom: 24 }}>
+        <h1 style={{ fontSize: 30, fontWeight: 800, color: 'var(--navy)', fontFamily: 'Manrope, sans-serif', lineHeight: 1.15 }}>
+          {greeting()}, Nino
+        </h1>
+        <p style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>
+          Here's what's happening with your projects today.
+        </p>
       </div>
 
-      <div className="page-content" style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+      {/* Two-column layout */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 20, alignItems: 'start' }}>
 
-        {/* ── Welcome ─────────────────────────────────────────────────────── */}
-        <div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--c0)', marginBottom: 5, letterSpacing: '-0.4px' }}>
-            {greeting()}, Nino.
-          </div>
-          <div style={{ fontSize: 13, color: 'var(--c3)', lineHeight: 1.5 }}>
-            {summaryText()}
-          </div>
-        </div>
+        {/* ── LEFT COLUMN ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-        {/* ── Quick links ─────────────────────────────────────────────────── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
-          {QUICK_LINKS.map(link => <QuickLinkCard key={link.to} {...link} />)}
-        </div>
+          {/* KPI cards row */}
+          <div style={{ display: 'flex', gap: 12 }}>
 
-        {/* ── Row 2: Pixel AI + Invoices ──────────────────────────────────── */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, alignItems: 'start' }}>
-
-          {/* Pixel AI */}
-          <div className="card card-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <PixelAvatar size={36} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--c0)' }}>Pixel AI</div>
-                <div style={{ fontSize: 11, color: 'var(--c4)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 1 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
-                  Agency Intelligence Assistant
-                </div>
+            <div className="stat-card card" style={{ flex: 1, padding: '20px 22px 18px' }}>
+              <div className="stat-card-label">Monthly Revenue</div>
+              <div className="stat-card-value" style={{ fontSize: 32 }}>
+                {rStore.loading ? '—' : fmtEur(issuedAmount)}
               </div>
-              <Link to="/pixel" className="btn btn-ghost btn-sm" style={{ fontSize: 11, color: 'var(--c3)' }}>Open →</Link>
-            </div>
-
-            <div style={{ fontSize: 12, color: 'var(--c3)', lineHeight: 1.6 }}>
-              Here's what's on your plate — tap a question to get a response instantly.
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-              {buildSuggestions().map(s => (
-                <button
-                  key={s}
-                  onClick={() => handleSuggestion(s)}
-                  style={{
-                    textAlign: 'left', padding: '10px 14px',
-                    background: '#f8f8fc', border: '1px solid var(--c6)',
-                    borderRadius: 10, cursor: 'pointer', fontSize: 12,
-                    color: 'var(--c2)', fontFamily: 'inherit', fontWeight: 500,
-                    transition: 'border-color 0.15s, background 0.15s',
-                    display: 'flex', alignItems: 'flex-start', gap: 9, lineHeight: 1.45,
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.background = '#f3f3fd' }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--c6)'; e.currentTarget.style.background = '#f8f8fc' }}
-                >
-                  <span style={{ color: '#8b5cf6', fontSize: 13, lineHeight: '1.45', flexShrink: 0 }}>✦</span>
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Invoices to issue */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div className="section-bar">
-              <h2>Invoices to Issue</h2>
-              <Link to="/this-month" className="btn btn-secondary btn-sm">→ This Month</Link>
-            </div>
-            <div className="card">
-              {rStore.loading ? (
-                <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>Loading…</div>
-              ) : invoicesToIssue.length === 0 ? (
-                <div style={{ padding: '32px 20px', textAlign: 'center' }}>
-                  <div style={{ fontSize: 20, marginBottom: 6, color: 'var(--green)' }}>✓</div>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--c2)', marginBottom: 4 }}>All caught up</div>
-                  <div style={{ fontSize: 12, color: 'var(--c4)' }}>No pending invoices for this month.</div>
-                </div>
-              ) : (
-                <>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Project / Contract</th>
-                      <th>Client</th>
-                      <th className="th-right">Amount</th>
-                      <th className="th-right">%</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {invoicesToIssue.slice((invoicePage - 1) * 5, invoicePage * 5).map(row => (
-                      <tr key={row.id}>
-                        <td>
-                          <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--c0)' }}>{getRowLabel(row)}</span>
-                          {row.project?.pn && (
-                            <span className="badge badge-gray" style={{ marginLeft: 6, fontSize: 10 }}>{row.project.pn}</span>
-                          )}
-                        </td>
-                        <td style={{ color: 'var(--c3)', fontSize: 12 }}>{getRowClient(row)}</td>
-                        <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)', fontSize: 13 }}>
-                          {row.planned_amount != null ? fmtEur(row.planned_amount) : '—'}
-                        </td>
-                        <td className="td-right">
-                          <span className={probBadge(row.probability)}>{row.probability}%</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  {invoicesToIssue.length > 1 && (
-                    <tfoot>
-                      <tr>
-                        <td colSpan={2} style={{ fontWeight: 700, fontSize: 12, color: 'var(--c3)' }}>Total</td>
-                        <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)' }}>{fmtEur(invoiceTotal)}</td>
-                        <td />
-                      </tr>
-                    </tfoot>
-                  )}
-                </table>
-                {invoicesToIssue.length > 5 && (
-                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: '8px 0' }}>
-                    <button className="btn btn-ghost btn-xs" disabled={invoicePage === 1} onClick={() => setInvoicePage(p => p - 1)}>←</button>
-                    <span style={{ fontSize: 12, color: 'var(--c3)' }}>{invoicePage} / {Math.ceil(invoicesToIssue.length / 5)}</span>
-                    <button className="btn btn-ghost btn-xs" disabled={invoicePage >= Math.ceil(invoicesToIssue.length / 5)} onClick={() => setInvoicePage(p => p + 1)}>→</button>
-                  </div>
+              <div className="stat-card-sub" style={{
+                color: revenueChange === null ? '#6b7280' : revenueChange >= 0 ? '#16a34a' : '#dc2626',
+                display: 'flex', alignItems: 'center', gap: 4,
+              }}>
+                {revenueChange !== null ? (
+                  <>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      {revenueChange >= 0
+                        ? <><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></>
+                        : <><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></>
+                      }
+                    </svg>
+                    {revenueChange >= 0 ? '+' : ''}{revenueChange}% vs {getPrevMonthLabel()}
+                  </>
+                ) : (
+                  <>{getMonthLabel()}</>
                 )}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* ── Row 3: Sales + Expirations ──────────────────────────────────── */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, alignItems: 'start' }}>
-
-          {/* Sales */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div className="section-bar">
-              <h2>Sales Pipeline</h2>
-              <Link to="/sales" className="btn btn-secondary btn-sm">→ Sales</Link>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div className="card card-body" style={{ padding: '14px 16px' }}>
-                <div className="stat-card-label">Active Deals</div>
-                <div className="stat-card-value">{activeDeals.length}</div>
-              </div>
-              <div className="card card-body" style={{ padding: '14px 16px' }}>
-                <div className="stat-card-label">Pipeline Value</div>
-                <div className="stat-card-value" style={{ fontSize: 18 }}>{fmtEur(pipelineValue)}</div>
               </div>
             </div>
 
-            {staleDeals.length > 0 && (
-              <div className="alert alert-amber" style={{ fontSize: 12 }}>
-                <strong>{staleDeals.length} deal{staleDeals.length > 1 ? 's' : ''} stalled</strong> — no movement in 30+ days:{' '}
-                {staleDeals.slice(0, 2).map(d => d.title).join(', ')}
-                {staleDeals.length > 2 && ` +${staleDeals.length - 2} more`}
-                <Link to="/sales" style={{ marginLeft: 10, fontWeight: 700, textDecoration: 'underline' }}>Review →</Link>
+            <div className="stat-card card" style={{ flex: 1, padding: '20px 22px 18px' }}>
+              <div className="stat-card-label">Clients</div>
+              <div className="stat-card-value" style={{ fontSize: 32 }}>
+                {cStore.clients.length}
               </div>
-            )}
-
-            <div className="card">
-              {pipeStore.loading ? (
-                <div style={{ padding: '24px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 12 }}>Loading…</div>
-              ) : activeDeals.length === 0 ? (
-                <div style={{ padding: '24px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 12 }}>No active deals in the pipeline.</div>
-              ) : (
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Deal</th>
-                      <th>Client</th>
-                      <th className="th-right">Value</th>
-                      <th className="th-right">%</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activeDeals.slice(0, 6).map(deal => (
-                      <tr key={deal.id}>
-                        <td>
-                          <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--c0)' }}>{deal.title}</span>
-                          {daysSince(deal.created_at) > 30 && (
-                            <span className="badge badge-amber" style={{ marginLeft: 6, fontSize: 9 }}>stale</span>
-                          )}
-                        </td>
-                        <td style={{ fontSize: 12, color: 'var(--c3)' }}>
-                          {deal.client?.name ?? deal.company_name ?? '—'}
-                        </td>
-                        <td className="td-right text-mono" style={{ fontSize: 13, fontWeight: 600, color: 'var(--navy)' }}>
-                          {deal.estimated_amount != null ? fmtEur(deal.estimated_amount) : '—'}
-                        </td>
-                        <td className="td-right">
-                          <span className={probBadge(deal.probability)}>{deal.probability}%</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+              <div className="stat-card-sub" style={{ color: '#6b7280', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                Total active
+              </div>
             </div>
+
+            <div className="stat-card card" style={{ flex: 1, padding: '20px 22px 18px' }}>
+              <div className="stat-card-label">Active Projects</div>
+              <div className="stat-card-value" style={{ fontSize: 32 }}>
+                {activeProjects.length}
+              </div>
+              <div style={{ height: 4, background: '#ede8ef', borderRadius: 2, overflow: 'hidden', marginBottom: 6, marginTop: 'auto' }}>
+                <div style={{ height: '100%', width: `${activeProjects.length > 0 ? 80 : 0}%`, background: 'var(--navy)', borderRadius: 2 }} />
+              </div>
+              <div className="stat-card-sub" style={{ color: 'var(--navy)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                {pStore.projects.length} total
+              </div>
+            </div>
+
+            <div className="stat-card card" style={{ flex: 1, padding: '20px 22px 18px' }}>
+              <div className="stat-card-label">Maintenances</div>
+              <div className="stat-card-value" style={{ fontSize: 32 }}>
+                {activeMaintenances.length}
+              </div>
+              <div className="stat-card-sub" style={{ color: expiringMaintenances.length > 0 ? '#dc2626' : '#6b7280', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill={expiringMaintenances.length > 0 ? '#dc2626' : 'none'} stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                {expiringMaintenances.length > 0 ? `${expiringMaintenances.length} expiring soon` : 'All active'}
+              </div>
+            </div>
+
           </div>
 
-          {/* Expirations */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div className="section-bar">
-              <h2>Expiring Soon</h2>
+          {/* Revenue Progress */}
+          <div className="card" style={{ padding: '26px 28px 22px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
+              <div>
+                <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: '#64748b', fontFamily: 'Manrope, sans-serif', marginBottom: 5 }}>Revenue Progress</p>
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: 'var(--navy)', fontFamily: 'Manrope, sans-serif' }}>
+                  {getMonthLabel()} Target: {rStore.loading ? '—' : fmtEur(totalTarget)}
+                </h2>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ fontSize: 40, fontWeight: 800, color: 'var(--navy)', fontFamily: 'Manrope, sans-serif', lineHeight: 1 }}>{pctAchieved}%</p>
+                <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: '#64748b', fontFamily: 'Manrope, sans-serif', marginTop: 2 }}>Achieved</p>
+              </div>
             </div>
 
-            {totalExpirations === 0 ? (
-              <div className="card card-body" style={{ textAlign: 'center', padding: '32px 20px' }}>
-                <div style={{ fontSize: 20, color: 'var(--green)', marginBottom: 6 }}>✓</div>
-                <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--c2)', marginBottom: 4 }}>Nothing expiring soon</div>
-                <div style={{ fontSize: 12, color: 'var(--c4)' }}>All domains, contracts, and hosting are up to date.</div>
+            <div style={{ height: 13, background: '#ede8ef', borderRadius: 2, overflow: 'hidden', display: 'flex', gap: 2, marginBottom: 14 }}>
+              <div style={{ height: '100%', width: `${pctAchieved}%`, background: 'var(--navy)' }} />
+              <div style={{ height: '100%', width: `${pctPending}%`, background: '#64748b', opacity: 0.45 }} />
+            </div>
+
+            <div style={{ display: 'flex', gap: 36 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 11, height: 11, background: 'var(--navy)', borderRadius: 2, flexShrink: 0 }} />
+                <div>
+                  <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.09em', textTransform: 'uppercase', color: '#64748b', fontFamily: 'Manrope, sans-serif' }}>Issued</p>
+                  <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--navy)', fontFamily: 'Manrope, sans-serif' }}>{fmtEur(issuedAmount)}</p>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 11, height: 11, background: '#64748b', borderRadius: 2, opacity: 0.5, flexShrink: 0 }} />
+                <div>
+                  <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.09em', textTransform: 'uppercase', color: '#64748b', fontFamily: 'Manrope, sans-serif' }}>Pending</p>
+                  <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--navy)', fontFamily: 'Manrope, sans-serif' }}>{fmtEur(pendingAmount)}</p>
+                </div>
+              </div>
+              <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+                <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.09em', textTransform: 'uppercase', color: '#64748b', fontFamily: 'Manrope, sans-serif' }}>Remaining Gap</p>
+                <p style={{ fontSize: 14, fontWeight: 800, color: '#6b7280', fontFamily: 'Manrope, sans-serif' }}>{fmtEur(gapAmount)}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Invoices table */}
+          <div className="card">
+            <div style={{ padding: '18px 20px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f0eef2' }}>
+              <h3 style={{ fontSize: 16, fontWeight: 800, color: 'var(--navy)', fontFamily: 'Manrope, sans-serif' }}>Invoices to Issue</h3>
+              <Link to="/this-month" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.09em', textTransform: 'uppercase', color: '#64748b', textDecoration: 'none', fontFamily: 'Manrope, sans-serif', display: 'flex', alignItems: 'center', gap: 3 }}>
+                View All
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+              </Link>
+            </div>
+
+            {rStore.loading ? (
+              <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>Loading…</div>
+            ) : invoicesToIssue.length === 0 ? (
+              <div style={{ padding: '32px 20px', textAlign: 'center' }}>
+                <div style={{ fontSize: 20, marginBottom: 6, color: '#16a34a' }}>✓</div>
+                <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--navy)', marginBottom: 4, fontFamily: 'Manrope, sans-serif' }}>All caught up</div>
+                <div style={{ fontSize: 12, color: '#6b7280' }}>No pending invoices for this month.</div>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Client</th>
+                      <th>Project</th>
+                      <th className="th-right">Value</th>
+                      <th className="th-right">Likelihood</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invoicesToIssue
+                      .slice((invoicePage - 1) * INVOICE_PAGE_SIZE, invoicePage * INVOICE_PAGE_SIZE)
+                      .map(row => (
+                        <tr key={row.id}>
+                          <td>
+                            <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--navy)', fontFamily: 'Manrope, sans-serif' }}>{getRowClient(row)}</span>
+                          </td>
+                          <td>
+                            <span style={{ fontSize: 13, color: '#1b1b1d' }}>{getRowLabel(row)}</span>
+                          </td>
+                          <td className="td-right text-mono" style={{ fontWeight: 800, color: 'var(--navy)', fontSize: 13, fontFamily: 'Manrope, sans-serif' }}>
+                            {row.planned_amount != null ? fmtEur(row.planned_amount) : '—'}
+                          </td>
+                          <td className="td-right">
+                            <span className={probBadge(row.probability)}>{row.probability}%</span>
+                          </td>
+                          <td>
+                            <span className={statusBadge(row.status)}>{statusLabel(row.status)}</span>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
 
-                {expiringDomains.length > 0 && (
-                  <div className="card card-body" style={{ padding: '14px 16px' }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--c4)', marginBottom: 8 }}>Domains</div>
-                    {expiringDomains.map(domain => (
-                      <ExpirationRow
-                        key={domain.id}
-                        name={domain.domain_name}
-                        sub={domain.client?.name}
-                        days={daysUntil(domain.expiry_date)}
-                        date={domain.expiry_date}
-                        isCritical={daysUntil(domain.expiry_date) <= 7}
-                      />
-                    ))}
-                    <Link to="/domains" style={{ fontSize: 11, color: 'var(--navy)', fontWeight: 600, marginTop: 10, display: 'inline-block' }}>Manage domains →</Link>
+                {invoicesToIssue.length > INVOICE_PAGE_SIZE && (
+                  <div style={{ padding: '11px 20px', borderTop: '1px solid #f0eef2', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 12, color: '#64748b', fontFamily: 'Manrope, sans-serif' }}>
+                      Showing {Math.min(invoicePage * INVOICE_PAGE_SIZE, invoicesToIssue.length)} of {invoicesToIssue.length}
+                    </span>
+                    <div style={{ display: 'flex', gap: 3 }}>
+                      <button
+                        onClick={() => setInvoicePage(p => p - 1)}
+                        disabled={invoicePage === 1}
+                        style={{ width: 27, height: 27, border: '1px solid #e8e3ea', background: '#fff', borderRadius: 3, cursor: invoicePage === 1 ? 'default' : 'pointer', fontSize: 13, opacity: invoicePage === 1 ? 0.4 : 1 }}
+                      >‹</button>
+                      {Array.from({ length: Math.ceil(invoicesToIssue.length / INVOICE_PAGE_SIZE) }, (_, i) => i + 1).map(p => (
+                        <button
+                          key={p}
+                          onClick={() => setInvoicePage(p)}
+                          style={{
+                            width: 27, height: 27, borderRadius: 3, cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: 'Manrope, sans-serif',
+                            border: p === invoicePage ? 'none' : '1px solid #e8e3ea',
+                            background: p === invoicePage ? 'var(--navy)' : '#fff',
+                            color: p === invoicePage ? '#fff' : '#1b1b1d',
+                          }}
+                        >{p}</button>
+                      ))}
+                      <button
+                        onClick={() => setInvoicePage(p => p + 1)}
+                        disabled={invoicePage >= Math.ceil(invoicesToIssue.length / INVOICE_PAGE_SIZE)}
+                        style={{ width: 27, height: 27, border: '1px solid #e8e3ea', background: '#fff', borderRadius: 3, cursor: invoicePage >= Math.ceil(invoicesToIssue.length / INVOICE_PAGE_SIZE) ? 'default' : 'pointer', fontSize: 13, opacity: invoicePage >= Math.ceil(invoicesToIssue.length / INVOICE_PAGE_SIZE) ? 0.4 : 1 }}
+                      >›</button>
+                    </div>
                   </div>
                 )}
-
-                {expiringMaintenances.length > 0 && (
-                  <div className="card card-body" style={{ padding: '14px 16px' }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--c4)', marginBottom: 8 }}>Maintenance Contracts</div>
-                    {expiringMaintenances.map(m => (
-                      <ExpirationRow
-                        key={m.id}
-                        name={m.name}
-                        sub={m.client?.name}
-                        days={m.contract_end ? daysUntil(m.contract_end) : 0}
-                        date={m.contract_end ?? ''}
-                        isCritical={false}
-                      />
-                    ))}
-                    <Link to="/maintenances" style={{ fontSize: 11, color: 'var(--navy)', fontWeight: 600, marginTop: 10, display: 'inline-block' }}>Manage contracts →</Link>
-                  </div>
-                )}
-
-                {expiringHosting.length > 0 && (
-                  <div className="card card-body" style={{ padding: '14px 16px' }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--c4)', marginBottom: 8 }}>Hosting</div>
-                    {expiringHosting.map(h => (
-                      <ExpirationRow
-                        key={h.id}
-                        name={h.description ?? h.project_pn ?? '—'}
-                        sub={h.client?.name}
-                        days={h.contract_expiry ? daysUntil(h.contract_expiry) : 0}
-                        date={h.contract_expiry ?? ''}
-                        isCritical={false}
-                      />
-                    ))}
-                    <Link to="/infrastructure" style={{ fontSize: 11, color: 'var(--navy)', fontWeight: 600, marginTop: 10, display: 'inline-block' }}>Manage hosting →</Link>
-                  </div>
-                )}
-
-              </div>
+              </>
             )}
           </div>
+
         </div>
+        {/* /LEFT */}
+
+        {/* ── RIGHT COLUMN ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+          {/* Pixel Assistant dark card */}
+          <div style={{ background: 'var(--navy)', borderRadius: 10, padding: '24px 22px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 12 }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="#89ceff" stroke="none">
+                <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5z"/>
+                <path d="M19 3l.75 2.25L22 6l-2.25.75L19 9l-.75-2.25L16 6l2.25-.75z"/>
+              </svg>
+              <p style={{ fontSize: 14, fontWeight: 800, color: '#fff', fontFamily: 'Manrope, sans-serif' }}>Pixel Assistant</p>
+            </div>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', lineHeight: 1.6, marginBottom: 18 }}>
+              {pixelSummary()}
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <button
+                onClick={() => navigate('/pixel')}
+                style={{ background: 'rgba(255,255,255,0.08)', color: '#fff', border: 'none', borderRadius: 3, padding: '12px 18px', fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', cursor: 'pointer', fontFamily: 'Manrope, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', transition: 'background .15s' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.14)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)' }}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                Open Pixel AI
+              </button>
+              {invoicesToIssue.length > 0 && (
+                <button
+                  onClick={() => handlePixelSuggestion(`I have ${invoicesToIssue.length} invoices to issue this month totaling ${fmtEur(invoicesToIssue.reduce((s, r) => s + (r.planned_amount ?? 0), 0))}. What should I prioritize?`)}
+                  style={{ background: '#fff', color: 'var(--navy)', border: 'none', borderRadius: 3, padding: '12px 18px', fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', cursor: 'pointer', fontFamily: 'Manrope, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', transition: 'background .15s' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#f4f2f6' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '#fff' }}
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  Review Invoices
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Expiring Soon */}
+          {expiringItems.length > 0 ? (
+            <div style={{ background: '#fff5f5', border: '1.5px solid #fecaca', borderRadius: 10, padding: '18px 20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 14 }}>
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="#dc2626" stroke="none"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13" stroke="#fff" strokeWidth="2" strokeLinecap="round"/><line x1="12" y1="17" x2="12.01" y2="17" stroke="#fff" strokeWidth="2" strokeLinecap="round"/></svg>
+                <p style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.07em', textTransform: 'uppercase', color: '#dc2626', fontFamily: 'Manrope, sans-serif' }}>
+                  Expiring Soon
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {expirePage2.map((item, idx) => (
+                  <Link
+                    key={item.id}
+                    to={item.to}
+                    style={{ textDecoration: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: idx < expirePage2.length - 1 ? '1px solid #fecaca' : 'none' }}
+                  >
+                    <div>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--navy)', fontFamily: 'Manrope, sans-serif' }}>{item.name}</p>
+                      <p style={{ fontSize: 11, color: item.days <= 3 ? '#dc2626' : '#92400e', fontWeight: 600, marginTop: 3, display: 'flex', alignItems: 'center', gap: 3 }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        Expires in {item.days === 0 ? 'today' : `${item.days} day${item.days !== 1 ? 's' : ''}`}
+                      </p>
+                    </div>
+                    <div style={{ width: 30, height: 30, borderRadius: 4, border: '1.5px solid #fecaca', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: 12 }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+
+              {expirePageCount > 1 && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, paddingTop: 10, borderTop: '1px solid #fecaca' }}>
+                  <span style={{ fontSize: 11, color: '#dc2626', fontFamily: 'Manrope, sans-serif', fontWeight: 600 }}>
+                    {expirePage} / {expirePageCount}
+                  </span>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button
+                      onClick={() => setExpirePage(p => p - 1)}
+                      disabled={expirePage === 1}
+                      style={{ padding: '3px 8px', border: '1.5px solid #fecaca', background: '#fff', borderRadius: 3, cursor: expirePage === 1 ? 'default' : 'pointer', fontSize: 12, opacity: expirePage === 1 ? 0.4 : 1 }}
+                    >‹</button>
+                    <button
+                      onClick={() => setExpirePage(p => p + 1)}
+                      disabled={expirePage >= expirePageCount}
+                      style={{ padding: '3px 8px', border: '1.5px solid #fecaca', background: '#fff', borderRadius: 3, cursor: expirePage >= expirePageCount ? 'default' : 'pointer', fontSize: 12, opacity: expirePage >= expirePageCount ? 0.4 : 1 }}
+                    >›</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ background: '#f0fdf4', border: '1.5px solid #bbf7d0', borderRadius: 10, padding: '18px 20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                <p style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.07em', textTransform: 'uppercase', color: '#16a34a', fontFamily: 'Manrope, sans-serif' }}>Nothing expiring</p>
+              </div>
+              <p style={{ fontSize: 12, color: '#166534', marginTop: 6 }}>All domains, contracts, and hosting are up to date.</p>
+            </div>
+          )}
+
+          {/* Sales Pipeline */}
+          <div className="card" style={{ padding: '18px 20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: '#64748b', fontFamily: 'Manrope, sans-serif' }}>Sales Pipeline</p>
+              <Link to="/sales" style={{ fontSize: 11, fontWeight: 700, color: 'var(--navy)', textDecoration: 'none', fontFamily: 'Manrope, sans-serif', display: 'flex', alignItems: 'center', gap: 2 }}>
+                View
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+              </Link>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', fontFamily: 'Manrope, sans-serif' }}>Proposals Sent</span>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--navy)', fontFamily: 'Manrope, sans-serif' }}>{proposalItems.length}</span>
+                </div>
+                <div style={{ height: 5, background: '#ede8ef', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', background: 'var(--navy)', width: `${Math.min(100, proposalItems.length * 10)}%`, borderRadius: 2 }} />
+                </div>
+              </div>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', fontFamily: 'Manrope, sans-serif' }}>Pipeline Value</span>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--navy)', fontFamily: 'Manrope, sans-serif' }}>{fmtEur(pipelineValue)}</span>
+                </div>
+                <div style={{ height: 5, background: '#ede8ef', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', background: 'var(--navy)', width: `${pipelineValue > 0 ? 65 : 0}%`, borderRadius: 2 }} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+        {/* /RIGHT */}
 
       </div>
     </div>

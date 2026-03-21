@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { usePixelStore } from '../stores/pixel'
+import type { PixelState } from '../stores/pixel'
 import type { PixelMessage } from '../lib/types'
 
 type ModelChoice = 'auto' | 'claude' | 'gpt4o'
@@ -148,7 +149,7 @@ function MessageBubble({ msg }: { msg: PixelMessage }) {
 // ── History controls (rendered once, outside isEmpty branch) ───────────────
 
 function HistoryControls({ store, showHistory, setShowHistory }: {
-  store: ReturnType<typeof usePixelStore>
+  store: PixelState
   showHistory: boolean
   setShowHistory: (v: boolean) => void
 }) {

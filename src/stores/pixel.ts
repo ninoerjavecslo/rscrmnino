@@ -4,7 +4,7 @@ import type { PixelConversation, PixelMessage } from '../lib/types'
 
 const EDGE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pixel-chat`
 
-interface PixelState {
+export interface PixelState {
   conversations: PixelConversation[]
   activeConversationId: string | null
   messages: PixelMessage[]

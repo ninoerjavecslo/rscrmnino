@@ -13,6 +13,7 @@ const CAT_COLORS: Record<AllocationCategory, string> = {
   meeting: 'var(--amber)',
   admin: 'var(--c3)',
   leave: 'var(--red)',
+  sales: '#7c3aed',
 }
 
 const STATUS_BADGE: Record<string, string> = {

@@ -346,7 +346,7 @@ export function ProjectDetailView() {
       .from('member_projects')
       .select('id, member_id, member:team_members(id, name)')
       .eq('project_id', projectId)
-      .then(({ data }) => setProjectMembers((data ?? []) as Array<{ id: string; member_id: string; member: { id: string; name: string } }>))
+      .then(({ data }) => setProjectMembers((data ?? []) as unknown as Array<{ id: string; member_id: string; member: { id: string; name: string } }>))
   }
 
   useEffect(() => {
@@ -1721,11 +1721,11 @@ export function ProjectDetailView() {
                   </div>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Start Month</div>
-                    <div style={{ fontSize: 14 }}>{project.start_month ? fmtMonth(project.start_month) : '—'}</div>
+                    <div style={{ fontSize: 14 }}>{(project as any).start_month ? fmtMonth((project as any).start_month) : '—'}</div>
                   </div>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Est. Launch</div>
-                    <div style={{ fontSize: 14 }}>{project.end_month ? fmtMonth(project.end_month) : '—'}</div>
+                    <div style={{ fontSize: 14 }}>{(project as any).end_month ? fmtMonth((project as any).end_month) : '—'}</div>
                   </div>
                   {project.contract_url && (
                     <div>

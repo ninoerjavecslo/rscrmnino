@@ -538,7 +538,6 @@ Client profile:
   const expiringDomains = clientDomains.filter(d => daysUntil(d.expiry_date) <= 30 && daysUntil(d.expiry_date) >= 0)
   const endingMaintenances = maintenances.filter(m => m.status === 'active' && m.contract_end && daysUntil(m.contract_end) <= 30 && daysUntil(m.contract_end) >= 0)
 
-  const clientSince = client ? new Date(client.created_at).getFullYear() : null
   const activeCount = activeProjects.length
 
   // ── pipeline forecast grouping ────────────────────────────────────────────

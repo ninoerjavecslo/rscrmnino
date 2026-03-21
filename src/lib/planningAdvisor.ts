@@ -18,7 +18,7 @@ export function generateAdvisories(
   members: TeamMember[],
   deliverables: ProjectDeliverable[],
   weekStart: string,
-  weekEnd: string
+  _weekEnd: string
 ): Advisory[] {
   const advisories: Advisory[] = []
   const today = new Date().toISOString().slice(0, 10)

@@ -505,6 +505,16 @@ export interface AllocationActual {
   created_at: string
 }
 
+export interface CompanyHoliday {
+  id: string
+  name: string
+  date: string                           // YYYY-MM-DD
+  type: 'public_holiday' | 'company_shutdown'
+  applies_to: string[]                   // team_ids; empty = all teams
+  recurrence: 'none' | 'yearly'
+  created_at: string
+}
+
 // ── Pixel AI ──────────────────────────────────────────────────────────────────
 
 export interface PixelConversation {

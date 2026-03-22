@@ -27,6 +27,7 @@ import { AutomationFormView } from './views/AutomationFormView'
 import { PixelView } from './views/PixelView'
 import { ResourcePlanningView } from './views/ResourcePlanningView'
 import { ResourceReportsView } from './views/ResourceReportsView'
+import { ResourceYearlyView } from './views/ResourceYearlyView'
 import { ResourceMonthlyView } from './views/ResourceMonthlyView'
 import { ResourceByProjectView } from './views/ResourceByProjectView'
 import { TeamMemberDetailView } from './views/TeamMemberDetailView'
@@ -113,6 +114,7 @@ function App() {
                 <Route path="/tools/timesheet" element={<TimesheetView />} />
                 <Route path="/resource-planning" element={<ResourcePlanningView />} />
                 <Route path="/resource-reports" element={<ResourceReportsView />} />
+                <Route path="/resource-yearly" element={<ResourceYearlyView />} />
                 <Route path="/resource-monthly" element={<ResourceMonthlyView />} />
                 <Route path="/resource-by-project" element={<ResourceByProjectView />} />
                 <Route path="/team"            element={<Navigate to="/resource-planning" replace />} />

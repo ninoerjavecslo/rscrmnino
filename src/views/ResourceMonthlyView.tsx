@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useResourceStore } from '../stores/resource'
-import type { ResourceAllocation } from '../lib/types'
+import { useHolidayStore } from '../stores/holidays'
+import { workDaysInRange, holidayWorkDays } from '../lib/capacityUtils'
+import type { ResourceAllocation, CompanyHoliday } from '../lib/types'
 
 /* ── helpers ──────────────────────────────────────────────────── */
 
@@ -73,11 +75,13 @@ const CAT_BG: Record<string, string> = {
 export function ResourceMonthlyView() {
   const [monthOffset, setMonthOffset] = useState(0)
   const [allocations, setAllocations] = useState<ResourceAllocation[]>([])
+  const [holidays, setHolidays] = useState<CompanyHoliday[]>([])
   const [loading, setLoading] = useState(false)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
 
   const members = useResourceStore(s => s.members)
   const fetchMembers = useResourceStore(s => s.fetchMembers)
+  const fetchHolidaysByRange = useHolidayStore(s => s.fetchByRange)
 
   useEffect(() => { fetchMembers() }, [fetchMembers])
 
@@ -92,17 +96,20 @@ export function ResourceMonthlyView() {
 
   useEffect(() => {
     setLoading(true)
-    supabase
-      .from('resource_allocations')
-      .select('*, member:team_members(id, name), project:projects(id, pn, name)')
-      .gte('date', monthStart)
-      .lte('date', monthEnd)
-      .order('date')
-      .then(({ data }) => {
-        setAllocations((data ?? []) as ResourceAllocation[])
-        setLoading(false)
-      })
-  }, [monthStart, monthEnd])
+    Promise.all([
+      supabase
+        .from('resource_allocations')
+        .select('*, member:team_members(id, name), project:projects(id, pn, name)')
+        .gte('date', monthStart)
+        .lte('date', monthEnd)
+        .order('date'),
+      fetchHolidaysByRange(monthStart, monthEnd),
+    ]).then(([allocRes, hols]) => {
+      setAllocations((allocRes.data ?? []) as ResourceAllocation[])
+      setHolidays(hols)
+      setLoading(false)
+    })
+  }, [monthStart, monthEnd, fetchHolidaysByRange])
 
   const activeMembers = members.filter(m => m.active)
 
@@ -202,7 +209,10 @@ export function ResourceMonthlyView() {
 
             {sortedMembers.map((member, idx) => {
               const totalHrs = memberMonthTotal(member.id)
-              const capacity = workDays * (member.hours_per_day ?? 8)
+              const monthDays = workDaysInRange(monthStart, monthEnd)
+              const year = new Date(monthStart + 'T00:00:00').getFullYear()
+              const holDays = holidayWorkDays(holidays, monthDays, member.team_id, year)
+              const capacity = Math.max(0, workDays - holDays) * (member.hours_per_day ?? 8)
               const utilPct = capacity > 0 ? Math.round((totalHrs / capacity) * 100) : 0
               const expanded = expandedIds.has(member.id)
               const isLast = idx === sortedMembers.length - 1

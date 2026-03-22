@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSettingsStore } from '../stores/settings'
 import { useResourceStore } from '../stores/resource'
+import { useHolidayStore } from '../stores/holidays'
 import { toast } from '../lib/toast'
 import { Select } from '../components/Select'
 import type { TeamMember } from '../lib/types'
@@ -21,7 +22,7 @@ function TelegramIcon() {
   )
 }
 
-type SettingsTab = 'general' | 'team'
+type SettingsTab = 'general' | 'team' | 'holidays'
 
 interface MemberForm {
   name: string; email: string; team_id: string; role: string; skills: string
@@ -54,6 +55,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
 export function SettingsView() {
   const settingsStore = useSettingsStore()
   const resourceStore = useResourceStore()
+  const holidayStore = useHolidayStore()
   const navigate = useNavigate()
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('general')
@@ -72,6 +74,7 @@ export function SettingsView() {
   const [memberForm, setMemberForm] = useState<MemberForm>({ ...EMPTY_FORM })
   const [memberSaving, setMemberSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<TeamMember | null>(null)
+  const [confirmHolidayDelete, setConfirmHolidayDelete] = useState<{ id: string; name: string } | null>(null)
 
   // ── Telegram ─────────────────────────────────────────────────────────────
   const [linked, setLinked]     = useState<boolean | null>(null)
@@ -80,6 +83,15 @@ export function SettingsView() {
   const [codeExpiry, setCodeExpiry] = useState(0)
   const [tgLoading, setTgLoading] = useState(false)
   const [revoking, setRevoking]   = useState(false)
+
+  // ── Holidays ─────────────────────────────────────────────────────────────
+  const [filterYear, setFilterYear] = useState(new Date().getFullYear())
+  const [showHolidayForm, setShowHolidayForm] = useState(false)
+  const [holidayForm, setHolidayForm] = useState<{
+    name: string; date: string; type: 'public_holiday' | 'company_shutdown'
+    applies_to: string[]; recurrence: 'none' | 'yearly'
+  }>({ name: '', date: '', type: 'public_holiday', applies_to: [], recurrence: 'none' })
+  const [holidaySaving, setHolidaySaving] = useState(false)
 
   const checkTgStatus = useCallback(async () => {
     try {
@@ -93,10 +105,11 @@ export function SettingsView() {
     settingsStore.fetch().then(() => {
       setAgencyInput(settingsStore.agencyName)
       setLogoInput(settingsStore.agencyLogo ?? '')
-      setEditingGeneral(!settingsStore.agencyName)
+      setEditingGeneral(false)
     })
     resourceStore.fetchTeams()
     resourceStore.fetchMembers()
+    holidayStore.fetchAll()
     checkTgStatus()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -446,6 +459,195 @@ export function SettingsView() {
     )
   }
 
+  async function saveHoliday() {
+    if (!holidayForm.name.trim() || !holidayForm.date) return
+    setHolidaySaving(true)
+    try {
+      await holidayStore.add({
+        name: holidayForm.name.trim(),
+        date: holidayForm.date,
+        type: holidayForm.type,
+        applies_to: holidayForm.applies_to,
+        recurrence: holidayForm.recurrence,
+      })
+      toast('success', 'Holiday added')
+      setShowHolidayForm(false)
+      setHolidayForm({ name: '', date: '', type: 'public_holiday', applies_to: [], recurrence: 'none' })
+    } catch (e) { toast('error', e instanceof Error ? e.message : 'Failed to save') }
+    finally { setHolidaySaving(false) }
+  }
+
+  async function deleteHoliday(id: string, name: string) {
+    setConfirmHolidayDelete({ id, name })
+  }
+
+  async function confirmHolidayDeleteFn() {
+    if (!confirmHolidayDelete) return
+    try {
+      await holidayStore.remove(confirmHolidayDelete.id)
+      toast('success', 'Removed')
+      setConfirmHolidayDelete(null)
+    }
+    catch (e) { toast('error', e instanceof Error ? e.message : 'Failed to remove') }
+  }
+
+  function renderHolidays() {
+    const visibleHolidays = holidayStore.holidays.filter(h =>
+      h.recurrence === 'yearly' || h.date.startsWith(String(filterYear))
+    )
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div className="section-bar">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button className="btn btn-ghost btn-sm" onClick={() => setFilterYear(y => y - 1)}>‹</button>
+            <span style={{ fontWeight: 700, fontSize: 14, minWidth: 40, textAlign: 'center' }}>{filterYear}</span>
+            <button className="btn btn-ghost btn-sm" onClick={() => setFilterYear(y => y + 1)}>›</button>
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowHolidayForm(v => !v)}>
+            {showHolidayForm ? 'Cancel' : '+ Add Holiday'}
+          </button>
+        </div>
+
+        {showHolidayForm && (
+          <div className="card">
+            <div className="card-body">
+              <div className="form-row" style={{ marginBottom: 14 }}>
+                <div className="form-group">
+                  <label className="form-label">Holiday Name</label>
+                  <input autoFocus value={holidayForm.name} onChange={e => setHolidayForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Christmas Day" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Date</label>
+                  <input type="date" value={holidayForm.date} onChange={e => setHolidayForm(f => ({ ...f, date: e.target.value }))} />
+                </div>
+              </div>
+              <div className="form-row" style={{ marginBottom: 14 }}>
+                <div className="form-group">
+                  <label className="form-label">Type</label>
+                  <Select
+                    value={holidayForm.type}
+                    onChange={val => setHolidayForm(f => ({ ...f, type: val as 'public_holiday' | 'company_shutdown' }))}
+                    options={[
+                      { value: 'public_holiday', label: 'Public Holiday' },
+                      { value: 'company_shutdown', label: 'Company Shutdown' },
+                    ]}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Recurrence</label>
+                  <Select
+                    value={holidayForm.recurrence}
+                    onChange={val => setHolidayForm(f => ({ ...f, recurrence: val as 'none' | 'yearly' }))}
+                    options={[
+                      { value: 'none', label: 'Once' },
+                      { value: 'yearly', label: 'Yearly' },
+                    ]}
+                  />
+                </div>
+              </div>
+              <div className="form-group" style={{ marginBottom: 16 }}>
+                <label className="form-label">Applies To</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                  {/* "All Teams" pill */}
+                  <button
+                    type="button"
+                    onClick={() => setHolidayForm(f => ({ ...f, applies_to: [] }))}
+                    style={{
+                      padding: '5px 14px', borderRadius: 20, border: '1.5px solid',
+                      borderColor: holidayForm.applies_to.length === 0 ? 'var(--navy)' : 'var(--c5)',
+                      background: holidayForm.applies_to.length === 0 ? 'var(--navy)' : '#fff',
+                      color: holidayForm.applies_to.length === 0 ? '#fff' : 'var(--c2)',
+                      fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                    }}
+                  >All Teams</button>
+                  {resourceStore.teams.map(t => {
+                    const selected = holidayForm.applies_to.includes(t.id)
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setHolidayForm(f => ({
+                          ...f,
+                          applies_to: selected
+                            ? f.applies_to.filter(id => id !== t.id)
+                            : [...f.applies_to, t.id],
+                        }))}
+                        style={{
+                          padding: '5px 14px', borderRadius: 20, border: '1.5px solid',
+                          borderColor: selected ? t.color : 'var(--c5)',
+                          background: selected ? t.color + '22' : '#fff',
+                          color: selected ? t.color : 'var(--c2)',
+                          fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                        }}
+                      >{t.name}</button>
+                    )
+                  })}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button className="btn btn-secondary btn-sm" onClick={() => setShowHolidayForm(false)}>Cancel</button>
+                <button className="btn btn-primary btn-sm" onClick={saveHoliday} disabled={holidaySaving || !holidayForm.name.trim() || !holidayForm.date}>
+                  {holidaySaving ? 'Saving…' : 'Save Holiday'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="card">
+          {holidayStore.loading ? (
+            <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--c4)' }}>Loading…</div>
+          ) : visibleHolidays.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--c4)', fontSize: 13 }}>
+              No holidays for {filterYear}. Click "Add Holiday" to get started.
+            </div>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>DATE</th>
+                  <th>NAME</th>
+                  <th>TYPE</th>
+                  <th>RECURRENCE</th>
+                  <th>APPLIES TO</th>
+                  <th style={{ width: 80 }}>ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleHolidays.map(h => {
+                  const rawDate = h.recurrence === 'yearly'
+                    ? `${filterYear}-${h.date.slice(5)}`
+                    : h.date
+                  const [dy, dm, dd] = rawDate.split('-')
+                  const displayDate = `${dd}/${dm}/${dy}`
+                  const teamLabels = h.applies_to.length === 0
+                    ? 'All Teams'
+                    : h.applies_to.map(tid => resourceStore.teams.find(t => t.id === tid)?.name ?? tid).join(', ')
+                  return (
+                    <tr key={h.id}>
+                      <td className="text-mono" style={{ fontSize: 13 }}>{displayDate}</td>
+                      <td style={{ fontWeight: 600 }}>{h.name}</td>
+                      <td>
+                        <span className={`badge ${h.type === 'public_holiday' ? 'badge-blue' : 'badge-amber'}`}>
+                          {h.type === 'public_holiday' ? 'Public Holiday' : 'Company Shutdown'}
+                        </span>
+                      </td>
+                      <td style={{ fontSize: 13, color: 'var(--c2)' }}>{h.recurrence === 'yearly' ? 'Yearly' : 'Once'}</td>
+                      <td style={{ fontSize: 13, color: 'var(--c2)' }}>{teamLabels}</td>
+                      <td>
+                        <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red)' }} onClick={() => deleteHoliday(h.id, h.name)}>Remove</button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   function renderTeam() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -590,6 +792,16 @@ export function SettingsView() {
       )}
 
       {/* ── Delete confirm ── */}
+      {confirmHolidayDelete && (
+        <Modal title="Remove holiday" onClose={() => setConfirmHolidayDelete(null)}>
+          <p style={{ margin: '0 0 20px', fontSize: 14 }}>Remove <strong>{confirmHolidayDelete.name}</strong>? This cannot be undone.</p>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => setConfirmHolidayDelete(null)}>Cancel</button>
+            <button className="btn btn-sm" style={{ background: 'var(--red)', color: '#fff', borderColor: 'var(--red)' }} onClick={confirmHolidayDeleteFn}>Remove</button>
+          </div>
+        </Modal>
+      )}
+
       {deleteTarget && (
         <Modal title="Remove member" onClose={() => setDeleteTarget(null)}>
           <p style={{ margin: '0 0 20px', fontSize: 14 }}>Remove <strong>{deleteTarget.name}</strong> from the team? This cannot be undone.</p>
@@ -609,10 +821,10 @@ export function SettingsView() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 0, borderTop: '1px solid var(--c6)', width: '100%', marginLeft: -28, paddingLeft: 28, marginRight: -28 }}>
-          {(['general', 'team'] as SettingsTab[]).map(tab => (
+          {(['general', 'team', 'holidays'] as SettingsTab[]).map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)}
               style={{ background: 'transparent', border: 'none', borderBottom: activeTab === tab ? '2px solid var(--navy)' : '2px solid transparent', cursor: 'pointer', padding: '10px 16px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: activeTab === tab ? 'var(--navy)' : 'var(--c3)', transition: 'color .12s', whiteSpace: 'nowrap', marginBottom: -1, textTransform: 'capitalize' }}>
-              {tab === 'general' ? 'General' : 'Team'}
+              {tab === 'general' ? 'General' : tab === 'team' ? 'Team' : 'Holidays'}
             </button>
           ))}
         </div>
@@ -621,6 +833,7 @@ export function SettingsView() {
       <div className="page-content">
         {activeTab === 'general' && renderGeneral()}
         {activeTab === 'team' && renderTeam()}
+        {activeTab === 'holidays' && renderHolidays()}
       </div>
     </div>
   )

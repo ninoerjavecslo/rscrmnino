@@ -346,7 +346,10 @@ export function ProjectDetailView() {
       .from('member_projects')
       .select('id, member_id, member:team_members(id, name)')
       .eq('project_id', projectId)
-      .then(({ data }) => setProjectMembers((data ?? []) as unknown as Array<{ id: string; member_id: string; member: { id: string; name: string } }>))
+      .then(({ data, error }) => {
+        if (error) { console.error('fetchProjectMembers:', error); toast('error', error.message); return }
+        setProjectMembers((data ?? []) as unknown as Array<{ id: string; member_id: string; member: { id: string; name: string } }>)
+      })
   }
 
   useEffect(() => {
@@ -2465,9 +2468,12 @@ export function ProjectDetailView() {
                     if (!id || addMemberIds.length === 0) return
                     setAddMemberSaving(true)
                     try {
-                      await supabase.from('member_projects').insert(addMemberIds.map(mid => ({ project_id: id, member_id: mid })))
+                      const { error } = await supabase.from('member_projects').insert(addMemberIds.map(mid => ({ project_id: id, member_id: mid })))
+                      if (error) { toast('error', error.message); return }
                       fetchProjectMembers(id)
                       setShowAddMember(false)
+                      setAddMemberIds([])
+                      toast('success', 'Team members added')
                     } finally {
                       setAddMemberSaving(false)
                     }

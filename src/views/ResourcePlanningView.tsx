@@ -2,9 +2,12 @@ import { useState, useEffect, useMemo } from 'react'
 import { useResourceStore } from '../stores/resource'
 import { useProjectsStore } from '../stores/projects'
 import { useMaintenancesStore } from '../stores/maintenances'
+import { useHolidayStore } from '../stores/holidays'
+import { holidayWorkDays } from '../lib/capacityUtils'
 import { supabase } from '../lib/supabase'
 import { toast } from '../lib/toast'
-import type { AllocationCategory, Maintenance, Project, TeamMember, TimeOff } from '../lib/types'
+import { CapacityCheckWizard } from '../components/CapacityCheckWizard'
+import type { AllocationCategory, CompanyHoliday, Maintenance, Project, TeamMember, TimeOff } from '../lib/types'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -616,7 +619,7 @@ function MemberRow({ stats, onAssign, onEdit, onShareLink }: { stats: MemberStat
       </td>
 
       {/* Availability */}
-      <td style={{ padding: '14px 12px', verticalAlign: 'middle' }}>
+      <td style={{ padding: '14px 12px', verticalAlign: 'middle', width: 110 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--c1)' }}>
           {capacity}h
           {offDays > 0 && <span style={{ fontSize: 11, color: 'var(--amber)', marginLeft: 6 }}>−{offDays}d off</span>}
@@ -626,7 +629,7 @@ function MemberRow({ stats, onAssign, onEdit, onShareLink }: { stats: MemberStat
       </td>
 
       {/* Current projects */}
-      <td style={{ padding: '14px 12px', verticalAlign: 'middle', maxWidth: 280 }}>
+      <td style={{ padding: '14px 12px', verticalAlign: 'middle' }}>
         {projectChips.length === 0 ? (
           <span style={{ fontSize: 12, color: 'var(--c5)' }}>No assignments</span>
         ) : (
@@ -1280,9 +1283,12 @@ export function ResourcePlanningView() {
   const [showPool, setShowPool] = useState(false)
   const [showSummary, setShowSummary] = useState(false)
   const [showBulk, setShowBulk] = useState(false)
+  const [showCapacityWizard, setShowCapacityWizard] = useState(false)
   const [assignTarget, setAssignTarget] = useState<TeamMember | null>(null)
   const [editTarget, setEditTarget] = useState<TeamMember | null>(null)
   const [allTimeOff, setAllTimeOff] = useState<TimeOff[]>([])
+  const [allHolidays, setAllHolidays] = useState<CompanyHoliday[]>([])
+  const holidayStore = useHolidayStore()
 
   const { members, allocations, teams, fetchMembers, fetchTeams, fetchAllocations, addAllocationsBatch, updateAllocation, removeAllocation } = useResourceStore()
   const { projects, fetchAll: fetchProjects } = useProjectsStore()
@@ -1307,14 +1313,17 @@ export function ResourcePlanningView() {
       .lte('start_date', weekEnd)
       .gte('end_date', weekStart)
       .then(({ data }) => setAllTimeOff((data ?? []) as TimeOff[]))
-  }, [weekStart, weekEnd, fetchAllocations])
+    holidayStore.fetchByRange(weekStart, weekEnd).then(setAllHolidays)
+  }, [weekStart, weekEnd, fetchAllocations]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const memberStats = useMemo<MemberStats[]>(() => {
     return members.map(m => {
       const memberAllocs = allocations.filter(a => a.member_id === m.id)
       const memberTimeOff = allTimeOff.filter(t => t.member_id === m.id)
       const offDays = timeOffWorkDays(memberTimeOff, days)
-      const availDays = 5 - offDays
+      const year = new Date(days[0] + 'T00:00:00').getFullYear()
+      const holDays = holidayWorkDays(allHolidays, days, m.team_id, year)
+      const availDays = Math.max(0, 5 - offDays - holDays)
       const capacity = m.hours_per_day * availDays
       // leave allocations reduce capacity, not work
       const leaveAllocs = memberAllocs.filter(a => a.category === 'leave')
@@ -1380,6 +1389,7 @@ export function ResourcePlanningView() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => setShowCapacityWizard(true)}>Capacity Check</button>
           <button className="btn btn-ghost btn-sm" onClick={() => setShowBulk(true)}>Bulk Assign</button>
           <button
             className="btn btn-secondary btn-sm"
@@ -1449,12 +1459,20 @@ export function ResourcePlanningView() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--c7)', borderBottom: '2px solid var(--c6)' }}>
-                {['Team Member', 'Availability', 'Current Projects', 'Allocated Hours', 'Utilization', 'Actions'].map(h => (
-                  <th key={h} style={{
-                    padding: '10px 16px', textAlign: h === 'Actions' ? 'right' : 'left',
+                {([
+                  { label: 'Team Member' },
+                  { label: 'Availability', width: 110 },
+                  { label: 'Current Projects' },
+                  { label: 'Allocated Hours', width: 190 },
+                  { label: 'Utilization', width: 90 },
+                  { label: 'Actions', width: 160 },
+                ] as { label: string; width?: number }[]).map(({ label, width }) => (
+                  <th key={label} style={{
+                    padding: '10px 16px', textAlign: label === 'Actions' ? 'right' : 'left',
                     fontSize: 11, fontWeight: 700, color: 'var(--c3)',
                     textTransform: 'uppercase', letterSpacing: '0.06em',
-                  }}>{h}</th>
+                    ...(width ? { width } : {}),
+                  }}>{label}</th>
                 ))}
               </tr>
             </thead>
@@ -1544,6 +1562,9 @@ export function ResourcePlanningView() {
           }}
         />
       )}
+
+      {/* Capacity Check Wizard */}
+      {showCapacityWizard && <CapacityCheckWizard onClose={() => setShowCapacityWizard(false)} />}
 
       {/* Summary Modal */}
       {showSummary && (

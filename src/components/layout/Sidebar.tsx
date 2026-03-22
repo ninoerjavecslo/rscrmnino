@@ -92,6 +92,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         <div className="sidebar-group-label">Planning</div>
         <NavLink to="/resource-planning" className={nav}><IconGrid /> Allocation</NavLink>
         <NavLink to="/resource-reports" className={nav}><IconBarChart /> Reports</NavLink>
+        <NavLink to="/resource-yearly" className={nav}><IconCalendar /> Yearly Plan</NavLink>
 
         <div className="sidebar-divider" />
 

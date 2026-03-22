@@ -29,6 +29,8 @@ const TYPE_BADGE: Record<string, string> = {
   variable: 'badge-amber',
 }
 
+const fmt = (n: number) => String(Math.round(n * 10) / 10)
+
 const fmtDate = (d: string) => {
   const dt = new Date(d + 'T00:00:00')
   return dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -215,8 +217,8 @@ export function TeamMemberDetailView() {
           <div className="stats-strip" style={{ marginBottom: 28 }}>
             <div className="stat-card">
               <div className="stat-card-label">This Month</div>
-              <div className="stat-card-value">{stats.monthHours}h</div>
-              <div className="stat-card-sub">of {stats.monthCapacity}h capacity</div>
+              <div className="stat-card-value">{fmt(stats.monthHours)}h</div>
+              <div className="stat-card-sub">of {fmt(stats.monthCapacity)}h capacity</div>
             </div>
             <div className="stat-card">
               <div className="stat-card-label">Utilization</div>
@@ -227,7 +229,7 @@ export function TeamMemberDetailView() {
             </div>
             <div className="stat-card">
               <div className="stat-card-label">Year Total</div>
-              <div className="stat-card-value">{stats.yearHours}h</div>
+              <div className="stat-card-value">{fmt(stats.yearHours)}h</div>
               <div className="stat-card-sub">{new Date().getFullYear()}</div>
             </div>
             <div className="stat-card">
@@ -328,7 +330,7 @@ export function TeamMemberDetailView() {
                       <div key={cat}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                           <span style={{ textTransform: 'capitalize', fontWeight: 600, fontSize: 14 }}>{cat}</span>
-                          <span className="text-mono" style={{ fontWeight: 700, fontSize: 14 }}>{hours}h</span>
+                          <span className="text-mono" style={{ fontWeight: 700, fontSize: 14 }}>{fmt(hours)}h</span>
                         </div>
                         <div style={{ height: 8, borderRadius: 4, background: 'var(--c6)' }}>
                           <div style={{

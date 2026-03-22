@@ -1,4 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
+import { useEffect } from 'react'
+import { useSettingsStore } from '../../stores/settings'
+import { useCurrentUser } from '../../lib/useCurrentUser'
 
 function IconHome()      { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> }
 function IconInvoice()   { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg> }
@@ -24,28 +27,28 @@ interface SidebarProps {
 
 export function Sidebar({ open, onClose }: SidebarProps) {
   const navigate = useNavigate()
+  const { agencyName, agencyLogo, fetch: fetchSettings } = useSettingsStore()
+  const user = useCurrentUser()
+  useEffect(() => { fetchSettings() }, []) // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <aside className={`sidebar${open ? ' sidebar-open' : ''}`}>
       <div className="sidebar-logo" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{
-            width: 30,
-            height: 30,
-            background: '#0f172a',
-            borderRadius: 6,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-            color: '#fff',
-          }}>
-            <IconLayers />
+        {agencyLogo ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <img src={agencyLogo} alt="Logo" style={{ height: 32, maxWidth: 140, objectFit: 'contain', objectPosition: 'left' }} />
+            <div style={{ fontSize: 9, fontWeight: 600, fontFamily: 'Manrope, sans-serif', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Intelligence Platform</div>
           </div>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 800, fontFamily: 'Manrope, sans-serif', color: 'var(--c0)', lineHeight: 1.2 }}>Agency OS</div>
-            <div style={{ fontSize: 9, fontWeight: 600, fontFamily: 'Manrope, sans-serif', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', lineHeight: 1.2 }}>Intelligence Platform</div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 30, height: 30, background: '#0f172a', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#fff' }}>
+              <IconLayers />
+            </div>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 800, fontFamily: 'Manrope, sans-serif', color: 'var(--c0)', lineHeight: 1.2 }}>{agencyName || 'Agency OS'}</div>
+              <div style={{ fontSize: 9, fontWeight: 600, fontFamily: 'Manrope, sans-serif', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', lineHeight: 1.2 }}>Intelligence Platform</div>
+            </div>
           </div>
-        </div>
+        )}
         <button className="mobile-close-btn" onClick={onClose} aria-label="Close menu">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
@@ -104,14 +107,20 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       </nav>
 
       <div className="sidebar-foot">
-        <div className="user-chip">
-          <div className="user-avatar">N</div>
-          <div>
-            <div style={{fontSize: 13, fontWeight: 600, color: 'var(--c0)'}}>Nino</div>
-            <div style={{fontSize: 11, color: 'var(--c4)'}}>Admin</div>
+        <button
+          onClick={() => navigate('/profile')}
+          style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '6px 8px', borderRadius: 8, textAlign: 'left' }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'var(--c7)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+        >
+          <div className="user-avatar">{user?.initial ?? '?'}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--c0)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.name ?? '…'}</div>
+            <div style={{ fontSize: 11, color: 'var(--c4)' }}>{user?.role ?? ''}</div>
           </div>
-        </div>
-        <button className="btn btn-primary" style={{width:'100%', justifyContent:'center', marginTop:10, padding:'10px 0'}} onClick={() => navigate('/projects')}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--c4)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        </button>
+        <button className="btn btn-primary" style={{width:'100%', justifyContent:'center', marginTop:8, padding:'10px 0'}} onClick={() => navigate('/projects')}>
           + New Project
         </button>
       </div>

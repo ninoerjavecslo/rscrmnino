@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import './design-system.css'
+import { supabase } from './lib/supabase'
+import { LoginView } from './views/LoginView'
 import { Sidebar } from './components/layout/Sidebar'
 import { DashboardView } from './views/DashboardView'
 import { StatisticsView } from './views/StatisticsView'
@@ -30,11 +32,23 @@ import { ResourceByProjectView } from './views/ResourceByProjectView'
 import { TeamMemberDetailView } from './views/TeamMemberDetailView'
 import { MyWeekView } from './views/MyWeekView'
 import { MemberDashboardView } from './views/MemberDashboardView'
+import { ProfileView } from './views/ProfileView'
 import { Toaster } from './components/Toaster'
 import { Topbar } from './components/layout/Topbar'
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [session, setSession] = useState<boolean | null>(null) // null = loading
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(!!data.session))
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(!!s))
+    return () => subscription.unsubscribe()
+  }, [])
+
+  if (session === null) return null // loading — no flash
+
+  if (!session) return <LoginView onLogin={() => setSession(true)} />
 
   return (
     <BrowserRouter>
@@ -106,6 +120,7 @@ function App() {
                 <Route path="/email-tool"      element={<EmailToolView />} />
                 <Route path="/settings"        element={<SettingsView />} />
                 <Route path="/pixel"           element={<PixelView />} />
+                <Route path="/profile"         element={<ProfileView />} />
               </Routes>
             </main>
           </div>

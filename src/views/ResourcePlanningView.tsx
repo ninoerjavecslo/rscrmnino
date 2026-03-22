@@ -1422,7 +1422,7 @@ export function ResourcePlanningView() {
               onChange={e => setSearch(e.target.value)}
               style={{ width: 200 }}
             />
-            <select value={teamFilter} onChange={e => setTeamFilter(e.target.value)}>
+            <select value={teamFilter} onChange={e => setTeamFilter(e.target.value)} style={{ width: 160 }}>
               <option value="all">All teams</option>
               {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>

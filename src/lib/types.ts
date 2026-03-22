@@ -477,8 +477,10 @@ export interface ProjectDeliverable {
   project_id: string
   title: string
   due_date: string        // YYYY-MM-DD
+  start_date?: string | null  // YYYY-MM-DD (optional start for hour spreading)
   estimated_hours?: number | null
   team?: string | null
+  team_hours?: Record<string, number> | null  // per-team hour breakdown
   status: 'active' | 'completed' | 'delayed'
   notes?: string | null
   created_at: string

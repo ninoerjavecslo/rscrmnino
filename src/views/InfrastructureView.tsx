@@ -7,31 +7,13 @@ import { toast } from '../lib/toast'
 import type { HostingClient } from '../lib/types'
 import { hostingAnnualValue } from '../lib/types'
 import { Select } from '../components/Select'
+import { Modal } from '../components/Modal'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmt(n: number) { return n.toFixed(2).replace(/\.00$/, '') + ' €' }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
-
-function Modal({ open, title, maxWidth = 540, onClose, children, footer }: {
-  open: boolean; title: string; maxWidth?: number
-  onClose: () => void; children: React.ReactNode; footer?: React.ReactNode
-}) {
-  if (!open) return null
-  return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box" style={{ maxWidth }}>
-        <div className="modal-header">
-          <h2>{title}</h2>
-          <button className="modal-close" onClick={onClose}>×</button>
-        </div>
-        <div className="modal-body">{children}</div>
-        {footer && <div className="modal-footer">{footer}</div>}
-      </div>
-    </div>
-  )
-}
 
 // ── Add hosting form state ────────────────────────────────────────────────────
 

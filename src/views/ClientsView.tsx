@@ -9,6 +9,7 @@ import { useMaintenancesStore } from '../stores/maintenances'
 import { useChangeRequestsStore } from '../stores/changeRequests'
 import { usePipelineStore } from '../stores/pipeline'
 import type { Client } from '../lib/types'
+import { Modal } from '../components/Modal'
 
 const CURRENT_YEAR = new Date().getFullYear()
 
@@ -34,21 +35,6 @@ function YesNo({ yes }: { yes: boolean }) {
   )
 }
 
-function Modal({ open, title, onClose, children, footer }: {
-  open: boolean; title: string; onClose: () => void
-  children: React.ReactNode; footer?: React.ReactNode
-}) {
-  if (!open) return null
-  return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box" style={{ maxWidth: 400 }}>
-        <div className="modal-header"><h2>{title}</h2><button className="modal-close" onClick={onClose}>×</button></div>
-        <div className="modal-body">{children}</div>
-        {footer && <div className="modal-footer">{footer}</div>}
-      </div>
-    </div>
-  )
-}
 
 export function ClientsView() {
   const store       = useClientsStore()

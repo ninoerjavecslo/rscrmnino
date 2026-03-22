@@ -14,6 +14,7 @@ import { toast } from '../lib/toast'
 import type { Project, Domain, HostingClient, RevenuePlanner, Maintenance, PipelineItem } from '../lib/types'
 import { hostingContractValue } from '../lib/types'
 import { Select } from '../components/Select'
+import { Modal } from '../components/Modal'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -146,26 +147,6 @@ const PIPELINE_STATUS_LABELS: Record<string, string> = {
 
 // ── sub-components ────────────────────────────────────────────────────────────
 
-function Modal({
-  title, onClose, children, maxWidth = 560,
-}: {
-  title: string; onClose: () => void; children: React.ReactNode; maxWidth?: number
-}) {
-  return (
-    <div
-      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <div style={{ background: '#fff', borderRadius: 10, padding: '28px 32px', maxWidth, width: '100%', boxShadow: '0 8px 40px rgba(0,0,0,0.18)', maxHeight: '90vh', overflowY: 'auto' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>{title}</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c3)', fontSize: 20, lineHeight: 1, padding: 0 }}>×</button>
-        </div>
-        {children}
-      </div>
-    </div>
-  )
-}
 
 type ProjectType = 'fixed' | 'maintenance' | 'variable'
 
@@ -526,7 +507,7 @@ Client profile:
 
   const otherIncomeRows = useMemo(() =>
     [...allClientRpRows]
-      .filter(r => r.project_id != null && !r.maintenance_id && !r.hosting_client_id && !r.domain_id)
+      .filter(r => r.project_id != null && !r.maintenance_id && !r.hosting_client_id && !r.domain_id && r.project?.name === 'Other Income')
       .sort((a, b) => b.month.localeCompare(a.month)),
     [allClientRpRows])
 

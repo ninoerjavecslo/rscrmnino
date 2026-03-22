@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import type { Maintenance } from '../lib/types'
 import { Select } from '../components/Select'
+import { Modal } from '../components/Modal'
 
 function fmtEuro(n: number) {
   return n.toLocaleString('en-EU') + ' €'
@@ -27,24 +28,6 @@ const STATUS_BADGE: Record<string, string> = {
   cancelled: 'badge-red',
 }
 
-function Modal({ open, title, onClose, children, footer }: {
-  open: boolean; title: string
-  onClose: () => void; children: React.ReactNode; footer?: React.ReactNode
-}) {
-  if (!open) return null
-  return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box" style={{ maxWidth: 640 }}>
-        <div className="modal-header">
-          <h2>{title}</h2>
-          <button className="modal-close" onClick={onClose}>×</button>
-        </div>
-        <div className="modal-body">{children}</div>
-        {footer && <div className="modal-footer">{footer}</div>}
-      </div>
-    </div>
-  )
-}
 
 interface FormState {
   client_id: string
@@ -234,6 +217,7 @@ export function MaintenancesView() {
         open={showModal}
         title={editing ? 'Edit Maintenance Contract' : 'New Maintenance Contract'}
         onClose={closeModal}
+        maxWidth={640}
         footer={
           <>
             <button className="btn btn-secondary btn-sm" onClick={closeModal}>Cancel</button>

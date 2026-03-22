@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import type { RevenuePlanner, Maintenance, HostingClient, ChangeRequest } from '../lib/types'
 import { Select } from '../components/Select'
+import { Modal } from '../components/Modal'
 
 function safeUrl(url: string | null | undefined): string | undefined {
   if (!url) return undefined
@@ -38,27 +39,6 @@ const MAINT_STATUS_BADGE: Record<string, string> = {
   active:    'badge-green',
   paused:    'badge-amber',
   cancelled: 'badge-red',
-}
-
-// ── Modal ─────────────────────────────────────────────────────────────────────
-
-function Modal({ open, title, maxWidth = 520, onClose, children, footer }: {
-  open: boolean; title: string; maxWidth?: number
-  onClose: () => void; children: React.ReactNode; footer?: React.ReactNode
-}) {
-  if (!open) return null
-  return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box" style={{ maxWidth }}>
-        <div className="modal-header">
-          <h2>{title}</h2>
-          <button className="modal-close" onClick={onClose}>×</button>
-        </div>
-        <div className="modal-body">{children}</div>
-        {footer && <div className="modal-footer">{footer}</div>}
-      </div>
-    </div>
-  )
 }
 
 // ── Edit form type ────────────────────────────────────────────────────────────

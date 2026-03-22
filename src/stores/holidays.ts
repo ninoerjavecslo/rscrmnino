@@ -9,6 +9,7 @@ interface HolidayState {
   fetchAll: () => Promise<void>
   fetchByRange: (start: string, end: string) => Promise<CompanyHoliday[]>
   add: (data: Omit<CompanyHoliday, 'id' | 'created_at'>) => Promise<void>
+  update: (id: string, data: Partial<Omit<CompanyHoliday, 'id' | 'created_at'>>) => Promise<void>
   remove: (id: string) => Promise<void>
 }
 
@@ -45,6 +46,19 @@ export const useHolidayStore = create<HolidayState>((set) => ({
     if (error) throw new Error(error.message)
     if (inserted) {
       set(state => ({ holidays: [...state.holidays, inserted].sort((a, b) => a.date.localeCompare(b.date)) }))
+    }
+  },
+
+  update: async (id, data) => {
+    const { data: updated, error } = await supabase
+      .from('company_holidays')
+      .update(data)
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) throw new Error(error.message)
+    if (updated) {
+      set(state => ({ holidays: state.holidays.map(h => h.id === id ? updated : h).sort((a, b) => a.date.localeCompare(b.date)) }))
     }
   },
 

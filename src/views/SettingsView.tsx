@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams, Link } from 'react-router-dom'
+import type { CompanyHoliday } from '../lib/types'
 import { useSettingsStore } from '../stores/settings'
 import { useResourceStore } from '../stores/resource'
 import { useHolidayStore } from '../stores/holidays'
 import { toast } from '../lib/toast'
 import { Select } from '../components/Select'
+import { Modal } from '../components/Modal'
 import type { TeamMember } from '../lib/types'
 
 const FUNCTIONS_URL = import.meta.env.VITE_SUPABASE_URL?.replace('.supabase.co', '.supabase.co/functions/v1')
@@ -37,28 +39,18 @@ function getTeamCategory(m: TeamMember): 'uxui' | 'dev' | 'content' | 'other' {
   return 'other'
 }
 
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div style={{ background: '#fff', borderRadius: 12, padding: '24px 28px', maxWidth: 460, width: '100%', boxShadow: '0 8px 40px rgba(0,0,0,0.18)', maxHeight: '90vh', overflowY: 'auto' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{title}</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c3)', fontSize: 20, lineHeight: 1, padding: 0 }}>×</button>
-        </div>
-        {children}
-      </div>
-    </div>
-  )
-}
 
 export function SettingsView() {
   const settingsStore = useSettingsStore()
   const resourceStore = useResourceStore()
   const holidayStore = useHolidayStore()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
-  const [activeTab, setActiveTab] = useState<SettingsTab>('general')
+  const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
+    const tab = searchParams.get('tab')
+    return (tab === 'team' || tab === 'holidays' || tab === 'general') ? tab : 'general'
+  })
 
   // ── General settings ──────────────────────────────────────────────────────
   const [agencyInput, setAgencyInput]     = useState('')
@@ -92,6 +84,15 @@ export function SettingsView() {
     applies_to: string[]; recurrence: 'none' | 'yearly'
   }>({ name: '', date: '', type: 'public_holiday', applies_to: [], recurrence: 'none' })
   const [holidaySaving, setHolidaySaving] = useState(false)
+  const [editHolidayTarget, setEditHolidayTarget] = useState<CompanyHoliday | null>(null)
+  const [editHolidayForm, setEditHolidayForm] = useState<{
+    name: string; date: string; type: 'public_holiday' | 'company_shutdown'
+    applies_to: string[]; recurrence: 'none' | 'yearly'
+  }>({ name: '', date: '', type: 'public_holiday', applies_to: [], recurrence: 'none' })
+  const [editHolidaySaving, setEditHolidaySaving] = useState(false)
+
+  // ── Team search ───────────────────────────────────────────────────────────
+  const [memberSearch, setMemberSearch] = useState('')
 
   const checkTgStatus = useCallback(async () => {
     try {
@@ -477,6 +478,28 @@ export function SettingsView() {
     finally { setHolidaySaving(false) }
   }
 
+  function openEditHoliday(h: CompanyHoliday) {
+    setEditHolidayTarget(h)
+    setEditHolidayForm({ name: h.name, date: h.date, type: h.type, applies_to: h.applies_to, recurrence: h.recurrence })
+  }
+
+  async function saveEditHoliday() {
+    if (!editHolidayTarget || !editHolidayForm.name.trim() || !editHolidayForm.date) return
+    setEditHolidaySaving(true)
+    try {
+      await holidayStore.update(editHolidayTarget.id, {
+        name: editHolidayForm.name.trim(),
+        date: editHolidayForm.date,
+        type: editHolidayForm.type,
+        applies_to: editHolidayForm.applies_to,
+        recurrence: editHolidayForm.recurrence,
+      })
+      toast('success', 'Holiday updated')
+      setEditHolidayTarget(null)
+    } catch (e) { toast('error', e instanceof Error ? e.message : 'Failed to save') }
+    finally { setEditHolidaySaving(false) }
+  }
+
   async function deleteHoliday(id: string, name: string) {
     setConfirmHolidayDelete({ id, name })
   }
@@ -610,7 +633,7 @@ export function SettingsView() {
                   <th>TYPE</th>
                   <th>RECURRENCE</th>
                   <th>APPLIES TO</th>
-                  <th style={{ width: 80 }}>ACTIONS</th>
+                  <th style={{ width: 130 }}>ACTIONS</th>
                 </tr>
               </thead>
               <tbody>
@@ -635,7 +658,10 @@ export function SettingsView() {
                       <td style={{ fontSize: 13, color: 'var(--c2)' }}>{h.recurrence === 'yearly' ? 'Yearly' : 'Once'}</td>
                       <td style={{ fontSize: 13, color: 'var(--c2)' }}>{teamLabels}</td>
                       <td>
-                        <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red)' }} onClick={() => deleteHoliday(h.id, h.name)}>Remove</button>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button className="btn btn-secondary btn-xs" onClick={() => openEditHoliday(h)}>Edit</button>
+                          <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red)' }} onClick={() => deleteHoliday(h.id, h.name)}>Remove</button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -675,7 +701,15 @@ export function SettingsView() {
 
         {/* Table header */}
         <div className="section-bar" style={{ marginBottom: 0 }}>
-          <h2>Team Members</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <h2 style={{ margin: 0 }}>Team Members</h2>
+            <input
+              value={memberSearch}
+              onChange={e => setMemberSearch(e.target.value)}
+              placeholder="Search members…"
+              style={{ height: 34, fontSize: 13, padding: '0 12px', borderRadius: 6, border: '1px solid var(--c5)', width: 220, fontFamily: 'inherit', boxSizing: 'border-box' }}
+            />
+          </div>
           <button className="btn btn-primary btn-sm" onClick={openInvite}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Add
@@ -702,7 +736,7 @@ export function SettingsView() {
                 </tr>
               </thead>
               <tbody>
-                {members.map(m => (
+                {members.filter(m => !memberSearch.trim() || m.name.toLowerCase().includes(memberSearch.toLowerCase()) || (m.role ?? '').toLowerCase().includes(memberSearch.toLowerCase())).map(m => (
                   <tr key={m.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/team/${m.id}`)}>
                     <td onClick={e => e.stopPropagation()}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -710,7 +744,11 @@ export function SettingsView() {
                           {m.name.charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--c0)' }}>{m.name}</div>
+                          <Link to={`/team/${m.id}`} style={{ fontWeight: 600, fontSize: 13, color: 'var(--c0)', textDecoration: 'none' }}
+                            onMouseEnter={e => (e.currentTarget.style.color = 'var(--navy)')}
+                            onMouseLeave={e => (e.currentTarget.style.color = 'var(--c0)')}>
+                            {m.name}
+                          </Link>
                           {m.email && <div style={{ fontSize: 11, color: 'var(--c4)' }}>{m.email}</div>}
                         </div>
                       </div>
@@ -735,6 +773,7 @@ export function SettingsView() {
                     </td>
                     <td onClick={e => e.stopPropagation()}>
                       <div style={{ display: 'flex', gap: 6 }}>
+                        <Link to={`/team/${m.id}`} className="btn btn-secondary btn-xs" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>View</Link>
                         <button className="btn btn-secondary btn-xs" onClick={() => openEdit(m)}>Edit</button>
                         <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red)' }} onClick={() => setDeleteTarget(m)}>Remove</button>
                       </div>
@@ -786,6 +825,38 @@ export function SettingsView() {
             <button className="btn btn-secondary btn-sm" onClick={() => setShowMemberModal(false)}>Cancel</button>
             <button className="btn btn-primary btn-sm" onClick={saveMember} disabled={memberSaving || !memberForm.name.trim()}>
               {memberSaving ? 'Saving…' : editTarget ? 'Save changes' : 'Add member'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Edit Holiday modal ── */}
+      {editHolidayTarget && (
+        <Modal title="Edit Holiday" onClose={() => setEditHolidayTarget(null)}>
+          <div className="form-row" style={{ marginBottom: 14 }}>
+            <div className="form-group">
+              <label className="form-label">Holiday Name</label>
+              <input autoFocus value={editHolidayForm.name} onChange={e => setEditHolidayForm(f => ({ ...f, name: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Date</label>
+              <input type="date" value={editHolidayForm.date} onChange={e => setEditHolidayForm(f => ({ ...f, date: e.target.value }))} />
+            </div>
+          </div>
+          <div className="form-row" style={{ marginBottom: 14 }}>
+            <div className="form-group">
+              <label className="form-label">Type</label>
+              <Select value={editHolidayForm.type} onChange={val => setEditHolidayForm(f => ({ ...f, type: val as 'public_holiday' | 'company_shutdown' }))} options={[{ value: 'public_holiday', label: 'Public Holiday' }, { value: 'company_shutdown', label: 'Company Shutdown' }]} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Recurrence</label>
+              <Select value={editHolidayForm.recurrence} onChange={val => setEditHolidayForm(f => ({ ...f, recurrence: val as 'none' | 'yearly' }))} options={[{ value: 'none', label: 'Once' }, { value: 'yearly', label: 'Yearly' }]} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => setEditHolidayTarget(null)}>Cancel</button>
+            <button className="btn btn-primary btn-sm" onClick={saveEditHoliday} disabled={editHolidaySaving || !editHolidayForm.name.trim() || !editHolidayForm.date}>
+              {editHolidaySaving ? 'Saving…' : 'Save'}
             </button>
           </div>
         </Modal>

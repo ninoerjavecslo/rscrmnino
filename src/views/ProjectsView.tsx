@@ -8,6 +8,7 @@ import { useSettingsStore } from '../stores/settings'
 import { supabase } from '../lib/supabase'
 import type { Project } from '../lib/types'
 import { Select } from '../components/Select'
+import { Modal } from '../components/Modal'
 
 const CURRENT_YEAR = new Date().getFullYear()
 
@@ -66,24 +67,6 @@ function TypePills({ value, onChange }: { value: string; onChange: (v: string) =
             <div style={{fontSize:11,color:'var(--c4)',marginTop:2}}>{t.sub}</div>
           </div>
         ))}
-      </div>
-    </div>
-  )
-}
-
-// ── Modal ─────────────────────────────────────────────────────────────────────
-
-function Modal({ open, title, onClose, children, footer, wide }: {
-  open: boolean; title: string; onClose: () => void
-  children: React.ReactNode; footer?: React.ReactNode; wide?: boolean
-}) {
-  if (!open) return null
-  return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box" style={{ maxWidth: wide ? 680 : 560 }}>
-        <div className="modal-header"><h2>{title}</h2><button className="modal-close" onClick={onClose}>×</button></div>
-        <div className="modal-body">{children}</div>
-        {footer && <div className="modal-footer">{footer}</div>}
       </div>
     </div>
   )
@@ -338,7 +321,7 @@ export function ProjectsView() {
         )}
       </div>
 
-      <Modal open={showAdd} title="New Project" onClose={closeModal} wide={form.type === 'variable'}
+      <Modal open={showAdd} title="New Project" onClose={closeModal} maxWidth={form.type === 'variable' ? 680 : 560}
         footer={<>
           <button className="btn btn-secondary btn-sm" onClick={closeModal}>Cancel</button>
           <button className="btn btn-primary btn-sm" onClick={handleCreate} disabled={saving || !form.name.trim()}>

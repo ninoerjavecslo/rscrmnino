@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import type { RevenuePlanner, Project, ChangeRequest, ProjectDeliverable, ResourceAllocation } from '../lib/types'
 import { Select } from '../components/Select'
+import { Modal } from '../components/Modal'
 
 function safeUrl(url: string | null | undefined): string | undefined {
   if (!url) return undefined
@@ -46,54 +47,6 @@ function fmt(n?: number | null) {
 
 function cap(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1)
-}
-
-// ── local Modal ───────────────────────────────────────────────────────────────
-
-function Modal({
-  title,
-  onClose,
-  children,
-  maxWidth = 560,
-}: {
-  title: string
-  onClose: () => void
-  children: React.ReactNode
-  maxWidth?: number
-}) {
-  return (
-    <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 1000,
-        background: 'rgba(0,0,0,0.45)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <div
-        style={{
-          background: '#fff', borderRadius: 10, padding: '28px 32px',
-          maxWidth, width: '100%',
-          boxShadow: '0 8px 40px rgba(0,0,0,0.18)',
-          maxHeight: '90vh', overflowY: 'auto',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>{title}</h2>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: 'var(--c3)', fontSize: 20, lineHeight: 1, padding: 0,
-            }}
-          >
-            ×
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  )
 }
 
 // ── state types ───────────────────────────────────────────────────────────────
@@ -222,7 +175,7 @@ export function ProjectDetailView() {
   const cStore = useClientsStore()
   const crStore = useChangeRequestsStore()
   const settingsStore = useSettingsStore()
-  const { deliverables, fetchDeliverables, addDeliverable, updateDeliverable, removeDeliverable, members, fetchMembers } = useResourceStore()
+  const { deliverables, fetchDeliverables, addDeliverable, updateDeliverable, removeDeliverable, members, fetchMembers, teams, fetchTeams } = useResourceStore()
   const pmOptions = settingsStore.projectManagers.map(m => ({ value: m, label: m }))
 
   // revenue_planner rows fetched directly
@@ -305,8 +258,11 @@ export function ProjectDetailView() {
   const [showDeliverableModal, setShowDeliverableModal] = useState(false)
   const [delTitle, setDelTitle] = useState('')
   const [delDue, setDelDue] = useState('')
+  const [delStartDate, setDelStartDate] = useState('')
   const [delHours, setDelHours] = useState<number | ''>('')
   const [delTeam, setDelTeam] = useState<string[]>([])
+  const [delTeamHours, setDelTeamHours] = useState<Record<string, number>>({})
+  const [editDeliverableTarget, setEditDeliverableTarget] = useState<import('../lib/types').ProjectDeliverable | null>(null)
 
   // project team members
   const [projectMembers, setProjectMembers] = useState<Array<{ id: string; member_id: string; member: { id: string; name: string } }>>([])
@@ -325,6 +281,7 @@ export function ProjectDetailView() {
     pStore.fetchAll()
     cStore.fetchAll()
     settingsStore.fetch()
+    fetchTeams()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchRpRows = (projectId: string) => {
@@ -993,22 +950,71 @@ export function ProjectDetailView() {
       ? (maintenancePlannedTotal != null ? fmt(maintenancePlannedTotal) : contractVal != null ? `${contractVal.toLocaleString()} €/mo` : '—')
       : (project.initial_contract_value ?? contractVal) != null ? fmt(project.initial_contract_value ?? contractVal) : '—'
 
+  // ── deliverable helpers ───────────────────────────────────────────────────
+  const computeDelHours = (teamList: string[], teamHrs: Record<string, number>, fallback: number | '') => {
+    if (teamList.length > 1) {
+      const sum = teamList.reduce((s, t) => s + (teamHrs[t] ?? 0), 0)
+      return sum || null
+    }
+    return (fallback as number) || null
+  }
+
+  const resetDelForm = () => {
+    setDelTitle(''); setDelDue(''); setDelStartDate(''); setDelHours(''); setDelTeam([]); setDelTeamHours({})
+  }
+
+  const openEditDeliverable = (d: import('../lib/types').ProjectDeliverable) => {
+    setEditDeliverableTarget(d)
+    setDelTitle(d.title)
+    setDelDue(d.due_date)
+    setDelStartDate(d.start_date ?? '')
+    setDelHours(d.estimated_hours ?? '')
+    const savedTeam = d.team ? d.team.split(',').map(t => t.trim()) : []
+    setDelTeam(savedTeam)
+    setDelTeamHours((d.team_hours as Record<string, number>) ?? {})
+    setShowDeliverableModal(true)
+  }
+
   // ── deliverable handlers ──────────────────────────────────────────────────
   const handleAddDeliverable = async () => {
+    const teamHrsPayload = delTeam.length > 1 ? delTeamHours : null
+    const totalHours = computeDelHours(delTeam, delTeamHours, delHours)
     try {
       await addDeliverable({
         project_id: id!,
         title: delTitle.trim(),
         due_date: delDue,
-        estimated_hours: delHours || null,
+        start_date: delStartDate || null,
+        estimated_hours: totalHours,
         team: delTeam.length > 0 ? delTeam.join(', ') : null,
+        team_hours: teamHrsPayload,
         status: 'active',
         notes: null,
       })
       toast('success', 'Deliverable added')
       setShowDeliverableModal(false)
-      setDelTitle(''); setDelDue(''); setDelHours(''); setDelTeam([])
+      resetDelForm()
     } catch { toast('error', 'Failed to add deliverable') }
+  }
+
+  const handleSaveDeliverable = async () => {
+    if (!editDeliverableTarget) return
+    const teamHrsPayload = delTeam.length > 1 ? delTeamHours : null
+    const totalHours = computeDelHours(delTeam, delTeamHours, delHours)
+    try {
+      await updateDeliverable(editDeliverableTarget.id, {
+        title: delTitle.trim(),
+        due_date: delDue,
+        start_date: delStartDate || null,
+        estimated_hours: totalHours,
+        team: delTeam.length > 0 ? delTeam.join(', ') : null,
+        team_hours: teamHrsPayload,
+      })
+      toast('success', 'Deliverable updated')
+      setShowDeliverableModal(false)
+      setEditDeliverableTarget(null)
+      resetDelForm()
+    } catch { toast('error', 'Failed to update deliverable') }
   }
 
   const handleToggleDeliverable = async (d: ProjectDeliverable) => {
@@ -2314,7 +2320,7 @@ export function ProjectDetailView() {
             {/* Deliverables / estimates */}
             <div className="section-bar" style={{ marginBottom: 16 }}>
               <h2>Deliverables &amp; Estimates</h2>
-              <button className="btn btn-primary btn-sm" onClick={() => setShowDeliverableModal(true)}>+ Add</button>
+              <button className="btn btn-primary btn-sm" onClick={() => { resetDelForm(); setEditDeliverableTarget(null); setShowDeliverableModal(true) }}>+ Add</button>
             </div>
             <div className="card" style={{ marginBottom: 24 }}>
               {deliverables.length === 0 ? (
@@ -2354,6 +2360,7 @@ export function ProjectDetailView() {
                           </td>
                           <td>
                             <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                              <button className="btn btn-ghost btn-xs" onClick={() => openEditDeliverable(d)}>Edit</button>
                               <button className="btn btn-ghost btn-xs" onClick={() => handleToggleDeliverable(d)}>
                                 {d.status === 'completed' ? 'Reopen' : 'Complete'}
                               </button>
@@ -2486,39 +2493,45 @@ export function ProjectDetailView() {
           </div>
         )}
 
-        {/* ── Add Deliverable Modal ─── */}
+        {/* ── Add / Edit Deliverable Modal ─── */}
         {showDeliverableModal && (
-          <div className="modal-overlay" onClick={() => setShowDeliverableModal(false)}>
-            <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 600 }}>
+          <div className="modal-overlay" onClick={() => { setShowDeliverableModal(false); setEditDeliverableTarget(null); resetDelForm() }}>
+            <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 620 }}>
               <div className="modal-header">
-                <h3>Add Deliverable</h3>
-                <button className="modal-close" onClick={() => setShowDeliverableModal(false)}>&times;</button>
+                <h3>{editDeliverableTarget ? 'Edit Deliverable' : 'Add Deliverable'}</h3>
+                <button className="modal-close" onClick={() => { setShowDeliverableModal(false); setEditDeliverableTarget(null); resetDelForm() }}>&times;</button>
               </div>
               <div className="modal-body">
                 <div className="form-group" style={{ marginBottom: 16 }}>
                   <label className="form-label">Title</label>
                   <input value={delTitle} onChange={e => setDelTitle(e.target.value)} placeholder="e.g. UX/UI Design delivery" autoFocus />
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 16 }}>
+                  <div className="form-group">
+                    <label className="form-label">Start Date <span style={{ fontWeight: 400, color: 'var(--c4)' }}>(optional)</span></label>
+                    <input type="date" value={delStartDate} onChange={e => setDelStartDate(e.target.value)} />
+                  </div>
                   <div className="form-group">
                     <label className="form-label">Due Date</label>
                     <input type="date" value={delDue} onChange={e => setDelDue(e.target.value)} />
                   </div>
-                  <div className="form-group">
-                    <label className="form-label">Estimated Hours</label>
-                    <input type="number" value={delHours} onChange={e => setDelHours(e.target.value ? Number(e.target.value) : '')} min={0} step={1} placeholder="40" />
-                  </div>
+                  {delTeam.length <= 1 && (
+                    <div className="form-group">
+                      <label className="form-label">Estimated Hours</label>
+                      <input type="number" value={delHours} onChange={e => setDelHours(e.target.value ? Number(e.target.value) : '')} min={0} step={1} placeholder="40" />
+                    </div>
+                  )}
                 </div>
-                <div className="form-group">
+                <div className="form-group" style={{ marginBottom: delTeam.length > 1 ? 16 : 0 }}>
                   <label className="form-label">Team</label>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
-                    {['ux/ui', 'dev', 'content', 'pm', 'analytics'].map(t => {
-                      const sel = delTeam.includes(t)
+                    {(teams.length > 0 ? teams : []).map(t => {
+                      const sel = delTeam.includes(t.name)
                       return (
                         <button
-                          key={t}
+                          key={t.id}
                           type="button"
-                          onClick={() => setDelTeam(prev => sel ? prev.filter(x => x !== t) : [...prev, t])}
+                          onClick={() => setDelTeam(prev => sel ? prev.filter(x => x !== t.name) : [...prev, t.name])}
                           style={{
                             padding: '5px 14px',
                             borderRadius: 20,
@@ -2532,16 +2545,45 @@ export function ProjectDetailView() {
                             letterSpacing: '0.04em',
                           }}
                         >
-                          {t === 'ux/ui' ? 'UX/UI' : t.charAt(0).toUpperCase() + t.slice(1)}
+                          {t.name}
                         </button>
                       )
                     })}
                   </div>
                 </div>
+                {delTeam.length > 1 && (
+                  <div style={{ background: 'var(--c7)', borderRadius: 8, padding: '12px 16px' }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>Hours per Team</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
+                      {delTeam.map(tName => (
+                        <div key={tName} className="form-group" style={{ margin: 0 }}>
+                          <label className="form-label" style={{ fontSize: 12 }}>{tName}</label>
+                          <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            placeholder="0"
+                            value={delTeamHours[tName] ?? ''}
+                            onChange={e => setDelTeamHours(prev => ({ ...prev, [tName]: e.target.value ? Number(e.target.value) : 0 }))}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ marginTop: 8, fontSize: 12, color: 'var(--c3)' }}>
+                      Total: <strong>{delTeam.reduce((s, t) => s + (delTeamHours[t] ?? 0), 0)}h</strong>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="modal-footer">
-                <button className="btn btn-secondary btn-sm" onClick={() => setShowDeliverableModal(false)}>Cancel</button>
-                <button className="btn btn-primary btn-sm" disabled={!delTitle.trim() || !delDue} onClick={handleAddDeliverable}>Add</button>
+                <button className="btn btn-secondary btn-sm" onClick={() => { setShowDeliverableModal(false); setEditDeliverableTarget(null); resetDelForm() }}>Cancel</button>
+                <button
+                  className="btn btn-primary btn-sm"
+                  disabled={!delTitle.trim() || !delDue}
+                  onClick={editDeliverableTarget ? handleSaveDeliverable : handleAddDeliverable}
+                >
+                  {editDeliverableTarget ? 'Save' : 'Add'}
+                </button>
               </div>
             </div>
           </div>

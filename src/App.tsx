@@ -15,6 +15,7 @@ import { MaintenanceDetailView } from './views/MaintenanceDetailView'
 import { RevenuePlannerView } from './views/RevenuePlannerView'
 import { ToolsView } from './views/ToolsView'
 import { InfrastructureView } from './views/InfrastructureView'
+import { InternalView } from './views/InternalView'
 import { DomainsView } from './views/DomainsView'
 import { TimesheetView } from './views/TimesheetView'
 import { ThisMonthView } from './views/ThisMonthView'
@@ -104,6 +105,7 @@ function App() {
                 <Route path="/clients/:id"     element={<ClientDetailView />} />
                 <Route path="/projects"        element={<ProjectsView />} />
                 <Route path="/projects/:id"    element={<ProjectDetailView />} />
+                <Route path="/internal"        element={<InternalView />} />
                 <Route path="/maintenances"    element={<MaintenancesView />} />
                 <Route path="/maintenances/:id" element={<MaintenanceDetailView />} />
                 <Route path="/sales"           element={<SalesView />} />

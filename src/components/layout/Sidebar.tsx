@@ -69,6 +69,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         <div className="sidebar-group-label">Clients &amp; Projects</div>
         <NavLink to="/clients"       className={nav}><IconUsers />    Clients</NavLink>
         <NavLink to="/projects"      className={nav}><IconBriefcase /> Projects</NavLink>
+        <NavLink to="/internal"      className={nav}><IconGrid /> Internal</NavLink>
         <NavLink to="/maintenances"  className={nav}><IconTool /> Maintenances</NavLink>
         <NavLink to="/sales"         className={nav}><IconTarget /> Sales</NavLink>
 

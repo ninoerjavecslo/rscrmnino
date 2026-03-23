@@ -5,6 +5,8 @@ import { useInfraStore } from '../stores/infrastructure'
 import { useDomainsStore } from '../stores/domains'
 import type { Project, RevenuePlanner } from '../lib/types'
 import { hostingActiveInMonth } from '../lib/types'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 
 // ── Half-year helpers ──────────────────────────────────────────────────────────
 
@@ -33,23 +35,15 @@ function fmtAmt(n: number): string {
 // ── Type badge ────────────────────────────────────────────────────────────────
 
 function TypeBadge({ type }: { type: Project['type'] }) {
-  const styles: Record<Project['type'], React.CSSProperties> = {
-    fixed: { background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd' },
-    maintenance: { background: '#dbeafe', color: '#1d4ed8', border: '1px solid #bfdbfe' },
-    variable: { background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a' },
+  const cls: Record<Project['type'], string> = {
+    fixed: 'bg-[#e0f2fe] text-[#0369a1] border border-[#bae6fd]',
+    maintenance: 'bg-[#dbeafe] text-[#1d4ed8] border border-[#bfdbfe]',
+    variable: 'bg-[#fef3c7] text-[#92400e] border border-[#fde68a]',
+    internal: 'bg-[#f4f2f6] text-[#374151] border border-[#e8e3ea]',
   }
-  const labels: Record<Project['type'], string> = { fixed: 'Fixed', maintenance: 'Recurring', variable: 'Variable' }
+  const labels: Record<Project['type'], string> = { fixed: 'Fixed', maintenance: 'Recurring', variable: 'Variable', internal: 'Internal' }
   return (
-    <span style={{
-      display: 'inline-block',
-      fontSize: 9,
-      fontWeight: 700,
-      letterSpacing: '0.4px',
-      textTransform: 'uppercase',
-      padding: '1px 5px',
-      borderRadius: 3,
-      ...styles[type],
-    }}>
+    <span className={`inline-block text-[9px] font-bold tracking-[0.4px] uppercase px-[5px] py-px rounded-[3px] ${cls[type]}`}>
       {labels[type]}
     </span>
   )
@@ -336,39 +330,29 @@ export function RevenuePlannerView() {
   return (
     <div>
       {/* Page header */}
-      <div className="page-header">
+      <div className="flex items-center justify-between px-6 py-4 bg-background border-b border-border">
         <div>
           <h1>Invoice Planning</h1>
           <p>Plan and track invoices across projects</p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div className="flex items-center gap-2.5">
           {/* Period nav */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <button
-              className="btn btn-secondary btn-sm"
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => navigate(-1)}
-              style={{ padding: '5px 9px', minWidth: 0 }}
+              className="px-2.5 min-w-0"
             >
               ‹
-            </button>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 0,
-              border: '1.5px solid var(--c5)',
-              borderRadius: 7,
-              overflow: 'hidden',
-            }}>
+            </Button>
+            <div className="flex items-center overflow-hidden rounded-[7px] border-[1.5px] border-border">
               {(['H1', 'H2'] as Half[]).map(h => (
                 <button
                   key={h}
                   onClick={() => setHalf(h)}
+                  className="px-3 py-1 text-xs font-bold border-none cursor-pointer transition-colors"
                   style={{
-                    padding: '5px 12px',
-                    fontSize: 12,
-                    fontWeight: 700,
-                    border: 'none',
-                    cursor: 'pointer',
                     background: half === h ? 'var(--navy)' : '#fff',
                     color: half === h ? '#fff' : 'var(--c3)',
                     fontFamily: 'inherit',
@@ -379,69 +363,70 @@ export function RevenuePlannerView() {
                 </button>
               ))}
             </div>
-            <button
-              className="btn btn-secondary btn-sm"
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => navigate(1)}
-              style={{ padding: '5px 9px', minWidth: 0 }}
+              className="px-2.5 min-w-0"
             >
               ›
-            </button>
+            </Button>
           </div>
-          <button className="btn btn-secondary btn-sm">
+          <Button variant="outline" size="sm">
             Export
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Error banners */}
       {(pStore.error || rpStore.error) && (
-        <div className="alert alert-red" style={{ margin: '0 28px 16px' }}>
+        <div className="rounded-lg border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-sm text-[#be123c] mx-7 mb-4">
           <span>Failed to load data. Please check your connection.</span>
         </div>
       )}
 
       {/* Stats strip */}
-      <div className="stats-strip" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
-        <div className="stat-card" style={{ '--left-color': '#15803d' } as React.CSSProperties}>
-          <div className="stat-card-label">Confirmed</div>
-          <div className="stat-card-value">{fmtAmt(confirmedTotal + recurringTotal())}</div>
-          <div className="stat-card-sub">projects + hosting + retainers</div>
+      <div className="grid grid-cols-4 gap-3 mb-4 px-6 pt-5">
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Confirmed</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{fmtAmt(confirmedTotal + recurringTotal())}</div>
+          <div className="text-xs text-muted-foreground mt-1">projects + hosting + retainers</div>
         </div>
-        <div className="stat-card" style={{ '--left-color': '#92400e' } as React.CSSProperties}>
-          <div className="stat-card-label">Likely</div>
-          <div className="stat-card-value">{fmtAmt(likelyTotal + recurringTotal())}</div>
-          <div className="stat-card-sub">confirmed + 50% invoices</div>
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Likely</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{fmtAmt(likelyTotal + recurringTotal())}</div>
+          <div className="text-xs text-muted-foreground mt-1">confirmed + 50% invoices</div>
         </div>
-        <div className="stat-card" style={{ '--left-color': 'var(--navy)' } as React.CSSProperties}>
-          <div className="stat-card-label">Best Case</div>
-          <div className="stat-card-value">{fmtAmt(bestCaseTotal + recurringTotal())}</div>
-          <div className="stat-card-sub">confirmed + 50% + 25%</div>
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Best Case</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{fmtAmt(bestCaseTotal + recurringTotal())}</div>
+          <div className="text-xs text-muted-foreground mt-1">confirmed + 50% + 25%</div>
         </div>
-        <div className="stat-card" style={{ '--left-color': '#4338ca' } as React.CSSProperties}>
-          <div className="stat-card-label">Actual Issued</div>
-          <div className="stat-card-value">{fmtAmt(actualSum)}</div>
-          <div className="stat-card-sub">issued + paid</div>
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Actual Issued</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{fmtAmt(actualSum)}</div>
+          <div className="text-xs text-muted-foreground mt-1">issued + paid</div>
         </div>
       </div>
 
       {/* Main grid */}
-      <div className="page-content">
+      <div className="flex-1 overflow-auto p-6">
         {isLoading ? (
           <div className="card">
-            <div className="card-body" style={{ textAlign: 'center', padding: '52px 20px', color: 'var(--c4)' }}>
+            <div className="text-center px-5 py-[52px] text-muted-foreground">
               <span className="spinner" style={{ width: 28, height: 28, borderWidth: 3 }} />
-              <div style={{ fontWeight: 600, marginTop: 12 }}>Loading projects…</div>
+              <div className="font-semibold mt-3">Loading projects…</div>
             </div>
           </div>
         ) : activeProjects.length === 0 ? (
           <div className="card">
-            <div className="card-body" style={{ textAlign: 'center', padding: '52px 20px' }}>
-              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--c2)', marginBottom: 5 }}>No active projects</div>
+            <div className="text-center px-5 py-[52px]">
+              <div className="font-bold text-[15px] text-[#374151] mb-1">No active projects</div>
               <div className="text-sm">Mark projects as active to see them in Invoice Planning.</div>
             </div>
           </div>
         ) : (
-          <div className="card" style={{ overflow: 'hidden' }}>
+          <div className="card overflow-hidden">
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: 900 }}>
                 <colgroup>
@@ -712,11 +697,11 @@ export function RevenuePlannerView() {
         {/* ── Maintenance Retainers ── */}
         {retainerByMaint.size > 0 && (
           <div style={{ marginTop: 24 }}>
-            <div className="section-bar">
+            <div className="flex items-center justify-between mb-3">
               <h2>Maintenance Retainers</h2>
             </div>
 
-            <div className="card" style={{ overflow: 'hidden' }}>
+            <div className="card overflow-hidden">
               <div style={{ overflowX: 'auto' }}>
                 <table style={{
                   width: '100%',
@@ -986,11 +971,11 @@ export function RevenuePlannerView() {
         {/* Change Requests */}
         {crByMaint.size > 0 && (
           <div style={{ marginTop: 24 }}>
-            <div className="section-bar">
+            <div className="flex items-center justify-between mb-3">
               <h2>Change Requests</h2>
             </div>
 
-            <div className="card" style={{ overflow: 'hidden' }}>
+            <div className="card overflow-hidden">
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: 800 }}>
                   <colgroup>
@@ -1061,7 +1046,7 @@ export function RevenuePlannerView() {
                               background: rowBg, borderRight: '2px solid #e5e7eb', verticalAlign: 'middle',
                             }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
-                                <span className="badge badge-navy" style={{ fontSize: 9 }}>CR</span>
+                                <Badge variant="navy" className="text-[9px]">CR</Badge>
                               </div>
                               <div style={{ fontWeight: 700, fontSize: 13, color: '#111827', lineHeight: 1.3, marginBottom: 2 }}>{cr.title}</div>
                               <div style={{ fontSize: 11, color: '#6b7280' }}>{maintName} · {clientName}</div>
@@ -1147,11 +1132,11 @@ export function RevenuePlannerView() {
         {/* Hosting Revenue */}
         {activeHostingClients.length > 0 && (
           <div style={{ marginTop: 24 }}>
-            <div className="section-bar">
+            <div className="flex items-center justify-between mb-3">
               <h2>Hosting Revenue</h2>
             </div>
 
-            <div className="card" style={{ overflow: 'hidden' }}>
+            <div className="card overflow-hidden">
               <div style={{ overflowX: 'auto' }}>
                 <table style={{
                   width: '100%',
@@ -1355,11 +1340,11 @@ export function RevenuePlannerView() {
         {/* Domains Revenue */}
         {domainsInHalf.length > 0 && (
           <div style={{ marginTop: 24 }}>
-            <div className="section-bar">
+            <div className="flex items-center justify-between mb-3">
               <h2>Domain Renewals</h2>
             </div>
 
-            <div className="card" style={{ overflow: 'hidden' }}>
+            <div className="card overflow-hidden">
               <div style={{ overflowX: 'auto' }}>
                 <table style={{
                   width: '100%',

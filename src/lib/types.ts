@@ -23,7 +23,7 @@ export interface Project {
   client_id?: string | null
   pn: string                 // e.g. RS-2026-001
   name: string
-  type: 'fixed' | 'maintenance' | 'variable'
+  type: 'fixed' | 'maintenance' | 'variable' | 'internal'
   status: 'active' | 'paused' | 'completed' | 'cancelled'
   pm?: string | null
   contract_value?: number | null

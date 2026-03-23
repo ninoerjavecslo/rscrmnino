@@ -15,6 +15,10 @@ import type { Project, Domain, HostingClient, RevenuePlanner, Maintenance, Pipel
 import { hostingContractValue } from '../lib/types'
 import { Select } from '../components/Select'
 import { Modal } from '../components/Modal'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -112,32 +116,34 @@ function getCurrentMonth(): string {
 // ── badge maps ───────────────────────────────────────────────────────────────
 
 const STATUS_BADGE: Record<string, string> = {
-  active: 'badge-green',
-  paused: 'badge-amber',
-  completed: 'badge-gray',
-  cancelled: 'badge-red',
+  active: 'green',
+  paused: 'amber',
+  completed: 'gray',
+  cancelled: 'red',
 }
 const TYPE_BADGE: Record<string, string> = {
-  fixed: 'badge-blue',
-  maintenance: 'badge-amber',
-  variable: 'badge-green',
+  fixed: 'blue',
+  maintenance: 'amber',
+  variable: 'green',
+  internal: 'gray',
 }
 const TYPE_LABEL: Record<string, string> = {
   fixed: 'Fixed',
   maintenance: 'Recurring',
   variable: 'Variable',
+  internal: 'Internal',
 }
 const RP_STATUS_BADGE: Record<string, string> = {
-  paid: 'badge-green',
-  issued: 'badge-blue',
-  planned: 'badge-amber',
-  retainer: 'badge-navy',
-  cost: 'badge-red',
+  paid: 'green',
+  issued: 'blue',
+  planned: 'amber',
+  retainer: 'navy',
+  cost: 'red',
 }
 const PIPELINE_STATUS_BADGE: Record<string, string> = {
-  proposal: 'badge-amber',
-  won: 'badge-green',
-  lost: 'badge-red',
+  proposal: 'amber',
+  won: 'green',
+  lost: 'red',
 }
 const PIPELINE_STATUS_LABELS: Record<string, string> = {
   proposal: 'Proposal',
@@ -160,15 +166,15 @@ function TypePills({ value, onChange }: { value: ProjectType; onChange: (v: Proj
       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg> },
   ]
   return (
-    <div style={{ marginBottom: 16 }}>
-      <div className="form-label" style={{ marginBottom: 8 }}>Project type</div>
-      <div style={{ display: 'flex', gap: 8 }}>
+    <div className="mb-4">
+      <div className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-2">Project type</div>
+      <div className="flex gap-2">
         {types.map(t => (
           <div key={t.key} onClick={() => onChange(t.key)}
-            style={{ flex: 1, border: `2px solid ${value === t.key ? 'var(--navy)' : 'var(--c6)'}`, borderRadius: 'var(--r)', padding: '12px 10px', cursor: 'pointer', background: value === t.key ? 'var(--navy-light)' : '#fff', textAlign: 'center', transition: 'all .12s' }}>
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>{t.icon}</div>
-            <div style={{ fontWeight: 700, fontSize: 13, color: value === t.key ? 'var(--navy)' : 'var(--c1)' }}>{t.label}</div>
-            <div style={{ fontSize: 11, color: 'var(--c4)', marginTop: 2 }}>{t.sub}</div>
+            className={`flex-1 rounded border-2 px-[10px] py-3 cursor-pointer text-center transition-all ${value === t.key ? 'border-primary bg-blue-50' : 'border-border bg-white'}`}>
+            <div className="flex justify-center mb-1.5">{t.icon}</div>
+            <div className={`font-bold text-[13px] ${value === t.key ? 'text-primary' : 'text-foreground'}`}>{t.label}</div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">{t.sub}</div>
           </div>
         ))}
       </div>
@@ -196,26 +202,26 @@ function DomainRowInputs({ rows, onChange }: { rows: DomainRowData[]; onChange: 
   }
   return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 130px 130px 90px 32px', gap: '4px 8px', marginBottom: 4 }}>
-        <span style={{ fontSize: 11, color: 'var(--c4)', fontWeight: 600 }}>Domain</span>
-        <span style={{ fontSize: 11, color: 'var(--c4)', fontWeight: 600 }}>Registered</span>
-        <span style={{ fontSize: 11, color: 'var(--c4)', fontWeight: 600 }}>Expiry</span>
-        <span style={{ fontSize: 11, color: 'var(--c4)', fontWeight: 600 }}>€/yr</span>
+      <div className="grid mb-1" style={{ gridTemplateColumns: '2fr 130px 130px 90px 32px', gap: '4px 8px' }}>
+        <span className="text-[11px] text-muted-foreground font-semibold">Domain</span>
+        <span className="text-[11px] text-muted-foreground font-semibold">Registered</span>
+        <span className="text-[11px] text-muted-foreground font-semibold">Expiry</span>
+        <span className="text-[11px] text-muted-foreground font-semibold">€/yr</span>
         <span />
       </div>
       {rows.map((r, i) => (
-        <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 130px 130px 90px 32px', gap: '4px 8px', marginBottom: 8, alignItems: 'center' }}>
+        <div key={i} className="grid mb-2 items-center" style={{ gridTemplateColumns: '2fr 130px 130px 90px 32px', gap: '4px 8px' }}>
           <input placeholder="example.si" value={r.domain_name} onChange={e => update(i, 'domain_name', e.target.value)} />
           <input placeholder="DD/MM/YYYY" value={isoToDMY(r.registered_date)} onChange={e => update(i, 'registered_date', parseDMY(e.target.value))} />
           <input placeholder="DD/MM/YYYY" value={isoToDMY(r.expiry_date)} onChange={e => update(i, 'expiry_date', parseDMY(e.target.value))} />
           <input placeholder="25" type="number" value={r.yearly_amount} onChange={e => update(i, 'yearly_amount', e.target.value)} />
           <button type="button" onClick={() => onChange(rows.filter((_, idx) => idx !== i))}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--red)', fontSize: 18, lineHeight: 1 }}>×</button>
+            className="bg-transparent border-none cursor-pointer text-[#dc2626] text-lg leading-none">×</button>
         </div>
       ))}
-      <button type="button" className="btn btn-secondary btn-sm" onClick={() => onChange([...rows, { domain_name: '', registered_date: '', expiry_date: '', yearly_amount: '' }])} style={{ marginTop: 4 }}>
+      <Button variant="outline" size="sm" type="button" onClick={() => onChange([...rows, { domain_name: '', registered_date: '', expiry_date: '', yearly_amount: '' }])} className="mt-1">
         + Add domain
-      </button>
+      </Button>
     </div>
   )
 }
@@ -943,13 +949,13 @@ Client profile:
 
   // ── loading / not found ───────────────────────────────────────────────────
   if (cStore.loading) {
-    return <div className="page-content" style={{ textAlign: 'center', paddingTop: 60, color: 'var(--c4)' }}>Loading…</div>
+    return <div className="flex-1 overflow-auto p-6 text-center text-muted-foreground pt-[60px]">Loading…</div>
   }
   if (!client) {
     return (
-      <div className="page-content" style={{ paddingTop: 40 }}>
-        <div className="alert alert-red">Client not found.</div>
-        <button className="btn btn-secondary btn-sm" style={{ marginTop: 12 }} onClick={() => navigate('/clients')}>← Back to Clients</button>
+      <div className="flex-1 overflow-auto p-6 pt-10">
+        <div className="rounded-lg border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-sm text-[#be123c]">Client not found.</div>
+        <Button variant="outline" size="sm" className="mt-3" onClick={() => navigate('/clients')}>← Back to Clients</Button>
       </div>
     )
   }
@@ -985,163 +991,161 @@ Client profile:
     ]
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="flex flex-col gap-4">
         {/* Alerts */}
         {(expiringDomains.length > 0 || endingMaintenances.length > 0) && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div className="flex flex-col gap-1.5">
             {expiringDomains.map(d => (
-              <div key={d.id} className="alert alert-amber" style={{ margin: 0 }}>
+              <div key={d.id} className="rounded-lg border border-[#fcd34d] bg-[#fef9ee] px-3 py-2 text-sm text-[#92400e]">
                 Domain <strong>{d.domain_name}</strong> expires in {daysUntil(d.expiry_date)} days ({fmtDate(d.expiry_date)})
               </div>
             ))}
             {endingMaintenances.map(m => (
-              <div key={m.id} className="alert alert-amber" style={{ margin: 0 }}>
+              <div key={m.id} className="rounded-lg border border-[#fcd34d] bg-[#fef9ee] px-3 py-2 text-sm text-[#92400e]">
                 Maintenance <strong>{m.name}</strong> ends in {daysUntil(m.contract_end!)} days
               </div>
             ))}
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 270px', gap: 16, minWidth: 0, alignItems: 'start' }}>
+        <div className="grid gap-4 min-w-0 items-start" style={{ gridTemplateColumns: '1fr 270px' }}>
 
           {/* ── Left column ── */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
+          <div className="flex flex-col gap-[14px] min-w-0">
 
             {/* Strategic Intelligence – light bg section */}
-            <div style={{ background: '#f5f3ff', borderRadius: 14, padding: '18px 20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+            <div className="bg-[#f5f3ff] rounded-[14px] px-5 py-[18px]">
+              <div className="flex items-center gap-2 mb-[14px]">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5z"/><path d="M19 3l.75 2.25L22 6l-2.25.75L19 9l-.75-2.25L16 6l2.25-.75z"/></svg>
-                <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--c0)' }}>Strategic Intelligence</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20, border: '1px solid rgba(99,102,241,0.35)', color: '#6366f1', background: 'rgba(99,102,241,0.08)', marginLeft: 2 }}>
+                <span className="text-[15px] font-bold text-foreground">Strategic Intelligence</span>
+                <span className="flex items-center gap-[5px] text-[10px] font-bold px-[10px] py-[3px] rounded-full border border-[rgba(99,102,241,0.35)] text-[#6366f1] bg-[rgba(99,102,241,0.08)] ml-0.5">
                   <svg width="7" height="7" viewBox="0 0 24 24" fill="#6366f1"><circle cx="12" cy="12" r="12"/></svg>
                   AI ENGINE ONLINE
                 </span>
               </div>
               {/* AI Account Summary white card */}
-              <div style={{ background: '#fff', borderRadius: 10, padding: '16px 18px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+              <div className="bg-white rounded-[10px] px-[18px] py-4">
+                <div className="flex items-center gap-1.5 mb-[10px]">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5z"/></svg>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>AI Account Summary</span>
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.08em]">AI Account Summary</span>
                 </div>
                 {aiLoading ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--c4)', padding: '4px 0' }}>
+                  <div className="flex items-center gap-2 text-[13px] text-muted-foreground py-1">
                     <span className="spinner" style={{ borderTopColor: '#6366f1', width: 13, height: 13 }} />
                     Generating account summary…
                   </div>
                 ) : aiSummary ? (
-                  <p style={{ margin: 0, fontSize: 13, lineHeight: 1.7, color: 'var(--c1)' }}>{aiSummary}</p>
+                  <p className="m-0 text-[13px] leading-[1.7] text-[#374151]">{aiSummary}</p>
                 ) : (
-                  <p style={{ margin: 0, fontSize: 13, color: 'var(--c4)' }}>No summary yet.</p>
+                  <p className="m-0 text-[13px] text-muted-foreground">No summary yet.</p>
                 )}
                 <button
                   onClick={() => { localStorage.removeItem(`ai_client_summary_${id}`); setAiSummary(null); setAiIdeas([]) }}
-                  style={{ marginTop: 10, background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--c4)', padding: 0 }}
+                  className="mt-[10px] bg-transparent border-none cursor-pointer text-[11px] text-muted-foreground p-0"
                 >↻ Regenerate</button>
               </div>
             </div>
 
             {/* Growth Metrics */}
-            <div className="card">
-              <div className="card-body" style={{ padding: '16px 20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}>
+            <Card>
+              <CardContent className="px-5 py-4">
+                <div className="flex items-center gap-1.5 mb-[14px]">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--c2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--c2)' }}>Growth Metrics</span>
+                  <span className="text-xs font-bold text-[#374151]">Growth Metrics</span>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13 }}>
-                    <span style={{ color: 'var(--c3)' }}>Revenue YoY</span>
+                <div className="flex flex-col gap-[10px]">
+                  <div className="flex items-center justify-between text-[13px]">
+                    <span className="text-muted-foreground">Revenue YoY</span>
                     {yoyChange !== null
-                      ? <span style={{ fontWeight: 700, color: yoyChange >= 0 ? 'var(--green)' : 'var(--red)' }}>{yoyChange >= 0 ? '+' : ''}{yoyChange}% vs {CURRENT_YEAR - 1}</span>
-                      : <span style={{ color: 'var(--c4)', fontWeight: 500 }}>No prior year data</span>}
+                      ? <span className={`font-bold ${yoyChange >= 0 ? 'text-[#16a34a]' : 'text-[#dc2626]'}`}>{yoyChange >= 0 ? '+' : ''}{yoyChange}% vs {CURRENT_YEAR - 1}</span>
+                      : <span className="text-muted-foreground font-medium">No prior year data</span>}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13 }}>
-                    <span style={{ color: 'var(--c3)' }}>Invoice consistency</span>
-                    <span style={{ fontWeight: 700, color: invoiceConsistency >= 80 ? 'var(--green)' : invoiceConsistency >= 50 ? 'var(--amber)' : 'var(--red)' }}>{invoiceConsistency}% of months billed</span>
+                  <div className="flex items-center justify-between text-[13px]">
+                    <span className="text-muted-foreground">Invoice consistency</span>
+                    <span className={`font-bold ${invoiceConsistency >= 80 ? 'text-[#16a34a]' : invoiceConsistency >= 50 ? 'text-[#d97706]' : 'text-[#dc2626]'}`}>{invoiceConsistency}% of months billed</span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13 }}>
-                    <span style={{ color: 'var(--c3)' }}>Active services</span>
-                    <span style={{ fontWeight: 700 }}>{activeProjects.length} projects · {maintenances.filter(m => m.status === 'active').length} maintenances · {hostingRows.length} hosting</span>
+                  <div className="flex items-center justify-between text-[13px]">
+                    <span className="text-muted-foreground">Active services</span>
+                    <span className="font-bold">{activeProjects.length} projects · {maintenances.filter(m => m.status === 'active').length} maintenances · {hostingRows.length} hosting</span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13 }}>
-                    <span style={{ color: 'var(--c3)' }}>Domains</span>
-                    <span style={{ fontWeight: 700, color: expiringDomains.length > 0 ? 'var(--amber)' : undefined }}>
+                  <div className="flex items-center justify-between text-[13px]">
+                    <span className="text-muted-foreground">Domains</span>
+                    <span className={`font-bold ${expiringDomains.length > 0 ? 'text-[#d97706]' : ''}`}>
                       {clientDomains.length}{expiringDomains.length > 0 ? ` · ${expiringDomains.length} expiring` : ''}
                     </span>
                   </div>
                 </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
 
             {/* Growth Opportunities */}
             {aiIdeas.length > 0 && (
-              <div className="card">
-                <div className="card-body" style={{ padding: '16px 20px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}>
+              <Card>
+                <CardContent className="px-5 py-4">
+                  <div className="flex items-center gap-1.5 mb-[14px]">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--c2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5z"/><path d="M19 3l.75 2.25L22 6l-2.25.75L19 9l-.75-2.25L16 6l2.25-.75z"/></svg>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Growth Opportunities</span>
+                    <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-[0.07em]">Growth Opportunities</span>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div className="grid grid-cols-2 gap-[10px]">
                     {aiIdeas.map((idea, i) => (
-                      <div key={i} style={{ background: 'var(--c7)', borderRadius: 8, padding: '12px 14px' }}>
-                        <div style={{ fontWeight: 700, fontSize: 11, color: 'var(--c0)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>{idea.title}</div>
-                        <div style={{ fontSize: 12, color: 'var(--c2)', lineHeight: 1.55 }}>{idea.description}</div>
+                      <div key={i} className="bg-gray-50 rounded-lg px-[14px] py-3">
+                        <div className="font-bold text-[11px] text-foreground uppercase tracking-[0.05em] mb-[5px]">{idea.title}</div>
+                        <div className="text-xs text-[#374151] leading-[1.55]">{idea.description}</div>
                       </div>
                     ))}
                   </div>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             )}
 
             {/* Recent Billing */}
-            <div className="card">
-              <div className="card-body" style={{ padding: '16px 20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--c2)' }}>Recent Billing</span>
-                  <button className="btn btn-ghost btn-xs" onClick={() => setActiveTab('invoices')}>All history →</button>
+            <Card>
+              <CardContent className="px-5 py-4">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-bold text-[#374151]">Recent Billing</span>
+                  <Button variant="ghost" size="xs" onClick={() => setActiveTab('invoices')}>All history →</Button>
                 </div>
                 {fullInvoiceHistory.length === 0 ? (
-                  <div style={{ fontSize: 12, color: 'var(--c4)', textAlign: 'center', padding: '12px 0' }}>No invoices yet</div>
+                  <div className="text-xs text-muted-foreground text-center py-3">No invoices yet</div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div className="flex flex-col gap-2">
                     {fullInvoiceHistory.slice(0, 5).map(r => (
-                      <div key={r.id} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ fontSize: 11, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 1 }}>{fmtMonthShort(r.month)}</div>
-                          <div style={{ fontSize: 12, color: 'var(--c2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <div key={r.id} className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-[11px] text-muted-foreground uppercase tracking-[0.04em] mb-px">{fmtMonthShort(r.month)}</div>
+                          <div className="text-xs text-[#374151] truncate">
                             {r.notes || (r.maintenance_id ? 'Retainer' : r.project_id ? 'Project invoice' : 'Other')}
                           </div>
                         </div>
-                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--green)' }}>{fmtEuro(r.actual_amount ?? r.planned_amount)}</div>
-                          <span className={`badge ${STATUS_BADGE[r.status] ?? 'badge-gray'}`} style={{ fontSize: 10 }}>{r.status}</span>
+                        <div className="text-right shrink-0">
+                          <div className="text-[13px] font-bold text-[#16a34a]">{fmtEuro(r.actual_amount ?? r.planned_amount)}</div>
+                          <Badge variant={(STATUS_BADGE[r.status] ?? 'gray') as Parameters<typeof Badge>[0]['variant']}>{r.status}</Badge>
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* ── Right column: Quick Actions (dark navy) ── */}
-          <div style={{ background: 'var(--navy)', borderRadius: 14, padding: '20px', position: 'sticky', top: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+          <div className="bg-primary rounded-[14px] p-5 sticky top-5">
+            <div className="flex items-center gap-2 mb-4">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="#f59e0b"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-              <span style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>Quick Actions</span>
+              <span className="text-[15px] font-bold text-white">Quick Actions</span>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className="flex flex-col gap-2">
               {quickActions.map((action, i) => (
                 <button key={i} onClick={action.onClick}
-                  style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: 10, padding: '12px 14px', cursor: 'pointer', width: '100%', textAlign: 'left' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.11)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
+                  className="flex items-center gap-3 bg-white/[0.06] border-none rounded-[10px] px-[14px] py-3 cursor-pointer w-full text-left hover:bg-white/[0.11] transition-colors"
                 >
-                  <div style={{ width: 36, height: 36, borderRadius: 8, background: action.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: action.bg }}>
                     {action.icon}
                   </div>
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: 13, color: '#fff', marginBottom: 1 }}>{action.label}</div>
-                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{action.sub}</div>
+                    <div className="font-bold text-[13px] text-white mb-px">{action.label}</div>
+                    <div className="text-[11px] text-white/40">{action.sub}</div>
                   </div>
                 </button>
               ))}
@@ -1155,13 +1159,13 @@ Client profile:
   function renderProjects() {
     return (
       <div>
-        <div className="section-bar" style={{ marginBottom: 10 }}>
+        <div className="flex items-center justify-between mb-3">
           <h2>Projects</h2>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowAddProject(true)}>+ New Project</button>
+          <Button size="sm" onClick={() => setShowAddProject(true)}>+ New Project</Button>
         </div>
-        <div className="card">
+        <Card>
           {projects.length === 0 ? (
-            <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>No projects for this client yet.</div>
+            <div className="px-5 py-7 text-center text-muted-foreground text-[13px]">No projects for this client yet.</div>
           ) : (
             <table>
               <thead>
@@ -1169,8 +1173,8 @@ Client profile:
                   <th style={{ width: 140 }}>PROJECT #</th>
                   <th>PROJECT</th>
                   <th style={{ width: 120 }}>TYPE</th>
-                  <th className="th-right">TOTAL VALUE</th>
-                  <th className="th-right">INVOICED</th>
+                  <th className="text-right">TOTAL VALUE</th>
+                  <th className="text-right">INVOICED</th>
                   <th>STATUS</th>
                   <th></th>
                 </tr>
@@ -1189,24 +1193,22 @@ Client profile:
                   return (
                     <tr key={p.id}>
                       <td>
-                        <span className="text-mono" style={{ fontSize: 11, color: 'var(--c3)', background: 'var(--c7)', border: '1px solid var(--c6)', borderRadius: 4, padding: '2px 6px', whiteSpace: 'nowrap' }}>{p.pn}</span>
+                        <span className="text-[11px] text-muted-foreground bg-gray-50 border border-border rounded px-1.5 py-0.5 whitespace-nowrap">{p.pn}</span>
                       </td>
-                      <td style={{ fontWeight: 700 }}>
-                        <Link to={`/projects/${p.id}`} className="table-link" style={{ color: 'var(--c0)', textDecoration: 'none', fontWeight: 700 }}
-                          onMouseEnter={e => (e.currentTarget.style.color = 'var(--navy)')}
-                          onMouseLeave={e => (e.currentTarget.style.color = 'var(--c0)')}>
+                      <td className="font-bold">
+                        <Link to={`/projects/${p.id}`} className="font-medium text-primary hover:underline cursor-pointer">
                           {p.name}
                         </Link>
                       </td>
-                      <td><span className={`badge ${TYPE_BADGE[p.type] ?? 'badge-gray'}`}>{TYPE_LABEL[p.type] ?? p.type}</span></td>
-                      <td className="td-right text-mono" style={{ fontWeight: 600 }}>
-                        {totalProjectValue > 0 ? fmtEuro(totalProjectValue) : <span className="text-muted">—</span>}
+                      <td><Badge variant={(TYPE_BADGE[p.type] ?? 'gray') as Parameters<typeof Badge>[0]['variant']}>{TYPE_LABEL[p.type] ?? p.type}</Badge></td>
+                      <td className="text-right font-semibold">
+                        {totalProjectValue > 0 ? fmtEuro(totalProjectValue) : <span className="text-muted-foreground">—</span>}
                       </td>
-                      <td className="td-right text-mono" style={{ color: 'var(--green)', fontWeight: 600 }}>
-                        {projInvoiced ? fmtEuro(projInvoiced) : <span className="text-muted">—</span>}
+                      <td className="text-right font-semibold text-[#16a34a]">
+                        {projInvoiced ? fmtEuro(projInvoiced) : <span className="text-muted-foreground">—</span>}
                       </td>
-                      <td><span className={`badge ${STATUS_BADGE[p.status] ?? 'badge-gray'}`}>{p.status.charAt(0).toUpperCase() + p.status.slice(1)}</span></td>
-                      <td><button className="btn btn-secondary btn-xs" onClick={() => navigate(`/projects/${p.id}`)}>View</button></td>
+                      <td><Badge variant={(STATUS_BADGE[p.status] ?? 'gray') as Parameters<typeof Badge>[0]['variant']}>{p.status.charAt(0).toUpperCase() + p.status.slice(1)}</Badge></td>
+                      <td><Button variant="outline" size="xs" onClick={() => navigate(`/projects/${p.id}`)}>View</Button></td>
                     </tr>
                   )
                 })}
@@ -1224,10 +1226,10 @@ Client profile:
                   }, 0)
                   const totalInvoiced = projects.reduce((s, p) => s + (invoicedByProject.get(p.id) ?? 0), 0)
                   return (
-                    <tr style={{ background: 'var(--c7)', borderTop: '2px solid var(--c6)' }}>
-                      <td colSpan={3} style={{ fontWeight: 700, fontSize: 12, color: 'var(--c3)', letterSpacing: '0.05em' }}>TOTAL</td>
-                      <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)', fontSize: 14 }}>{totalVal > 0 ? fmtEuro(totalVal) : '—'}</td>
-                      <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--green)', fontSize: 14 }}>{totalInvoiced > 0 ? fmtEuro(totalInvoiced) : '—'}</td>
+                    <tr className="bg-gray-50 border-t-2 border-border">
+                      <td colSpan={3} className="font-bold text-xs text-muted-foreground tracking-[0.05em]">TOTAL</td>
+                      <td className="text-right font-bold text-primary text-sm">{totalVal > 0 ? fmtEuro(totalVal) : '—'}</td>
+                      <td className="text-right font-bold text-[#16a34a] text-sm">{totalInvoiced > 0 ? fmtEuro(totalInvoiced) : '—'}</td>
                       <td colSpan={2} />
                     </tr>
                   )
@@ -1235,7 +1237,7 @@ Client profile:
               </tfoot>
             </table>
           )}
-        </div>
+        </Card>
       </div>
     )
   }
@@ -1243,23 +1245,23 @@ Client profile:
   function renderInfra() {
     return (
       <div>
-        <div className="section-bar" style={{ marginBottom: 10 }}>
+        <div className="flex items-center justify-between mb-3">
           <h2>Domains &amp; Hosting</h2>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => navigate('/infrastructure')}>Go to Hosting</button>
-            <button className="btn btn-secondary btn-sm" onClick={() => navigate('/domains')}>Go to Domains</button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => navigate('/infrastructure')}>Go to Hosting</Button>
+            <Button variant="outline" size="sm" onClick={() => navigate('/domains')}>Go to Domains</Button>
           </div>
         </div>
-        <div className="card">
+        <Card>
           {hostingRows.length === 0 && clientDomains.length === 0 ? (
-            <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>No hosting or domain entries for this client.</div>
+            <div className="px-5 py-7 text-center text-muted-foreground text-[13px]">No hosting or domain entries for this client.</div>
           ) : (
             <table>
               <thead>
                 <tr>
                   <th>TYPE</th><th>PROJECT #</th><th>DESCRIPTION</th>
-                  <th className="th-right">AMOUNT</th><th>OCCURRENCE</th>
-                  <th className="th-right">TOTAL VALUE</th><th>NEXT BILLING</th><th>CONTRACT EXPIRY</th><th>STATUS</th>
+                  <th className="text-right">AMOUNT</th><th>OCCURRENCE</th>
+                  <th className="text-right">TOTAL VALUE</th><th>NEXT BILLING</th><th>CONTRACT EXPIRY</th><th>STATUS</th>
                 </tr>
               </thead>
               <tbody>
@@ -1267,59 +1269,58 @@ Client profile:
                   const totalVal = hostingContractValue(h)
                   return (
                     <tr key={h.id}>
-                      <td><span className="badge badge-blue">Hosting</span></td>
-                      <td><span className="badge badge-gray text-mono" style={{ fontSize: 11 }}>{h.project_pn}</span></td>
-                      <td style={{ fontSize: 13 }}>{h.description ?? <span className="text-muted">—</span>}</td>
-                      <td className="td-right text-mono" style={{ fontWeight: 600, fontSize: 13 }}>{h.amount.toLocaleString()} €</td>
-                      <td style={{ fontSize: 12, color: 'var(--c3)' }}>{h.cycle === 'monthly' ? 'Monthly' : 'Yearly'}</td>
-                      <td className="td-right text-mono" style={{ fontWeight: 600, fontSize: 13 }}>{fmtEuro(totalVal)}</td>
-                      <td style={{ fontSize: 13, color: 'var(--c2)' }}>{h.cycle === 'monthly' ? nextMonthLabel() : fmtDate(h.next_invoice_date)}</td>
-                      <td style={{ fontSize: 13 }}>
+                      <td><Badge variant="blue">Hosting</Badge></td>
+                      <td><Badge variant="gray">{h.project_pn}</Badge></td>
+                      <td className="text-[13px]">{h.description ?? <span className="text-muted-foreground">—</span>}</td>
+                      <td className="text-right font-semibold text-[13px]">{h.amount.toLocaleString()} €</td>
+                      <td className="text-xs text-muted-foreground">{h.cycle === 'monthly' ? 'Monthly' : 'Yearly'}</td>
+                      <td className="text-right font-semibold text-[13px]">{fmtEuro(totalVal)}</td>
+                      <td className="text-[13px] text-[#374151]">{h.cycle === 'monthly' ? nextMonthLabel() : fmtDate(h.next_invoice_date)}</td>
+                      <td className="text-[13px]">
                         {h.contract_expiry
-                          ? <span style={{ color: daysUntil(h.contract_expiry) <= 30 ? 'var(--red)' : 'var(--c2)', fontWeight: daysUntil(h.contract_expiry) <= 30 ? 700 : 400 }}>{fmtDate(h.contract_expiry)}</span>
-                          : <span className="text-muted" style={{ fontSize: 12 }}>No expiration</span>
+                          ? <span className={daysUntil(h.contract_expiry) <= 30 ? 'text-[#dc2626] font-bold' : 'text-[#374151]'}>{fmtDate(h.contract_expiry)}</span>
+                          : <span className="text-muted-foreground text-xs">No expiration</span>
                         }
                       </td>
-                      <td><span className={`badge ${STATUS_BADGE[h.status] ?? 'badge-gray'}`}>{h.status.charAt(0).toUpperCase() + h.status.slice(1)}</span></td>
+                      <td><Badge variant={(STATUS_BADGE[h.status] ?? 'gray') as Parameters<typeof Badge>[0]['variant']}>{h.status.charAt(0).toUpperCase() + h.status.slice(1)}</Badge></td>
                     </tr>
                   )
                 })}
                 {clientDomains.map((d: Domain) => {
                   const days = daysUntil(d.expiry_date)
-                  const expiryColor = days <= 30 ? 'var(--red)' : undefined
                   const domainStatus = days < 0
-                    ? <span className="badge badge-red">Expired</span>
-                    : days <= 30 ? <span className="badge badge-red">Expires soon</span>
-                    : <span className="badge badge-green">Active</span>
+                    ? <Badge variant="red">Expired</Badge>
+                    : days <= 30 ? <Badge variant="red">Expires soon</Badge>
+                    : <Badge variant="green">Active</Badge>
                   return (
                     <tr key={d.id}>
-                      <td><span className="badge" style={{ background: 'var(--navy)', color: '#fff', fontSize: 11, padding: '2px 7px', borderRadius: 4 }}>Domain</span></td>
-                      <td><span className="badge badge-gray text-mono" style={{ fontSize: 11 }}>{d.project_pn}</span></td>
-                      <td style={{ fontSize: 13 }}>{d.domain_name}</td>
-                      <td className="td-right text-mono" style={{ fontWeight: 600, fontSize: 13 }}>
-                        {d.yearly_amount ? `${d.yearly_amount.toLocaleString()} €` : <span className="text-muted">—</span>}
+                      <td><Badge variant="navy">Domain</Badge></td>
+                      <td><Badge variant="gray">{d.project_pn}</Badge></td>
+                      <td className="text-[13px]">{d.domain_name}</td>
+                      <td className="text-right font-semibold text-[13px]">
+                        {d.yearly_amount ? `${d.yearly_amount.toLocaleString()} €` : <span className="text-muted-foreground">—</span>}
                       </td>
-                      <td style={{ fontSize: 12, color: 'var(--c3)' }}>Yearly</td>
-                      <td className="td-right text-mono" style={{ fontWeight: 600, fontSize: 13 }}>
-                        {d.yearly_amount ? fmtEuro(d.yearly_amount) : <span className="text-muted">—</span>}
+                      <td className="text-xs text-muted-foreground">Yearly</td>
+                      <td className="text-right font-semibold text-[13px]">
+                        {d.yearly_amount ? fmtEuro(d.yearly_amount) : <span className="text-muted-foreground">—</span>}
                       </td>
-                      <td style={{ fontSize: 13, color: expiryColor ?? 'var(--c2)', fontWeight: expiryColor ? 700 : 400 }}>{fmtDate(d.expiry_date)}</td>
-                      <td><span className="text-muted" style={{ fontSize: 12 }}>—</span></td>
+                      <td className={`text-[13px] ${days <= 30 ? 'text-[#dc2626] font-bold' : 'text-[#374151]'}`}>{fmtDate(d.expiry_date)}</td>
+                      <td><span className="text-muted-foreground text-xs">—</span></td>
                       <td>{domainStatus}</td>
                     </tr>
                   )
                 })}
                 {(hostingRows.length > 0 || clientDomains.length > 0) && (
-                  <tr style={{ background: 'var(--c7)', borderTop: '2px solid var(--c6)' }}>
-                    <td colSpan={5} style={{ fontWeight: 700, fontSize: 12, color: 'var(--c3)', letterSpacing: '0.05em' }}>TOTAL VALUE / YEAR</td>
-                    <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)', fontSize: 14 }}>{fmtEuro(hostingRows.reduce((s, h) => s + hostingContractValue(h), 0) + domainsAnnual)}</td>
+                  <tr className="bg-gray-50 border-t-2 border-border">
+                    <td colSpan={5} className="font-bold text-xs text-muted-foreground tracking-[0.05em]">TOTAL VALUE / YEAR</td>
+                    <td className="text-right font-bold text-primary text-sm">{fmtEuro(hostingRows.reduce((s, h) => s + hostingContractValue(h), 0) + domainsAnnual)}</td>
                     <td colSpan={3} />
                   </tr>
                 )}
               </tbody>
             </table>
           )}
-        </div>
+        </Card>
       </div>
     )
   }
@@ -1340,43 +1341,43 @@ Client profile:
     const hasLinkedHosting = maintenances.some(m => infraStore.hostingClients.some(h => h.maintenance_id === m.id))
     return (
       <div>
-        <div className="section-bar" style={{ marginBottom: 10 }}>
+        <div className="flex items-center justify-between mb-3">
           <h2>Maintenance Contracts</h2>
         </div>
         {maintenances.length > 0 && (
-          <div className="stats-strip" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 16 }}>
-            <div className="stat-card" style={{ '--left-color': 'var(--navy)' } as React.CSSProperties}>
-              <div className="stat-card-label">TOTAL VALUE {CURRENT_YEAR}</div>
-              <div className="stat-card-value text-mono" style={{ color: 'var(--navy)' }}>{totalMaintValue > 0 ? fmtEuro(totalMaintValue) : '—'}</div>
-              <div className="stat-card-sub">retainer + hosting + extra</div>
+          <div className="grid grid-cols-4 gap-4 mb-4">
+            <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+              <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">TOTAL VALUE {CURRENT_YEAR}</div>
+              <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-primary">{totalMaintValue > 0 ? fmtEuro(totalMaintValue) : '—'}</div>
+              <div className="text-xs text-muted-foreground mt-1">retainer + hosting + extra</div>
             </div>
-            <div className="stat-card" style={{ '--left-color': 'var(--c4)' } as React.CSSProperties}>
-              <div className="stat-card-label">RETAINER VALUE</div>
-              <div className="stat-card-value text-mono">{retainerValue > 0 ? fmtEuro(retainerValue) : '—'}</div>
-              <div className="stat-card-sub">base retainer × months</div>
+            <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+              <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">RETAINER VALUE</div>
+              <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{retainerValue > 0 ? fmtEuro(retainerValue) : '—'}</div>
+              <div className="text-xs text-muted-foreground mt-1">base retainer × months</div>
             </div>
-            <div className="stat-card" style={{ '--left-color': hasLinkedHosting ? 'var(--blue)' : 'var(--c5)' } as React.CSSProperties}>
-              <div className="stat-card-label">HOSTING</div>
-              <div className="stat-card-value text-mono" style={{ color: hasLinkedHosting ? 'var(--blue)' : 'var(--c4)', fontSize: 18 }}>
+            <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+              <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">HOSTING</div>
+              <div className={`text-[28px] font-extrabold tracking-[-0.5px] mb-2 ${hasLinkedHosting ? 'text-[#2563eb]' : 'text-muted-foreground'}`}>
                 {hasLinkedHosting ? fmtEuro(hostingValue) : 'No'}
               </div>
-              <div className="stat-card-sub">{hasLinkedHosting ? 'linked hosting / year' : 'no linked hosting'}</div>
+              <div className="text-xs text-muted-foreground mt-1">{hasLinkedHosting ? 'linked hosting / year' : 'no linked hosting'}</div>
             </div>
-            <div className="stat-card" style={{ '--left-color': extraBilled > 0 ? 'var(--green)' : 'var(--c5)' } as React.CSSProperties}>
-              <div className="stat-card-label">EXTRA BILLED</div>
-              <div className="stat-card-value text-mono" style={{ color: extraBilled > 0 ? 'var(--green)' : 'var(--c4)', fontSize: extraBilled === 0 ? 18 : undefined }}>
+            <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+              <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">EXTRA BILLED</div>
+              <div className={`text-[28px] font-extrabold tracking-[-0.5px] mb-2 ${extraBilled > 0 ? 'text-[#16a34a]' : 'text-muted-foreground'}`}>
                 {extraBilled > 0 ? fmtEuro(extraBilled) : '—'}
               </div>
-              <div className="stat-card-sub">above retainer + hosting</div>
+              <div className="text-xs text-muted-foreground mt-1">above retainer + hosting</div>
             </div>
           </div>
         )}
-        <div className="card">
+        <Card>
           {maintenances.length === 0 ? (
-            <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>
+            <div className="px-5 py-7 text-center text-muted-foreground text-[13px]">
               No maintenance contracts for this client.
-              <div style={{ marginTop: 8 }}>
-                <button className="btn btn-secondary btn-sm" onClick={() => navigate('/maintenances')}>Go to Maintenances</button>
+              <div className="mt-2">
+                <Button variant="outline" size="sm" onClick={() => navigate('/maintenances')}>Go to Maintenances</Button>
               </div>
             </div>
           ) : (
@@ -1384,10 +1385,10 @@ Client profile:
               <thead>
                 <tr>
                   <th>NAME</th>
-                  <th className="th-right" style={{ width: 120 }}>RETAINER/MO</th>
-                  <th className="th-right" style={{ width: 110 }}>HOSTING/MO</th>
-                  <th className="th-right" style={{ width: 100 }}>HOURS/MO</th>
-                  <th className="th-right" style={{ width: 110 }}>REQUESTS/MO</th>
+                  <th className="text-right" style={{ width: 120 }}>RETAINER/MO</th>
+                  <th className="text-right" style={{ width: 110 }}>HOSTING/MO</th>
+                  <th className="text-right" style={{ width: 100 }}>HOURS/MO</th>
+                  <th className="text-right" style={{ width: 110 }}>REQUESTS/MO</th>
                   <th style={{ width: 200 }}>CONTRACT</th>
                   <th style={{ width: 100 }}>STATUS</th>
                   <th style={{ width: 80 }}></th>
@@ -1400,43 +1401,43 @@ Client profile:
                   return (
                     <tr key={m.id}>
                       <td>
-                        <div style={{ fontWeight: 700, fontSize: 14 }}>{m.name}</div>
-                        {m.notes && <div style={{ fontSize: 12, color: 'var(--c3)', marginTop: 2 }}>{m.notes}</div>}
+                        <div className="font-bold text-sm">{m.name}</div>
+                        {m.notes && <div className="text-xs text-muted-foreground mt-0.5">{m.notes}</div>}
                       </td>
-                      <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)' }}>{fmtEuro(m.monthly_retainer)}</td>
-                      <td className="td-right">
+                      <td className="text-right font-bold text-primary">{fmtEuro(m.monthly_retainer)}</td>
+                      <td className="text-right">
                         {linkedHosting ? (
-                          <span className="text-mono" style={{ fontWeight: 600, color: 'var(--blue)' }}>{fmtEuro(linkedHosting.amount)}</span>
+                          <span className="font-semibold text-[#2563eb]">{fmtEuro(linkedHosting.amount)}</span>
                         ) : (
-                          <span className="badge badge-gray" style={{ fontSize: 10 }}>No</span>
+                          <Badge variant="gray">No</Badge>
                         )}
                       </td>
-                      <td className="td-right text-mono">{m.hours_included}h</td>
-                      <td className="td-right text-mono">{m.help_requests_included}</td>
+                      <td className="text-right">{m.hours_included}h</td>
+                      <td className="text-right">{m.help_requests_included}</td>
                       <td>
-                        <div style={{ fontSize: 13, color: ending ? 'var(--red)' : 'var(--c2)', fontWeight: ending ? 700 : 400 }}>
+                        <div className={`text-[13px] ${ending ? 'text-[#dc2626] font-bold' : 'text-[#374151]'}`}>
                           {fmtDate(m.contract_start)} → {m.contract_end ? fmtDate(m.contract_end) : 'Open-ended'}
                         </div>
                         {m.contract_url && (
-                          <a href={safeUrl(m.contract_url)} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: 'var(--navy)', display: 'inline-flex', alignItems: 'center', gap: 3, marginTop: 2 }}>
+                          <a href={safeUrl(m.contract_url)} target="_blank" rel="noreferrer" className="text-[11px] text-primary inline-flex items-center gap-[3px] mt-0.5">
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                             Contract
                           </a>
                         )}
-                        {ending && <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 2 }}>Ends in {daysUntil(m.contract_end!)}d</div>}
+                        {ending && <div className="text-[11px] text-[#dc2626] mt-0.5">Ends in {daysUntil(m.contract_end!)}d</div>}
                       </td>
-                      <td><span className={`badge ${STATUS_BADGE[m.status] ?? 'badge-gray'}`}>{m.status.charAt(0).toUpperCase() + m.status.slice(1)}</span></td>
+                      <td><Badge variant={(STATUS_BADGE[m.status] ?? 'gray') as Parameters<typeof Badge>[0]['variant']}>{m.status.charAt(0).toUpperCase() + m.status.slice(1)}</Badge></td>
                       <td>
-                        <button className="btn btn-secondary btn-xs" onClick={() => navigate(`/maintenances?edit=${m.id}`)}>Edit</button>
+                        <Button variant="outline" size="xs" onClick={() => navigate(`/maintenances?edit=${m.id}`)}>Edit</Button>
                       </td>
                     </tr>
                   )
                 })}
               </tbody>
               <tfoot>
-                <tr style={{ background: 'var(--c7)', borderTop: '2px solid var(--c6)' }}>
-                  <td style={{ fontWeight: 700, fontSize: 12, color: 'var(--c3)', letterSpacing: '0.05em' }}>TOTAL / YEAR {CURRENT_YEAR}</td>
-                  <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)', fontSize: 14 }}>
+                <tr className="bg-gray-50 border-t-2 border-border">
+                  <td className="font-bold text-xs text-muted-foreground tracking-[0.05em]">TOTAL / YEAR {CURRENT_YEAR}</td>
+                  <td className="text-right font-bold text-primary text-sm">
                     {fmtEuro(maintenances.reduce((s, m) => s + m.monthly_retainer * maintMonthsThisYear(m), 0))}
                   </td>
                   <td colSpan={6} />
@@ -1444,7 +1445,7 @@ Client profile:
               </tfoot>
             </table>
           )}
-        </div>
+        </Card>
       </div>
     )
   }
@@ -1454,13 +1455,13 @@ Client profile:
     const total = otherIncomeRows.reduce((s, r) => s + (r.actual_amount ?? r.planned_amount ?? 0), 0)
     return (
       <div>
-        <div className="section-bar" style={{ marginBottom: 10 }}>
-          <h2>Other Income <span style={{ fontWeight: 400, fontSize: 13, textTransform: 'none', letterSpacing: 0 }}>· {otherIncomeRows.length} entries</span></h2>
-          <button className="btn btn-primary btn-sm" onClick={openAddOtherIncome}>+ Add invoice</button>
+        <div className="flex items-center justify-between mb-3">
+          <h2>Other Income <span className="font-normal text-[13px] normal-case tracking-normal">· {otherIncomeRows.length} entries</span></h2>
+          <Button size="sm" onClick={openAddOtherIncome}>+ Add invoice</Button>
         </div>
-        <div className="card">
+        <Card>
           {otherIncomeRows.length === 0 ? (
-            <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>
+            <div className="px-5 py-7 text-center text-muted-foreground text-[13px]">
               No one-time invoices yet. Add ad-hoc charges, one-off services, or project billing.
             </div>
           ) : (
@@ -1470,27 +1471,27 @@ Client profile:
                   <th>MONTH</th>
                   <th>PROJECT</th>
                   <th>DESCRIPTION</th>
-                  <th className="th-right">AMOUNT</th>
+                  <th className="text-right">AMOUNT</th>
                   <th>STATUS</th>
                   <th style={{ width: 80 }}></th>
                 </tr>
               </thead>
               <tbody>
                 {otherIncomeRows.map(r => {
-                  const amtColor = r.status === 'paid' ? 'var(--green)' : r.status === 'issued' ? 'var(--navy)' : 'var(--c2)'
+                  const amtClass = r.status === 'paid' ? 'text-[#16a34a]' : r.status === 'issued' ? 'text-primary' : 'text-[#374151]'
                   return (
                     <tr key={r.id}>
-                      <td className="text-mono" style={{ fontSize: 13, color: 'var(--c2)' }}>{fmtMonth(r.month)}</td>
-                      <td style={{ fontSize: 13, color: 'var(--c3)' }}>{r.project?.name ?? '—'}</td>
-                      <td style={{ fontSize: 13, color: 'var(--c1)' }}>{r.notes || <span style={{ color: 'var(--c4)' }}>—</span>}</td>
-                      <td className="td-right text-mono" style={{ color: amtColor, fontWeight: 600, fontSize: 13 }}>{fmtEuro(r.actual_amount ?? r.planned_amount)}</td>
-                      <td><span className={`badge ${RP_STATUS_BADGE[r.status] ?? 'badge-gray'}`}>{r.status.charAt(0).toUpperCase() + r.status.slice(1)}</span></td>
+                      <td className="text-[13px] text-[#374151]">{fmtMonth(r.month)}</td>
+                      <td className="text-[13px] text-muted-foreground">{r.project?.name ?? '—'}</td>
+                      <td className="text-[13px] text-foreground">{r.notes || <span className="text-muted-foreground">—</span>}</td>
+                      <td className={`text-right font-semibold text-[13px] ${amtClass}`}>{fmtEuro(r.actual_amount ?? r.planned_amount)}</td>
+                      <td><Badge variant={(RP_STATUS_BADGE[r.status] ?? 'gray') as Parameters<typeof Badge>[0]['variant']}>{r.status.charAt(0).toUpperCase() + r.status.slice(1)}</Badge></td>
                       <td>
-                        <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
-                          <button className="btn btn-ghost btn-xs" onClick={() => openEditOtherIncome(r)}>Edit</button>
-                          <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red)' }} onClick={() => setDeleteOtherIncomeTarget(r)}>
+                        <div className="flex gap-1 justify-end">
+                          <Button variant="ghost" size="xs" onClick={() => openEditOtherIncome(r)}>Edit</Button>
+                          <Button variant="ghost" size="xs" className="text-[#dc2626]" onClick={() => setDeleteOtherIncomeTarget(r)}>
                             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                          </button>
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -1498,25 +1499,25 @@ Client profile:
                 })}
               </tbody>
               <tfoot>
-                <tr style={{ background: 'var(--c7)', borderTop: '2px solid var(--c6)' }}>
-                  <td colSpan={3} style={{ fontWeight: 700, fontSize: 12, color: 'var(--c3)', letterSpacing: '0.05em' }}>TOTAL</td>
-                  <td className="td-right text-mono" style={{ fontWeight: 800, color: 'var(--navy)', fontSize: 14 }}>{fmtEuro(total)}</td>
+                <tr className="bg-gray-50 border-t-2 border-border">
+                  <td colSpan={3} className="font-bold text-xs text-muted-foreground tracking-[0.05em]">TOTAL</td>
+                  <td className="text-right font-extrabold text-primary text-sm">{fmtEuro(total)}</td>
                   <td colSpan={2} />
                 </tr>
               </tfoot>
             </table>
           )}
-        </div>
+        </Card>
       </div>
     )
   }
 
   function renderInvoices() {
     function getCategoryBadge(r: RevenuePlanner) {
-      if (r.maintenance_id) return <span className="badge badge-amber">Maintenance</span>
-      if (r.hosting_client_id) return <span className="badge badge-blue">Hosting</span>
-      if (r.domain_id) return <span className="badge" style={{ background: 'var(--navy)', color: '#fff' }}>Domain</span>
-      return <span className="badge badge-gray">Project</span>
+      if (r.maintenance_id) return <Badge variant="amber">Maintenance</Badge>
+      if (r.hosting_client_id) return <Badge variant="blue">Hosting</Badge>
+      if (r.domain_id) return <Badge variant="navy">Domain</Badge>
+      return <Badge variant="gray">Project</Badge>
     }
     function getDescription(r: RevenuePlanner) {
       if (r.maintenance_id) return r.maintenance?.name ?? '—'
@@ -1527,37 +1528,37 @@ Client profile:
 
     return (
       <div>
-        <div className="section-bar" style={{ marginBottom: 10 }}>
-          <h2>Invoice History <span style={{ fontWeight: 400, fontSize: 13, textTransform: 'none', letterSpacing: 0 }}>· {fullInvoiceHistory.length} entries</span></h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2>Invoice History <span className="font-normal text-[13px] normal-case tracking-normal">· {fullInvoiceHistory.length} entries</span></h2>
         </div>
-        <div className="card">
+        <Card>
           {fullInvoiceHistory.length === 0 ? (
-            <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>No invoiced entries for this client yet.</div>
+            <div className="px-5 py-7 text-center text-muted-foreground text-[13px]">No invoiced entries for this client yet.</div>
           ) : (
             <table>
               <thead>
                 <tr>
                   <th>MONTH</th><th>CATEGORY</th><th>DESCRIPTION</th>
-                  <th className="th-right">AMOUNT</th><th>STATUS</th>
+                  <th className="text-right">AMOUNT</th><th>STATUS</th>
                 </tr>
               </thead>
               <tbody>
                 {fullInvoiceHistory.map((r: RevenuePlanner) => {
-                  const amtColor = r.status === 'paid' ? 'var(--green)' : r.status === 'issued' ? 'var(--navy)' : 'var(--c2)'
+                  const amtClass = r.status === 'paid' ? 'text-[#16a34a]' : r.status === 'issued' ? 'text-primary' : 'text-[#374151]'
                   return (
                     <tr key={r.id}>
-                      <td className="text-mono" style={{ fontSize: 13, color: 'var(--c2)' }}>{fmtMonth(r.month)}</td>
+                      <td className="text-[13px] text-[#374151]">{fmtMonth(r.month)}</td>
                       <td>{getCategoryBadge(r)}</td>
-                      <td style={{ fontSize: 13, color: 'var(--c1)' }}>{getDescription(r)}</td>
-                      <td className="td-right text-mono" style={{ color: amtColor, fontWeight: 600, fontSize: 13 }}>{fmtEuro(r.actual_amount ?? r.planned_amount)}</td>
-                      <td><span className={`badge ${RP_STATUS_BADGE[r.status] ?? 'badge-gray'}`}>{r.status.charAt(0).toUpperCase() + r.status.slice(1)}</span></td>
+                      <td className="text-[13px] text-foreground">{getDescription(r)}</td>
+                      <td className={`text-right font-semibold text-[13px] ${amtClass}`}>{fmtEuro(r.actual_amount ?? r.planned_amount)}</td>
+                      <td><Badge variant={(RP_STATUS_BADGE[r.status] ?? 'gray') as Parameters<typeof Badge>[0]['variant']}>{r.status.charAt(0).toUpperCase() + r.status.slice(1)}</Badge></td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
           )}
-        </div>
+        </Card>
       </div>
     )
   }
@@ -1566,13 +1567,13 @@ Client profile:
     const totalAmount = activePipelineItems.reduce((s, i) => s + dealTotal(i), 0)
     return (
       <div>
-        <div className="section-bar" style={{ marginBottom: 10 }}>
+        <div className="flex items-center justify-between mb-3">
           <h2>Pipeline &amp; Offers</h2>
-          <button className="btn btn-primary btn-sm" onClick={openAddPipeline}>+ Add</button>
+          <Button size="sm" onClick={openAddPipeline}>+ Add</Button>
         </div>
-        <div className="card" style={{ marginBottom: 24 }}>
+        <Card className="mb-6">
           {pipelineItems.length === 0 ? (
-            <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>
+            <div className="px-5 py-7 text-center text-muted-foreground text-[13px]">
               No pipeline items yet. Add prospects, proposals, and ongoing negotiations.
             </div>
           ) : (
@@ -1581,7 +1582,7 @@ Client profile:
                 <tr>
                   <th style={{ width: 120 }}>STATUS</th>
                   <th>TITLE</th>
-                  <th className="th-right" style={{ width: 120 }}>AMOUNT</th>
+                  <th className="text-right" style={{ width: 120 }}>AMOUNT</th>
                   <th style={{ width: 110 }}>PROBABILITY</th>
                   <th style={{ width: 130 }}>EXPECTED MONTH</th>
                   <th style={{ width: 90 }}></th>
@@ -1589,33 +1590,33 @@ Client profile:
               </thead>
               <tbody>
                 {pipelineItems.map((item: PipelineItem) => (
-                  <tr key={item.id} style={{ opacity: item.status === 'won' || item.status === 'lost' ? 0.6 : 1 }}>
-                    <td><span className={`badge ${PIPELINE_STATUS_BADGE[item.status] ?? 'badge-gray'}`}>{PIPELINE_STATUS_LABELS[item.status]}</span></td>
+                  <tr key={item.id} className={(item.status === 'won' || item.status === 'lost') ? 'opacity-60' : ''}>
+                    <td><Badge variant={(PIPELINE_STATUS_BADGE[item.status] ?? 'gray') as Parameters<typeof Badge>[0]['variant']}>{PIPELINE_STATUS_LABELS[item.status]}</Badge></td>
                     <td>
-                      <div style={{ fontWeight: 600 }}>{item.title}</div>
-                      {item.description && <div style={{ fontSize: 12, color: 'var(--c3)', marginTop: 2 }}>{item.description}</div>}
+                      <div className="font-semibold">{item.title}</div>
+                      {item.description && <div className="text-xs text-muted-foreground mt-0.5">{item.description}</div>}
                     </td>
-                    <td className="td-right text-mono" style={{ fontWeight: 600 }}>
+                    <td className="text-right font-semibold">
                       {fmtEuro(dealTotal(item))}
-                      {item.deal_type === 'monthly' && <span style={{ fontSize: 11, color: 'var(--c3)', marginLeft: 3 }}>/mo</span>}
+                      {item.deal_type === 'monthly' && <span className="text-[11px] text-muted-foreground ml-[3px]">/mo</span>}
                     </td>
                     <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <div style={{ flex: 1, height: 4, background: 'var(--c6)', borderRadius: 2 }}>
-                          <div style={{ width: `${item.probability}%`, height: '100%', background: 'var(--navy)', borderRadius: 2 }} />
+                      <div className="flex items-center gap-1.5">
+                        <div className="flex-1 h-1 bg-border rounded-sm">
+                          <div className="h-full bg-primary rounded-sm" style={{ width: `${item.probability}%` }} />
                         </div>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--c2)', minWidth: 32 }}>{item.probability}%</span>
+                        <span className="text-xs font-bold text-[#374151] min-w-[32px]">{item.probability}%</span>
                       </div>
                     </td>
-                    <td style={{ fontSize: 13, color: 'var(--c2)' }}>
-                      {item.expected_month ? fmtMonthShort(item.expected_month) : <span className="text-muted">—</span>}
+                    <td className="text-[13px] text-[#374151]">
+                      {item.expected_month ? fmtMonthShort(item.expected_month) : <span className="text-muted-foreground">—</span>}
                     </td>
                     <td>
-                      <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
-                        <button className="btn btn-ghost btn-xs" onClick={() => openEditPipeline(item)}>Edit</button>
-                        <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red)' }} onClick={() => setDeletePipelineTarget(item)}>
+                      <div className="flex gap-1 justify-end">
+                        <Button variant="ghost" size="xs" onClick={() => openEditPipeline(item)}>Edit</Button>
+                        <Button variant="ghost" size="xs" className="text-[#dc2626]" onClick={() => setDeletePipelineTarget(item)}>
                           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                        </button>
+                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -1623,44 +1624,44 @@ Client profile:
               </tbody>
             </table>
           )}
-        </div>
+        </Card>
 
         {/* Pipeline Forecast */}
         {pipelineForecast.length > 0 && (
           <>
-            <div className="section-bar" style={{ marginBottom: 10 }}>
+            <div className="flex items-center justify-between mb-3">
               <h2>Pipeline Forecast</h2>
             </div>
-            <div className="card">
+            <Card>
               <table>
                 <thead>
                   <tr>
                     <th>MONTH</th>
                     <th>ITEMS</th>
-                    <th className="th-right">AMOUNT</th>
+                    <th className="text-right">AMOUNT</th>
                   </tr>
                 </thead>
                 <tbody>
                   {pipelineForecast.map(([month, g]) => (
                     <tr key={month}>
-                      <td style={{ fontWeight: 600 }}>
-                        {month === 'unscheduled' ? <span style={{ color: 'var(--c3)', fontStyle: 'italic' }}>Unscheduled</span> : fmtMonthShort(month)}
+                      <td className="font-semibold">
+                        {month === 'unscheduled' ? <span className="text-muted-foreground italic">Unscheduled</span> : fmtMonthShort(month)}
                       </td>
-                      <td style={{ fontSize: 12, color: 'var(--c3)' }}>
+                      <td className="text-xs text-muted-foreground">
                         {g.items.map(i => i.title).join(', ')}
                       </td>
-                      <td className="td-right text-mono" style={{ fontWeight: 600 }}>{fmtEuro(g.total)}</td>
+                      <td className="text-right font-semibold">{fmtEuro(g.total)}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr style={{ background: 'var(--c7)', borderTop: '2px solid var(--c6)' }}>
-                    <td colSpan={2} style={{ fontWeight: 700, fontSize: 12, color: 'var(--c3)', letterSpacing: '0.05em' }}>TOTAL PIPELINE</td>
-                    <td className="td-right text-mono" style={{ fontWeight: 800, color: 'var(--navy)', fontSize: 14 }}>{fmtEuro(totalAmount)}</td>
+                  <tr className="bg-gray-50 border-t-2 border-border">
+                    <td colSpan={2} className="font-bold text-xs text-muted-foreground tracking-[0.05em]">TOTAL PIPELINE</td>
+                    <td className="text-right font-extrabold text-primary text-sm">{fmtEuro(totalAmount)}</td>
                   </tr>
                 </tfoot>
               </table>
-            </div>
+            </Card>
           </>
         )}
       </div>
@@ -1682,133 +1683,127 @@ Client profile:
       {/* ── Edit client modal ── */}
       {showEdit && (
         <Modal title="Edit client" onClose={() => setShowEdit(false)}>
-          <div className="form-row" style={{ marginBottom: 14 }}>
-            <div className="form-group">
-              <label className="form-label">Name</label>
+          <div className="grid grid-cols-2 gap-4 mb-[14px]">
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Name</label>
               <input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} autoFocus />
             </div>
-            <div className="form-group">
-              <label className="form-label">Email</label>
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Email</label>
               <input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} />
             </div>
           </div>
-          <div className="form-row" style={{ marginBottom: 14 }}>
-            <div className="form-group">
-              <label className="form-label">Phone</label>
+          <div className="grid grid-cols-2 gap-4 mb-[14px]">
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Phone</label>
               <input value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} />
             </div>
-            <div className="form-group">
-              <label className="form-label">VAT ID</label>
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">VAT ID</label>
               <input value={editForm.vat_id} onChange={e => setEditForm(f => ({ ...f, vat_id: e.target.value }))} />
             </div>
           </div>
-          <div className="form-row" style={{ marginBottom: 14 }}>
-            <div className="form-group">
-              <label className="form-label">Address</label>
+          <div className="grid grid-cols-2 gap-4 mb-[14px]">
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Address</label>
               <input value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} />
             </div>
-            <div className="form-group">
-              <label className="form-label">Website</label>
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Website</label>
               <input type="url" placeholder="https://example.com" value={editForm.website} onChange={e => setEditForm(f => ({ ...f, website: e.target.value }))} />
             </div>
           </div>
-          <div style={{ borderTop: '1px solid var(--c6)', paddingTop: 14, marginBottom: 14 }}>
-            <p style={{ margin: '0 0 12px', fontSize: 12, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Contact Person</p>
-            <div className="form-row" style={{ marginBottom: 14 }}>
-              <div className="form-group">
-                <label className="form-label">Name</label>
+          <div className="border-t border-border pt-[14px] mb-[14px]">
+            <p className="m-0 mb-3 text-xs font-bold text-muted-foreground uppercase tracking-[0.5px]">Contact Person</p>
+            <div className="grid grid-cols-2 gap-4 mb-[14px]">
+              <div className="mb-4">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Name</label>
                 <input value={editForm.contact_person} onChange={e => setEditForm(f => ({ ...f, contact_person: e.target.value }))} placeholder="e.g. Ana Novak" />
               </div>
-              <div className="form-group">
-                <label className="form-label">Email</label>
+              <div className="mb-4">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Email</label>
                 <input type="email" value={editForm.contact_email} onChange={e => setEditForm(f => ({ ...f, contact_email: e.target.value }))} />
               </div>
             </div>
-            <div className="form-group">
-              <label className="form-label">Phone</label>
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Phone</label>
               <input type="tel" value={editForm.contact_phone} onChange={e => setEditForm(f => ({ ...f, contact_phone: e.target.value }))} />
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowEdit(false)}>Cancel</button>
-            <button className="btn btn-primary btn-sm" onClick={saveEdit} disabled={editSaving || !editForm.name.trim()}>
+          <div className="flex gap-2 justify-end mt-5">
+            <Button variant="outline" size="sm" onClick={() => setShowEdit(false)}>Cancel</Button>
+            <Button size="sm" onClick={saveEdit} disabled={editSaving || !editForm.name.trim()}>
               {editSaving ? 'Saving…' : 'Save'}
-            </button>
+            </Button>
           </div>
         </Modal>
       )}
 
       {/* ── Delete client confirm ── */}
-      {showDeleteClient && (
-        <Modal title="Delete client" onClose={() => setShowDeleteClient(false)}>
-          <div className="alert alert-red" style={{ marginBottom: 16 }}>
-            <strong>This action is permanent and cannot be undone.</strong>
+      <ConfirmDialog
+        open={showDeleteClient}
+        title="Delete client"
+        message={
+          <div>
+            <div className="rounded-lg border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-sm text-[#be123c] mb-3">
+              <strong>This action is permanent and cannot be undone.</strong>
+            </div>
+            <p className="mb-3 text-sm">Deleting <strong>{client!.name}</strong> will permanently remove:</p>
+            <ul className="mb-5 pl-5 text-[13px] leading-[1.8] text-[#374151]">
+              {projects.length > 0 && <li><strong>{projects.length}</strong> project{projects.length !== 1 ? 's' : ''}: {projects.map(p => p.name).join(', ')}</li>}
+              {maintenances.length > 0 && <li><strong>{maintenances.length}</strong> maintenance contract{maintenances.length !== 1 ? 's' : ''}: {maintenances.map(m => m.name).join(', ')}</li>}
+              {hostingRows.length > 0 && <li><strong>{hostingRows.length}</strong> hosting client{hostingRows.length !== 1 ? 's' : ''}</li>}
+              {clientDomains.length > 0 && <li><strong>{clientDomains.length}</strong> domain{clientDomains.length !== 1 ? 's' : ''}: {clientDomains.map(d => d.domain_name).join(', ')}</li>}
+              {plStore.items.filter(i => i.client_id === id).length > 0 && <li><strong>{plStore.items.filter(i => i.client_id === id).length}</strong> pipeline item{plStore.items.filter(i => i.client_id === id).length !== 1 ? 's' : ''}</li>}
+              <li>All related invoice planning rows</li>
+            </ul>
           </div>
-          <p style={{ margin: '0 0 12px', fontSize: 14 }}>
-            Deleting <strong>{client!.name}</strong> will permanently remove:
-          </p>
-          <ul style={{ margin: '0 0 20px', padding: '0 0 0 20px', fontSize: 13, lineHeight: 1.8, color: 'var(--c2)' }}>
-            {projects.length > 0 && <li><strong>{projects.length}</strong> project{projects.length !== 1 ? 's' : ''}: {projects.map(p => p.name).join(', ')}</li>}
-            {maintenances.length > 0 && <li><strong>{maintenances.length}</strong> maintenance contract{maintenances.length !== 1 ? 's' : ''}: {maintenances.map(m => m.name).join(', ')}</li>}
-            {hostingRows.length > 0 && <li><strong>{hostingRows.length}</strong> hosting client{hostingRows.length !== 1 ? 's' : ''}</li>}
-            {clientDomains.length > 0 && <li><strong>{clientDomains.length}</strong> domain{clientDomains.length !== 1 ? 's' : ''}: {clientDomains.map(d => d.domain_name).join(', ')}</li>}
-            {plStore.items.filter(i => i.client_id === id).length > 0 && <li><strong>{plStore.items.filter(i => i.client_id === id).length}</strong> pipeline item{plStore.items.filter(i => i.client_id === id).length !== 1 ? 's' : ''}</li>}
-            <li>All related invoice planning rows</li>
-          </ul>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowDeleteClient(false)}>Cancel</button>
-            <button
-              className="btn btn-sm"
-              style={{ background: 'var(--red)', color: '#fff', borderColor: 'var(--red)' }}
-              onClick={deleteClient}
-              disabled={deleteClientSaving}
-            >
-              {deleteClientSaving ? 'Deleting…' : `Delete ${client!.name}`}
-            </button>
-          </div>
-        </Modal>
-      )}
+        }
+        confirmLabel={deleteClientSaving ? 'Deleting…' : `Delete ${client!.name}`}
+        onConfirm={deleteClient}
+        onCancel={() => setShowDeleteClient(false)}
+      />
 
       {/* ── New project modal ── */}
       {showAddProject && (
         <Modal title="New Project" onClose={() => { setShowAddProject(false); setProjForm(EMPTY_PROJ) }}>
           <TypePills value={projForm.type} onChange={v => setProjForm(f => ({ ...f, type: v }))} />
-          <div className="form-row" style={{ marginBottom: 14 }}>
-            <div className="form-group">
-              <label className="form-label">Project name</label>
+          <div className="grid grid-cols-2 gap-4 mb-[14px]">
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Project name</label>
               <input placeholder="e.g. Petrol — Prenova" value={projForm.name} onChange={e => setProjForm(f => ({ ...f, name: e.target.value }))} autoFocus />
             </div>
-            <div className="form-group">
-              <label className="form-label">Project Manager</label>
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Project Manager</label>
               <Select value={projForm.pm} onChange={val => setProjForm(f => ({ ...f, pm: val }))}
                 options={pmOptions} />
             </div>
           </div>
-          <div className="form-row" style={{ marginBottom: 14 }}>
-            <div className="form-group">
-              <label className="form-label">
+          <div className="grid grid-cols-2 gap-4 mb-[14px]">
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">
                 {projForm.type === 'maintenance' ? 'Monthly amount (€)' : projForm.type === 'variable' ? 'Est. monthly (€)' : 'Project value (€)'}
               </label>
               <input type="number" value={projForm.contract_value} onChange={e => setProjForm(f => ({ ...f, contract_value: e.target.value }))} placeholder={projForm.type === 'fixed' ? '45000' : '2000'} />
             </div>
           </div>
           {projForm.type === 'maintenance' && (
-            <div className="form-row" style={{ marginBottom: 4 }}>
-              <div className="form-group">
-                <label className="form-label">Starting from</label>
+            <div className="grid grid-cols-2 gap-4 mb-1">
+              <div className="mb-4">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Starting from</label>
                 <input type="month" value={projForm.starting_from} onChange={e => setProjForm(f => ({ ...f, starting_from: e.target.value }))} />
               </div>
-              <div className="form-group">
-                <label className="form-label">End month <span className="form-hint" style={{ display: 'inline', marginLeft: 6 }}>optional</span></label>
+              <div className="mb-4">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">End month <span className="text-xs text-muted-foreground inline ml-1.5">optional</span></label>
                 <input type="month" value={projForm.end_month} onChange={e => setProjForm(f => ({ ...f, end_month: e.target.value }))} />
               </div>
             </div>
           )}
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => { setShowAddProject(false); setProjForm(EMPTY_PROJ) }}>Cancel</button>
-            <button className="btn btn-primary btn-sm" onClick={saveProject} disabled={projSaving || !projForm.name.trim()}>
+          <div className="flex gap-2 justify-end mt-5">
+            <Button variant="outline" size="sm" onClick={() => { setShowAddProject(false); setProjForm(EMPTY_PROJ) }}>Cancel</Button>
+            <Button size="sm" onClick={saveProject} disabled={projSaving || !projForm.name.trim()}>
               {projSaving ? <span className="spinner" style={{ borderTopColor: '#fff' }} /> : null} Create project
-            </button>
+            </Button>
           </div>
         </Modal>
       )}
@@ -1816,29 +1811,29 @@ Client profile:
       {/* ── Add hosting modal ── */}
       {showAddHosting && (
         <Modal title="Add Hosting" onClose={() => setShowAddHosting(false)}>
-          <div className="form-row" style={{ marginBottom: 12 }}>
-            <div className="form-group">
-              <label className="form-label">Project #</label>
+          <div className="grid grid-cols-2 gap-4 mb-3">
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Project #</label>
               <input placeholder="RS-2026-001" value={hostingForm.project_pn} onChange={e => setHostingForm(f => ({ ...f, project_pn: e.target.value }))} autoFocus />
             </div>
-            <div className="form-group">
-              <label className="form-label">Billing cycle</label>
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Billing cycle</label>
               <Select value={hostingForm.cycle} onChange={val => {
                 setHostingForm(f => ({ ...f, cycle: val as 'monthly' | 'yearly', next_invoice_date: val === 'yearly' && f.billing_since ? f.billing_since : '' }))
               }} options={[{ value: 'monthly', label: 'Monthly' }, { value: 'yearly', label: 'Yearly' }]} />
             </div>
           </div>
-          <div className="form-group" style={{ marginBottom: 12 }}>
-            <label className="form-label">Service description</label>
+          <div className="mb-3">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Service description</label>
             <input placeholder="VPS + cPanel hosting" value={hostingForm.description} onChange={e => setHostingForm(f => ({ ...f, description: e.target.value }))} />
           </div>
-          <div className="form-row" style={{ marginBottom: 12 }}>
-            <div className="form-group">
-              <label className="form-label">Amount (€)</label>
+          <div className="grid grid-cols-2 gap-4 mb-3">
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Amount (€)</label>
               <input type="number" value={hostingForm.amount} onChange={e => setHostingForm(f => ({ ...f, amount: e.target.value }))} />
             </div>
-            <div className="form-group">
-              <label className="form-label">Billing since</label>
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Billing since</label>
               <input type="month" value={hostingForm.billing_since?.slice(0, 7) ?? ''} onChange={e => {
                 const val = e.target.value
                 const since = val ? val + '-01' : ''
@@ -1852,35 +1847,35 @@ Client profile:
             </div>
           </div>
           {hostingForm.cycle === 'yearly' && (
-            <div className="form-group" style={{ marginBottom: 12 }}>
-              <label className="form-label">Invoice month (yearly)</label>
+            <div className="mb-3">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Invoice month (yearly)</label>
               <input type="month" value={hostingForm.next_invoice_date?.slice(0, 7) ?? ''} onChange={e => setHostingForm(f => ({ ...f, next_invoice_date: e.target.value ? e.target.value + '-01' : '' }))} />
             </div>
           )}
-          <div className="form-row" style={{ marginBottom: 12 }}>
-            <div className="form-group">
-              <label className="form-label">Contract / Order ID <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
+          <div className="grid grid-cols-2 gap-4 mb-3">
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Contract / Order ID <span className="text-xs text-muted-foreground inline ml-1">optional</span></label>
               <input placeholder="e.g. PO-2026-042" value={hostingForm.contract_id} onChange={e => setHostingForm(f => ({ ...f, contract_id: e.target.value }))} />
             </div>
-            <div className="form-group">
-              <label className="form-label">Contract expiry <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Contract expiry <span className="text-xs text-muted-foreground inline ml-1">optional</span></label>
               <input type="month" value={hostingForm.contract_expiry} onChange={e => setHostingForm(f => ({ ...f, contract_expiry: e.target.value }))} />
             </div>
           </div>
-          <div style={{ borderTop: '1px solid var(--c6)', paddingTop: 12, marginBottom: 12 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>Invoice planning</div>
+          <div className="border-t border-border pt-3 mb-3">
+            <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-[0.05em] mb-[10px]">Invoice planning</div>
             {hostingForm.cycle === 'monthly' && (
-              <div className="form-group" style={{ marginBottom: 10 }}>
-                <label className="form-label">Start from month</label>
+              <div className="mb-[10px]">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Start from month</label>
                 <input type="month" value={hostingForm.invoice_month} onChange={e => setHostingForm(f => ({ ...f, invoice_month: e.target.value }))} />
               </div>
             )}
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+            <label className="flex items-center gap-2 cursor-pointer text-[13px]">
               <input type="checkbox" checked={hostingForm.already_billed} onChange={e => setHostingForm(f => ({ ...f, already_billed: e.target.checked }))} />
               Already billed{hostingForm.cycle === 'monthly' ? ' for this month' : ' (mark as issued)'}
             </label>
             {(hostingForm.cycle === 'monthly' ? hostingForm.invoice_month : hostingForm.next_invoice_date) && (
-              <div className="form-hint" style={{ marginTop: 6 }}>
+              <div className="text-xs text-muted-foreground mt-1.5">
                 {hostingForm.cycle === 'monthly'
                   ? `Will create 12 monthly rows from ${hostingForm.invoice_month}${hostingForm.already_billed ? ' (first marked as issued)' : ''}`
                   : `Will create 1 invoice row for ${hostingForm.next_invoice_date?.slice(0, 7)}${hostingForm.already_billed ? ' (marked as issued)' : ''}`
@@ -1888,11 +1883,11 @@ Client profile:
               </div>
             )}
           </div>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowAddHosting(false)}>Cancel</button>
-            <button className="btn btn-primary btn-sm" onClick={saveHosting} disabled={hostingSaving || !hostingForm.amount}>
+          <div className="flex gap-2 justify-end mt-2">
+            <Button variant="outline" size="sm" onClick={() => setShowAddHosting(false)}>Cancel</Button>
+            <Button size="sm" onClick={saveHosting} disabled={hostingSaving || !hostingForm.amount}>
               {hostingSaving ? 'Saving…' : 'Add Hosting'}
-            </button>
+            </Button>
           </div>
         </Modal>
       )}
@@ -1900,47 +1895,47 @@ Client profile:
       {/* ── Add domains modal ── */}
       {showAddDomain && (
         <Modal title="Add Domains" onClose={() => setShowAddDomain(false)}>
-          <div className="form-row" style={{ marginBottom: 14 }}>
-            <div className="form-group">
-              <label className="form-label">Project #</label>
+          <div className="grid grid-cols-2 gap-4 mb-[14px]">
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Project #</label>
               <input placeholder="e.g. 1159" value={domainPn} onChange={e => setDomainPn(e.target.value)} autoFocus />
             </div>
-            <div className="form-group">
-              <label className="form-label">Contract / Order ID <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Contract / Order ID <span className="text-xs text-muted-foreground inline ml-1">optional</span></label>
               <input placeholder="e.g. PO-2026-042" value={domainContractId} onChange={e => setDomainContractId(e.target.value)} />
             </div>
           </div>
-          <div style={{ borderTop: '1px solid var(--c6)', paddingTop: 14 }}>
-            <p style={{ margin: '0 0 10px', fontWeight: 700, fontSize: 15, color: 'var(--c0)' }}>Domains</p>
+          <div className="border-t border-border pt-[14px]">
+            <p className="m-0 mb-[10px] font-bold text-[15px] text-foreground">Domains</p>
             <DomainRowInputs rows={domainRows} onChange={setDomainRows} />
           </div>
-          <div style={{ borderTop: '1px solid var(--c6)', paddingTop: 14, marginTop: 14 }}>
-            <p style={{ margin: '0 0 12px', fontWeight: 700, fontSize: 13, color: 'var(--c0)' }}>
-              Billing <span style={{ fontWeight: 400, fontSize: 11, color: 'var(--c4)' }}>— optional</span>
+          <div className="border-t border-border pt-[14px] mt-[14px]">
+            <p className="m-0 mb-3 font-bold text-[13px] text-foreground">
+              Billing <span className="font-normal text-[11px] text-muted-foreground">— optional</span>
             </p>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 12, fontSize: 13, fontWeight: 500 }}>
+            <label className="flex items-center gap-2 cursor-pointer mb-3 text-[13px] font-medium">
               <input type="checkbox" checked={domainAlreadyBilled} onChange={e => {
                 setDomainAlreadyBilled(e.target.checked)
                 if (!domainInvoiceMonth) {
                   const now = new Date()
                   setDomainInvoiceMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
                 }
-              }} style={{ width: 15, height: 15 }} />
+              }} className="w-[15px] h-[15px]" />
               Already billed
             </label>
-            <div className="form-group" style={{ marginBottom: 0, maxWidth: 200 }}>
-              <label className="form-label">{domainAlreadyBilled ? 'Billed in which month?' : 'Add to invoice month'}</label>
+            <div className="mb-0 max-w-[200px]">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">{domainAlreadyBilled ? 'Billed in which month?' : 'Add to invoice month'}</label>
               <input type="month" value={domainInvoiceMonth} onChange={e => setDomainInvoiceMonth(e.target.value)} />
             </div>
             {!domainAlreadyBilled && !domainInvoiceMonth && (
-              <p style={{ margin: '6px 0 0', fontSize: 11, color: 'var(--c4)' }}>Leave empty to skip — you can invoice from the table later.</p>
+              <p className="mt-1.5 text-[11px] text-muted-foreground">Leave empty to skip — you can invoice from the table later.</p>
             )}
           </div>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowAddDomain(false)}>Cancel</button>
-            <button className="btn btn-primary btn-sm" onClick={saveDomains} disabled={domainSaving || !domainPn}>
+          <div className="flex gap-2 justify-end mt-5">
+            <Button variant="outline" size="sm" onClick={() => setShowAddDomain(false)}>Cancel</Button>
+            <Button size="sm" onClick={saveDomains} disabled={domainSaving || !domainPn}>
               {domainSaving ? 'Saving…' : 'Save Domains'}
-            </button>
+            </Button>
           </div>
         </Modal>
       )}
@@ -1948,114 +1943,113 @@ Client profile:
       {/* ── Pipeline add/edit modal ── */}
       {showPipeline && (
         <Modal title={editPipelineTarget ? 'Edit Pipeline Item' : 'Add Pipeline Item'} onClose={() => setShowPipeline(false)}>
-          <div className="form-group" style={{ marginBottom: 14 }}>
-            <label className="form-label">Title <span style={{ color: 'var(--red)' }}>*</span></label>
+          <div className="mb-[14px]">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Title <span className="text-[#dc2626]">*</span></label>
             <input value={pipelineForm.title} onChange={e => setPipelineForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Website redesign proposal" autoFocus />
           </div>
-          <div className="form-row" style={{ marginBottom: 14 }}>
-            <div className="form-group">
-              <label className="form-label">Status</label>
+          <div className="grid grid-cols-2 gap-4 mb-[14px]">
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Status</label>
               <Select value={pipelineForm.status} onChange={val => setPipelineForm(f => ({ ...f, status: val as PipelineItem['status'] }))} options={PIPELINE_STATUS_OPTS} />
             </div>
-            <div className="form-group">
-              <label className="form-label">Probability</label>
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Probability</label>
               <Select value={pipelineForm.probability} onChange={val => setPipelineForm(f => ({ ...f, probability: val }))} options={PIPELINE_PROB_OPTS} />
             </div>
           </div>
-          <div className="form-group" style={{ marginBottom: 14 }}>
-            <label className="form-label">Deal type</label>
+          <div className="mb-[14px]">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Deal type</label>
             <Select value={pipelineForm.deal_type} onChange={val => setPipelineForm(f => ({ ...f, deal_type: val as 'one_time' | 'monthly' | 'fixed' }))} options={PIPELINE_TYPE_OPTS} />
           </div>
           {pipelineForm.deal_type !== 'fixed' && (
-            <div className="form-row" style={{ marginBottom: 14 }}>
-              <div className="form-group">
-                <label className="form-label">{pipelineForm.deal_type === 'monthly' ? 'Amount / month (€)' : 'Amount (€)'}</label>
+            <div className="grid grid-cols-2 gap-4 mb-[14px]">
+              <div className="mb-4">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">{pipelineForm.deal_type === 'monthly' ? 'Amount / month (€)' : 'Amount (€)'}</label>
                 <input type="number" value={pipelineForm.estimated_amount} onChange={e => setPipelineForm(f => ({ ...f, estimated_amount: e.target.value }))} placeholder="0" />
               </div>
-              <div className="form-group">
-                <label className="form-label">{pipelineForm.deal_type === 'monthly' ? 'Start month' : 'Expected month'}</label>
+              <div className="mb-4">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">{pipelineForm.deal_type === 'monthly' ? 'Start month' : 'Expected month'}</label>
                 <input type="month" value={pipelineForm.expected_month} onChange={e => setPipelineForm(f => ({ ...f, expected_month: e.target.value }))} />
               </div>
             </div>
           )}
           {pipelineForm.deal_type === 'monthly' && (
-            <div className="form-group" style={{ marginBottom: 14 }}>
-              <label className="form-label">End month</label>
+            <div className="mb-[14px]">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">End month</label>
               <input type="month" value={pipelineForm.expected_end_month} onChange={e => setPipelineForm(f => ({ ...f, expected_end_month: e.target.value }))} />
               {pipelineForm.expected_month && pipelineForm.expected_end_month && (() => {
                 const count = plMonthCount(pipelineForm.expected_month + '-01', pipelineForm.expected_end_month + '-01')
                 const total = Number(pipelineForm.estimated_amount || 0) * count
-                return <div className="form-hint">{count} month{count !== 1 ? 's' : ''} · total {fmtEuro(total)}</div>
+                return <div className="text-xs text-muted-foreground mt-1">{count} month{count !== 1 ? 's' : ''} · total {fmtEuro(total)}</div>
               })()}
             </div>
           )}
           {pipelineForm.deal_type === 'fixed' && (
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                <label className="form-label" style={{ margin: 0 }}>Payment schedule</label>
-                <button className="btn btn-secondary btn-xs" onClick={addScheduleRow} type="button">+ Add month</button>
+            <div className="mb-[14px]">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Payment schedule</label>
+                <Button variant="outline" size="xs" onClick={addScheduleRow} type="button">+ Add month</Button>
               </div>
               {pipelineForm.schedule.length === 0 && (
-                <div style={{ fontSize: 12, color: 'var(--c4)', padding: '10px 0' }}>No payments added yet.</div>
+                <div className="text-xs text-muted-foreground py-[10px]">No payments added yet.</div>
               )}
               {pipelineForm.schedule.map((row, i) => (
-                <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-                  <input type="month" value={row.month} onChange={e => updateScheduleRow(i, 'month', e.target.value)} style={{ flex: 1 }} />
-                  <div style={{ position: 'relative', flex: 1 }}>
-                    <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--c3)', fontSize: 13, pointerEvents: 'none' }}>€</span>
-                    <input type="number" value={row.amount} onChange={e => updateScheduleRow(i, 'amount', e.target.value)} placeholder="0" style={{ paddingLeft: 22, width: '100%' }} />
+                <div key={i} className="flex gap-2 items-center mb-1.5">
+                  <input type="month" value={row.month} onChange={e => updateScheduleRow(i, 'month', e.target.value)} className="flex-1" />
+                  <div className="relative flex-1">
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-[13px] pointer-events-none">€</span>
+                    <input type="number" value={row.amount} onChange={e => updateScheduleRow(i, 'amount', e.target.value)} placeholder="0" className="w-full pl-[22px]" />
                   </div>
-                  <button type="button" onClick={() => removeScheduleRow(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c4)', fontSize: 16, padding: '0 4px', lineHeight: 1 }}>×</button>
+                  <button type="button" onClick={() => removeScheduleRow(i)} className="bg-transparent border-none cursor-pointer text-muted-foreground text-base px-1 leading-none">×</button>
                 </div>
               ))}
               {pipelineForm.schedule.length > 0 && (
-                <div className="form-hint" style={{ textAlign: 'right' }}>Total: {fmtEuro(fixedScheduleTotal())}</div>
+                <div className="text-xs text-muted-foreground mt-1 text-right">Total: {fmtEuro(fixedScheduleTotal())}</div>
               )}
             </div>
           )}
-          <div className="form-group" style={{ marginBottom: 14 }}>
-            <label className="form-label">Notes <span className="form-hint" style={{ display: 'inline' }}>optional</span></label>
+          <div className="mb-[14px]">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Notes <span className="text-xs text-muted-foreground inline">optional</span></label>
             <textarea value={pipelineForm.notes} onChange={e => setPipelineForm(f => ({ ...f, notes: e.target.value }))} rows={2} style={{ resize: 'vertical' }} />
           </div>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowPipeline(false)}>Cancel</button>
-            <button className="btn btn-primary btn-sm" onClick={savePipeline} disabled={pipelineSaving || !pipelineForm.title.trim()}>
+          <div className="flex gap-2 justify-end mt-2">
+            <Button variant="outline" size="sm" onClick={() => setShowPipeline(false)}>Cancel</Button>
+            <Button size="sm" onClick={savePipeline} disabled={pipelineSaving || !pipelineForm.title.trim()}>
               {pipelineSaving ? 'Saving…' : editPipelineTarget ? 'Save changes' : 'Add to pipeline'}
-            </button>
+            </Button>
           </div>
         </Modal>
       )}
 
       {/* ── Delete pipeline confirm ── */}
-      {deletePipelineTarget && (
-        <Modal title="Remove pipeline item" onClose={() => setDeletePipelineTarget(null)}>
-          <p style={{ margin: '0 0 20px', fontSize: 14 }}>Remove <strong>{deletePipelineTarget.title}</strong> from the pipeline?</p>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => setDeletePipelineTarget(null)}>Cancel</button>
-            <button className="btn btn-primary btn-sm" style={{ background: 'var(--red)', borderColor: 'var(--red)' }} onClick={() => deletePipeline(deletePipelineTarget)}>Remove</button>
-          </div>
-        </Modal>
-      )}
+      <ConfirmDialog
+        open={!!deletePipelineTarget}
+        title="Remove pipeline item"
+        message={`Remove "${deletePipelineTarget?.title}" from the pipeline?`}
+        confirmLabel="Remove"
+        onConfirm={() => deletePipelineTarget && deletePipeline(deletePipelineTarget)}
+        onCancel={() => setDeletePipelineTarget(null)}
+      />
 
       {/* ── Other income modal ── */}
       {showOtherIncome && (
         <Modal title={editOtherIncomeTarget ? 'Edit invoice' : 'Add one-time invoice'} onClose={() => setShowOtherIncome(false)}>
-          <div className="form-group" style={{ marginBottom: 14 }}>
-            <label className="form-label">Description</label>
+          <div className="mb-[14px]">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Description</label>
             <input autoFocus value={otherIncomeForm.notes} onChange={e => setOtherIncomeForm(f => ({ ...f, notes: e.target.value }))} placeholder="e.g. Consultation fee, ad-hoc design work…" />
           </div>
-          <div className="form-row" style={{ marginBottom: 14 }}>
-            <div className="form-group">
-              <label className="form-label">Month</label>
+          <div className="grid grid-cols-2 gap-4 mb-[14px]">
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Month</label>
               <input type="month" value={otherIncomeForm.month} onChange={e => setOtherIncomeForm(f => ({ ...f, month: e.target.value }))} />
             </div>
-            <div className="form-group">
-              <label className="form-label">Amount (€)</label>
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Amount (€)</label>
               <input type="number" min="0" step="0.01" value={otherIncomeForm.amount} onChange={e => setOtherIncomeForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" />
             </div>
           </div>
-          <div className="form-group" style={{ marginBottom: 20 }}>
-            <label className="form-label">Status</label>
+          <div className="mb-5">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Status</label>
             <Select
               value={otherIncomeForm.status}
               onChange={v => setOtherIncomeForm(f => ({ ...f, status: v as RevenuePlanner['status'] }))}
@@ -2066,84 +2060,76 @@ Client profile:
               ]}
             />
           </div>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowOtherIncome(false)}>Cancel</button>
-            <button className="btn btn-primary btn-sm" disabled={otherIncomeSaving || !otherIncomeForm.month || !otherIncomeForm.amount} onClick={saveOtherIncome}>
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" size="sm" onClick={() => setShowOtherIncome(false)}>Cancel</Button>
+            <Button size="sm" disabled={otherIncomeSaving || !otherIncomeForm.month || !otherIncomeForm.amount} onClick={saveOtherIncome}>
               {otherIncomeSaving ? 'Saving…' : editOtherIncomeTarget ? 'Save changes' : 'Add invoice'}
-            </button>
+            </Button>
           </div>
         </Modal>
       )}
 
-      {deleteOtherIncomeTarget && (
-        <Modal title="Remove invoice" onClose={() => setDeleteOtherIncomeTarget(null)}>
-          <p style={{ margin: '0 0 20px', fontSize: 14 }}>Remove this invoice entry of <strong>{fmtEuro(deleteOtherIncomeTarget.actual_amount ?? deleteOtherIncomeTarget.planned_amount)}</strong>?</p>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => setDeleteOtherIncomeTarget(null)}>Cancel</button>
-            <button className="btn btn-primary btn-sm" style={{ background: 'var(--red)', borderColor: 'var(--red)' }} onClick={() => deleteOtherIncome(deleteOtherIncomeTarget)}>Remove</button>
-          </div>
-        </Modal>
-      )}
+      <ConfirmDialog
+        open={!!deleteOtherIncomeTarget}
+        title="Remove invoice"
+        message={`Remove this invoice entry of ${fmtEuro(deleteOtherIncomeTarget?.actual_amount ?? deleteOtherIncomeTarget?.planned_amount)}?`}
+        confirmLabel="Remove"
+        onConfirm={() => deleteOtherIncomeTarget && deleteOtherIncome(deleteOtherIncomeTarget)}
+        onCancel={() => setDeleteOtherIncomeTarget(null)}
+      />
 
       {/* ── Page header ── */}
-      <div className="page-header" style={{ alignItems: 'flex-start', flexDirection: 'column', gap: 0, paddingBottom: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', width: '100%', paddingBottom: 14 }}>
+      <div className="flex flex-col px-6 pt-4 bg-background border-b border-border">
+        <div className="flex items-start justify-between w-full pb-[14px]">
           <div>
-            <button onClick={() => navigate('/clients')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c3)', fontSize: 12, padding: 0, display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6, fontFamily: 'Manrope, sans-serif', fontWeight: 600 }}>
+            <button onClick={() => navigate('/clients')} className="bg-transparent border-none cursor-pointer text-muted-foreground text-xs p-0 flex items-center gap-1 mb-1.5 font-semibold">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
               Clients
             </button>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-              <h1 style={{ margin: 0 }}>{client.name}</h1>
-              <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: activeCount > 0 ? 'rgba(22,163,74,0.1)' : 'var(--c7)', color: activeCount > 0 ? 'var(--green)' : 'var(--c4)', border: `1px solid ${activeCount > 0 ? 'rgba(22,163,74,0.25)' : 'var(--c6)'}` }}>
+            <div className="flex items-center gap-[10px] mb-2">
+              <h1 className="m-0 text-[30px] font-extrabold tracking-[-0.4px]">{client.name}</h1>
+              <span className={`text-[11px] font-bold px-2 py-[2px] rounded-full border ${activeCount > 0 ? 'bg-[rgba(22,163,74,0.1)] text-[#16a34a] border-[rgba(22,163,74,0.25)]' : 'bg-gray-50 text-muted-foreground border-border'}`}>
                 {activeCount > 0 ? 'ACTIVE' : 'INACTIVE'}
               </span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 13, color: 'var(--c3)', flexWrap: 'wrap' }}>
+            <div className="flex items-center gap-4 text-[13px] text-muted-foreground flex-wrap">
               {client.email && (
-                <a href={`mailto:${client.email}`} style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--c3)', textDecoration: 'none' }}>
+                <a href={`mailto:${client.email}`} className="flex items-center gap-1 text-muted-foreground no-underline">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
                   {client.email}
                 </a>
               )}
               {client.phone && (
-                <a href={`tel:${client.phone}`} style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--c3)', textDecoration: 'none' }}>
+                <a href={`tel:${client.phone}`} className="flex items-center gap-1 text-muted-foreground no-underline">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 10.8a19.79 19.79 0 01-3.07-8.67A2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 14.92z"/></svg>
                   {client.phone}
                 </a>
               )}
               {client.website && (
-                <a href={safeUrl(client.website)} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--navy)', textDecoration: 'none', fontWeight: 500 }}>
+                <a href={safeUrl(client.website)} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-primary no-underline font-medium">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
                   {client.website.replace(/^https?:\/\//, '')}
                 </a>
               )}
               {client.contact_person && (
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span className="flex items-center gap-1">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                   {client.contact_person}
                 </span>
               )}
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-            <button className="btn btn-secondary btn-sm" onClick={openEdit}>Edit</button>
-            <button className="btn btn-primary btn-sm" onClick={() => setShowAddProject(true)}>+ New Project</button>
+          <div className="flex gap-2 shrink-0">
+            <Button variant="outline" size="sm" onClick={openEdit}>Edit</Button>
+            <Button size="sm" onClick={() => setShowAddProject(true)}>+ New Project</Button>
           </div>
         </div>
 
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: 0, borderTop: '1px solid var(--c6)', width: '100%', marginLeft: -28, paddingLeft: 28, marginRight: -28 }}>
+        <div className="flex border-t border-border w-full -mx-6 px-6">
           {TABS.map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              style={{
-                background: 'transparent', border: 'none',
-                borderBottom: activeTab === tab.id ? '2px solid var(--navy)' : '2px solid transparent',
-                cursor: 'pointer', padding: '10px 16px',
-                fontFamily: 'inherit', fontWeight: 600, fontSize: 13,
-                color: activeTab === tab.id ? 'var(--navy)' : 'var(--c3)',
-                transition: 'color .12s', whiteSpace: 'nowrap', marginBottom: -1,
-              }}>
+              className={`bg-transparent border-none cursor-pointer px-4 py-[10px] font-semibold text-[13px] whitespace-nowrap -mb-px transition-colors ${activeTab === tab.id ? 'border-b-2 border-primary text-primary' : 'border-b-2 border-transparent text-muted-foreground'}`}>
               {tab.label}
             </button>
           ))}
@@ -2152,64 +2138,64 @@ Client profile:
 
       {/* ── Stats strip (Overview only, outside page-content to avoid double padding) ── */}
       {activeTab === 'overview' && (
-        <div className="stats-strip">
+        <div className="grid grid-cols-4 gap-3 px-6 pt-4 mb-2">
           {/* ACTIVE PROJECTS */}
-          <div className="stat-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-              <div className="stat-card-label">ACTIVE PROJECTS</div>
-              <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(139,92,246,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="flex justify-between items-start mb-[14px]">
+              <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">ACTIVE PROJECTS</div>
+              <div className="w-[38px] h-[38px] rounded-[10px] bg-[rgba(139,92,246,0.1)] flex items-center justify-center shrink-0">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 00-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 012-3.95A12.88 12.88 0 0122 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 01-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-              <div className="stat-card-value">{projects.length}</div>
-              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--navy)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>IN DELIVERY</span>
+            <div className="flex items-baseline gap-2">
+              <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{projects.length}</div>
+              <span className="text-[10px] font-bold text-primary uppercase tracking-[0.06em]">IN DELIVERY</span>
             </div>
           </div>
           {/* TOTAL VALUE */}
-          <div className="stat-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-              <div className="stat-card-label">TOTAL VALUE</div>
-              <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(16,185,129,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="flex justify-between items-start mb-[14px]">
+              <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">TOTAL VALUE</div>
+              <div className="w-[38px] h-[38px] rounded-[10px] bg-[rgba(16,185,129,0.1)] flex items-center justify-center shrink-0">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-              <div className="stat-card-value" style={{ color: 'var(--navy)' }}>{totalValue ? totalValue.toLocaleString() + ' €' : '—'}</div>
-              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>LIFETIME</span>
+            <div className="flex items-baseline gap-2">
+              <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-primary">{totalValue ? totalValue.toLocaleString() + ' €' : '—'}</div>
+              <span className="text-[10px] font-bold text-[#16a34a] uppercase tracking-[0.06em]">LIFETIME</span>
             </div>
           </div>
           {/* INVOICED YTD */}
-          <div className="stat-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-              <div className="stat-card-label">INVOICED YTD</div>
-              <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(59,130,246,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="flex justify-between items-start mb-[14px]">
+              <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">INVOICED YTD</div>
+              <div className="w-[38px] h-[38px] rounded-[10px] bg-[rgba(59,130,246,0.1)] flex items-center justify-center shrink-0">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-              <div className="stat-card-value" style={{ color: 'var(--green)' }}>{invoicedYTD ? invoicedYTD.toLocaleString() + ' €' : '—'}</div>
-              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>COLLECTED</span>
+            <div className="flex items-baseline gap-2">
+              <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-[#16a34a]">{invoicedYTD ? invoicedYTD.toLocaleString() + ' €' : '—'}</div>
+              <span className="text-[10px] font-bold text-[#16a34a] uppercase tracking-[0.06em]">COLLECTED</span>
             </div>
           </div>
           {/* PIPELINE */}
-          <div className="stat-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-              <div className="stat-card-label">PIPELINE</div>
-              <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(245,158,11,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="flex justify-between items-start mb-[14px]">
+              <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">PIPELINE</div>
+              <div className="w-[38px] h-[38px] rounded-[10px] bg-[rgba(245,158,11,0.1)] flex items-center justify-center shrink-0">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><line x1="12" y1="7" x2="5" y2="17"/><line x1="12" y1="7" x2="19" y2="17"/><line x1="5" y1="19" x2="19" y2="19"/></svg>
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-              <div className="stat-card-value" style={{ color: pipelineTotal > 0 ? '#f59e0b' : undefined }}>{pipelineTotal > 0 ? pipelineTotal.toLocaleString() + ' €' : '—'}</div>
-              <span style={{ fontSize: 10, fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>PENDING</span>
+            <div className="flex items-baseline gap-2">
+              <div className={`text-[28px] font-extrabold tracking-[-0.5px] mb-2 ${pipelineTotal > 0 ? 'text-[#f59e0b]' : 'text-foreground'}`}>{pipelineTotal > 0 ? pipelineTotal.toLocaleString() + ' €' : '—'}</div>
+              <span className="text-[10px] font-bold text-[#f59e0b] uppercase tracking-[0.06em]">PENDING</span>
             </div>
           </div>
         </div>
       )}
 
       {/* ── Tab content ── */}
-      <div className="page-content">
+      <div className="flex-1 overflow-auto p-6">
         {activeTab === 'overview'     && renderOverview()}
         {activeTab === 'projects'     && renderProjects()}
         {activeTab === 'infra'        && renderInfra()}

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRevenuePlannerStore } from '../stores/revenuePlanner'
 import { usePipelineStore } from '../stores/pipeline'
 import { useChangeRequestsStore } from '../stores/changeRequests'
@@ -7,6 +7,9 @@ import { useInfraStore } from '../stores/infrastructure'
 import { useDomainsStore } from '../stores/domains'
 import type { PipelineItem } from '../lib/types'
 import { hostingActiveInMonth } from '../lib/types'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -55,8 +58,8 @@ function pipelineAmountInMonth(item: PipelineItem, month: string): number {
   return item.expected_month === month ? (item.estimated_amount ?? 0) : 0
 }
 
-function probColor(p: number) {
-  return p >= 100 ? 'var(--green)' : p >= 50 ? '#d97706' : '#ea580c'
+function probColorClass(p: number) {
+  return p >= 100 ? 'text-[#16a34a]' : p >= 50 ? 'text-[#d97706]' : 'text-[#ea580c]'
 }
 
 // ── component ─────────────────────────────────────────────────────────────────
@@ -317,70 +320,63 @@ export function ForecastView() {
   const totalLikely = totalConfirmed + activePipeline.filter(i => i.probability >= 50).reduce((s, i) => s + pipelineDealTotal(i), 0) + crPipelineLikely
   const totalCosts = months.reduce((s, m) => s + (costsByMonth.get(m) ?? 0), 0)
 
-  const sectionHeaderStyle: React.CSSProperties = {
-    fontWeight: 700, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px', padding: '6px 12px'
-  }
-  const subTotalRowStyle: React.CSSProperties = {
-    background: 'var(--c7)', borderTop: '2px solid var(--c6)'
-  }
-  const subTotalLabelStyle: React.CSSProperties = {
-    fontWeight: 700, fontSize: 12, color: 'var(--c2)', textTransform: 'uppercase', letterSpacing: '0.5px'
-  }
+  const sectionHeaderCls = 'font-bold text-[11px] uppercase tracking-[0.5px] px-3 py-1.5'
+  const subTotalRowCls = 'bg-[#f9fafb] border-t-2 border-[#e5e7eb]'
 
   return (
     <div>
-      <div className="page-header">
+      <div className="flex items-center justify-between px-6 py-4 bg-background border-b border-border">
         <div>
           <h1>Forecast</h1>
           <p>Confirmed plans + sales pipeline — {year}</p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button className="btn btn-ghost btn-sm" onClick={() => setYear(y => y - 1)} disabled={year <= 2025}>← {year - 1}</button>
-          <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--navy)', minWidth: 40, textAlign: 'center' }}>{year}</span>
-          <button className="btn btn-ghost btn-sm" onClick={() => setYear(y => y + 1)}>{year + 1} →</button>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => setYear(y => y - 1)} disabled={year <= 2025}>← {year - 1}</Button>
+          <span className="font-bold text-sm text-primary text-center min-w-[40px]">{year}</span>
+          <Button variant="ghost" size="sm" onClick={() => setYear(y => y + 1)}>{year + 1} →</Button>
         </div>
       </div>
 
-      <div className="stats-strip" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-        <div className="stat-card" style={{ '--left-color': 'var(--navy)' } as React.CSSProperties}>
-          <div className="stat-card-label">CONFIRMED {year}</div>
-          <div className="stat-card-value" style={{ color: 'var(--navy)' }}>{totalConfirmed > 0 ? fmtEuro(totalConfirmed) : '—'}</div>
-          <div className="stat-card-sub">planned + issued + retainer</div>
+      <div className="grid grid-cols-4 gap-3 mb-4 px-6 pt-4">
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">CONFIRMED {year}</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-primary">{totalConfirmed > 0 ? fmtEuro(totalConfirmed) : '—'}</div>
+          <div className="text-xs text-muted-foreground mt-1">planned + issued + retainer</div>
         </div>
-        <div className="stat-card" style={{ '--left-color': '#d97706' } as React.CSSProperties}>
-          <div className="stat-card-label">PIPELINE</div>
-          <div className="stat-card-value" style={{ color: '#d97706' }}>{totalPipelineFace > 0 ? fmtEuro(totalPipelineFace) : '—'}</div>
-          <div className="stat-card-sub">{activePipeline.length + pendingCRPipeline.length} active deals, face value</div>
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">PIPELINE</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-[#d97706]">{totalPipelineFace > 0 ? fmtEuro(totalPipelineFace) : '—'}</div>
+          <div className="text-xs text-muted-foreground mt-1">{activePipeline.length + pendingCRPipeline.length} active deals, face value</div>
         </div>
-        <div className="stat-card" style={{ '--left-color': 'var(--green)' } as React.CSSProperties}>
-          <div className="stat-card-label">BEST CASE</div>
-          <div className="stat-card-value" style={{ color: 'var(--green)' }}>{fmtEuro(totalBestCase)}</div>
-          <div className="stat-card-sub">confirmed + all sales</div>
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">BEST CASE</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-[#16a34a]">{fmtEuro(totalBestCase)}</div>
+          <div className="text-xs text-muted-foreground mt-1">confirmed + all sales</div>
         </div>
-        <div className="stat-card" style={{ '--left-color': 'var(--blue)' } as React.CSSProperties}>
-          <div className="stat-card-label">LIKELY</div>
-          <div className="stat-card-value" style={{ color: 'var(--blue)' }}>{fmtEuro(totalLikely)}</div>
-          <div className="stat-card-sub">confirmed + ≥50% chance sales</div>
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">LIKELY</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-[#2563eb]">{fmtEuro(totalLikely)}</div>
+          <div className="text-xs text-muted-foreground mt-1">confirmed + ≥50% chance sales</div>
         </div>
       </div>
 
-      <div className="page-content">
-        <div className="card" style={{ overflowX: 'auto' }}>
-          <table className="no-row-hover" style={{ minWidth: 'max-content' }}>
+      <div className="flex-1 overflow-auto p-6">
+        <Card className="overflow-x-auto">
+          <table className="no-row-hover min-w-max">
             <thead>
               <tr>
-                <th style={{ width: 200 }}>CLIENT / SOURCE</th>
+                <th className="w-[200px]">CLIENT / SOURCE</th>
                 {months.map(m => (
-                  <th key={m} className="th-right" style={{ width: 110 }}>{fmtMonthLabel(m)}</th>
+                  <th key={m} className="text-right w-[110px]">{fmtMonthLabel(m)}</th>
                 ))}
-                <th className="th-right" style={{ width: 120 }}>TOTAL</th>
+                <th className="text-right w-[120px]">TOTAL</th>
               </tr>
             </thead>
             <tbody>
 
               {/* ── Confirmed section header ── */}
-              <tr style={{ background: 'var(--navy)' }}>
-                <td colSpan={months.length + 2} style={{ ...sectionHeaderStyle, color: '#fff' }}>
+              <tr className="bg-primary">
+                <td colSpan={months.length + 2} className={`${sectionHeaderCls} text-white`}>
                   Confirmed Revenue
                 </td>
               </tr>
@@ -388,7 +384,7 @@ export function ForecastView() {
               {/* Per-client rows */}
               {clientRows.length === 0 && hostingByMonth.size === 0 && domainsByMonth.size === 0 && (
                 <tr>
-                  <td colSpan={months.length + 2} style={{ padding: '16px 12px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>
+                  <td colSpan={months.length + 2} className="text-center text-muted-foreground text-[13px] px-3 py-4">
                     No confirmed revenue planned for {year}.
                   </td>
                 </tr>
@@ -398,13 +394,13 @@ export function ForecastView() {
                 const rowTotal = [...byMonth.values()].reduce((s, v) => s + v, 0)
                 return (
                   <tr key={clientId}>
-                    <td style={{ fontWeight: 600, fontSize: 13 }}>{name}</td>
+                    <td className="font-semibold text-[13px]">{name}</td>
                     {months.map(m => (
-                      <td key={m} className="td-right text-mono" style={{ fontSize: 13, color: byMonth.has(m) ? 'var(--navy)' : 'var(--c5)' }}>
+                      <td key={m} className={`text-right text-[13px] ${byMonth.has(m) ? 'text-primary' : 'text-muted-foreground'}`}>
                         {byMonth.has(m) ? fmtEuro(byMonth.get(m)) : '—'}
                       </td>
                     ))}
-                    <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)' }}>{fmtEuro(rowTotal)}</td>
+                    <td className="text-right font-bold text-primary">{fmtEuro(rowTotal)}</td>
                   </tr>
                 )
               })}
@@ -412,16 +408,16 @@ export function ForecastView() {
               {/* Hosting aggregate row */}
               {hostingByMonth.size > 0 && (
                 <tr>
-                  <td style={{ fontSize: 13 }}>
-                    <span className="badge badge-blue" style={{ fontSize: 10 }}>Hosting</span>
-                    <span style={{ marginLeft: 6, color: 'var(--c2)' }}>All clients</span>
+                  <td className="text-[13px]">
+                    <Badge variant="blue" className="text-[10px]">Hosting</Badge>
+                    <span className="ml-1.5 text-[#374151]">All clients</span>
                   </td>
                   {months.map(m => (
-                    <td key={m} className="td-right text-mono" style={{ fontSize: 13, color: hostingByMonth.has(m) ? 'var(--navy)' : 'var(--c5)' }}>
+                    <td key={m} className={`text-right text-[13px] ${hostingByMonth.has(m) ? 'text-primary' : 'text-muted-foreground'}`}>
                       {hostingByMonth.has(m) ? fmtEuro(hostingByMonth.get(m)) : '—'}
                     </td>
                   ))}
-                  <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)' }}>
+                  <td className="text-right font-bold text-primary">
                     {fmtEuro([...hostingByMonth.values()].reduce((s, v) => s + v, 0))}
                   </td>
                 </tr>
@@ -430,42 +426,42 @@ export function ForecastView() {
               {/* Domains aggregate row */}
               {domainsByMonth.size > 0 && (
                 <tr>
-                  <td style={{ fontSize: 13 }}>
-                    <span className="badge" style={{ background: 'var(--navy)', color: '#fff', fontSize: 10 }}>Domain</span>
-                    <span style={{ marginLeft: 6, color: 'var(--c2)' }}>All renewals</span>
+                  <td className="text-[13px]">
+                    <Badge variant="navy" className="text-[10px]">Domain</Badge>
+                    <span className="ml-1.5 text-[#374151]">All renewals</span>
                   </td>
                   {months.map(m => (
-                    <td key={m} className="td-right text-mono" style={{ fontSize: 13, color: domainsByMonth.has(m) ? 'var(--navy)' : 'var(--c5)' }}>
+                    <td key={m} className={`text-right text-[13px] ${domainsByMonth.has(m) ? 'text-primary' : 'text-muted-foreground'}`}>
                       {domainsByMonth.has(m) ? fmtEuro(domainsByMonth.get(m)) : '—'}
                     </td>
                   ))}
-                  <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)' }}>
+                  <td className="text-right font-bold text-primary">
                     {fmtEuro([...domainsByMonth.values()].reduce((s, v) => s + v, 0))}
                   </td>
                 </tr>
               )}
 
               {/* Confirmed sub-total */}
-              <tr style={subTotalRowStyle}>
-                <td style={subTotalLabelStyle}>Confirmed Total</td>
+              <tr className={subTotalRowCls}>
+                <td className="font-bold text-[12px] text-[#374151] uppercase tracking-[0.5px]">Confirmed Total</td>
                 {months.map(m => (
-                  <td key={m} className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)' }}>
+                  <td key={m} className="text-right font-bold text-primary">
                     {(confirmedByMonth.get(m) ?? 0) > 0 ? fmtEuro(confirmedByMonth.get(m)) : '—'}
                   </td>
                 ))}
-                <td className="td-right text-mono" style={{ fontWeight: 800, color: 'var(--navy)', fontSize: 14 }}>{fmtEuro(totalConfirmed)}</td>
+                <td className="text-right font-extrabold text-primary text-sm">{fmtEuro(totalConfirmed)}</td>
               </tr>
 
               {/* ── Pipeline section header ── */}
-              <tr style={{ background: '#92400e' }}>
-                <td colSpan={months.length + 2} style={{ ...sectionHeaderStyle, color: '#fff' }}>
+              <tr className="bg-[#92400e]">
+                <td colSpan={months.length + 2} className={`${sectionHeaderCls} text-white`}>
                   Pipeline
                 </td>
               </tr>
 
               {activePipeline.length === 0 && pendingCRPipeline.length === 0 && (
                 <tr>
-                  <td colSpan={months.length + 2} style={{ padding: '16px 12px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>
+                  <td colSpan={months.length + 2} className="text-center text-muted-foreground text-[13px] px-3 py-4">
                     No active pipeline items. Add prospects from the client page.
                   </td>
                 </tr>
@@ -477,23 +473,23 @@ export function ForecastView() {
                 return (
                   <tr key={item.id}>
                     <td>
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>{clientName}</div>
-                      <div style={{ fontSize: 11, color: 'var(--c3)', marginTop: 1 }}>{item.title}</div>
+                      <div className="font-semibold text-[13px]">{clientName}</div>
+                      <div className="text-[11px] text-muted-foreground mt-px">{item.title}</div>
                     </td>
                     {months.map(m => {
                       const amt = pipelineAmountInMonth(item, m)
                       return (
-                        <td key={m} className="td-right" style={{ fontSize: 13 }}>
+                        <td key={m} className="text-right text-[13px]">
                           {amt > 0 ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                              <span className="text-mono" style={{ fontWeight: 600, color: '#d97706' }}>{fmtEuro(amt)}</span>
-                              <span style={{ fontSize: 10, fontWeight: 700, color: probColor(item.probability) }}>{item.probability}%</span>
+                            <div className="flex flex-col items-end gap-0.5">
+                              <span className="font-semibold text-[#d97706]">{fmtEuro(amt)}</span>
+                              <span className={`text-[10px] font-bold ${probColorClass(item.probability)}`}>{item.probability}%</span>
                             </div>
-                          ) : <span style={{ color: 'var(--c5)' }}>—</span>}
+                          ) : <span className="text-muted-foreground">—</span>}
                         </td>
                       )
                     })}
-                    <td className="td-right text-mono" style={{ fontWeight: 700, color: '#d97706' }}>{fmtEuro(faceTotal)}</td>
+                    <td className="text-right font-bold text-[#d97706]">{fmtEuro(faceTotal)}</td>
                   </tr>
                 )
               })}
@@ -506,41 +502,41 @@ export function ForecastView() {
                 return (
                   <tr key={cr.id}>
                     <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <span style={{ fontWeight: 600, fontSize: 13 }}>{clientName}</span>
-                        <span className="badge badge-navy" style={{ fontSize: 9 }}>CR</span>
+                      <div className="flex items-center gap-[5px]">
+                        <span className="font-semibold text-[13px]">{clientName}</span>
+                        <Badge variant="navy" className="text-[9px]">CR</Badge>
                       </div>
-                      <div style={{ fontSize: 11, color: 'var(--c3)', marginTop: 1 }}>{cr.title}</div>
-                      <div style={{ fontSize: 10, color: 'var(--c4)' }}>{source}</div>
+                      <div className="text-[11px] text-muted-foreground mt-px">{cr.title}</div>
+                      <div className="text-[10px] text-muted-foreground">{source}</div>
                     </td>
                     {months.map(m => {
                       const amt = cr.expected_month === m ? (cr.amount ?? 0) : 0
                       return (
-                        <td key={m} className="td-right" style={{ fontSize: 13 }}>
+                        <td key={m} className="text-right text-[13px]">
                           {amt > 0 ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                              <span className="text-mono" style={{ fontWeight: 600, color: '#d97706' }}>{fmtEuro(amt)}</span>
-                              <span style={{ fontSize: 10, fontWeight: 700, color: probColor(prob) }}>{prob}%</span>
+                            <div className="flex flex-col items-end gap-0.5">
+                              <span className="font-semibold text-[#d97706]">{fmtEuro(amt)}</span>
+                              <span className={`text-[10px] font-bold ${probColorClass(prob)}`}>{prob}%</span>
                             </div>
-                          ) : <span style={{ color: 'var(--c5)' }}>—</span>}
+                          ) : <span className="text-muted-foreground">—</span>}
                         </td>
                       )
                     })}
-                    <td className="td-right text-mono" style={{ fontWeight: 700, color: '#d97706' }}>{fmtEuro(cr.amount)}</td>
+                    <td className="text-right font-bold text-[#d97706]">{fmtEuro(cr.amount)}</td>
                   </tr>
                 )
               })}
 
               {/* Pipeline sub-total (face value) */}
               {(activePipeline.length > 0 || pendingCRPipeline.length > 0) && (
-                <tr style={subTotalRowStyle}>
-                  <td style={{ ...subTotalLabelStyle, color: '#d97706' }}>Pipeline Total</td>
+                <tr className={subTotalRowCls}>
+                  <td className="font-bold text-[12px] uppercase tracking-[0.5px] text-[#d97706]">Pipeline Total</td>
                   {months.map(m => (
-                    <td key={m} className="td-right text-mono" style={{ fontWeight: 700, color: '#d97706' }}>
+                    <td key={m} className="text-right font-bold text-[#d97706]">
                       {(pipelineFaceByMonth.get(m) ?? 0) > 0 ? fmtEuro(pipelineFaceByMonth.get(m)!) : '—'}
                     </td>
                   ))}
-                  <td className="td-right text-mono" style={{ fontWeight: 800, color: '#d97706', fontSize: 14 }}>
+                  <td className="text-right font-extrabold text-sm text-[#d97706]">
                     {fmtEuro(totalPipelineFace)}
                   </td>
                 </tr>
@@ -548,8 +544,8 @@ export function ForecastView() {
 
               {/* ── Costs section header ── */}
               {(costRows.length > 0 || maintCostRows.length > 0) && (
-                <tr style={{ background: '#7f1d1d' }}>
-                  <td colSpan={months.length + 2} style={{ ...sectionHeaderStyle, color: '#fff' }}>
+                <tr className="bg-[#7f1d1d]">
+                  <td colSpan={months.length + 2} className={`${sectionHeaderCls} text-white`}>
                     Costs
                   </td>
                 </tr>
@@ -564,20 +560,20 @@ export function ForecastView() {
                   return s
                 }, 0)
                 return (
-                  <tr key={c.id} style={isCancelled ? { opacity: 0.7 } : undefined}>
-                    <td style={{ fontSize: 13 }}>
-                      <div style={{ fontWeight: 600, color: 'var(--red)' }}>{c.provider}</div>
-                      {c.description && <div style={{ fontSize: 11, color: 'var(--c3)', marginTop: 1 }}>{c.description}</div>}
+                  <tr key={c.id} className={isCancelled ? 'opacity-70' : undefined}>
+                    <td className="text-[13px]">
+                      <div className="font-semibold text-[#dc2626]">{c.provider}</div>
+                      {c.description && <div className="text-[11px] text-muted-foreground mt-px">{c.description}</div>}
                     </td>
                     {months.map(m => {
                       const active = c.status === 'active' || (isCancelled && !!c.cancelled_from && m < c.cancelled_from)
                       return (
-                        <td key={m} className="td-right text-mono" style={{ fontSize: 13, color: active ? 'var(--red)' : 'var(--c5)' }}>
+                        <td key={m} className={`text-right text-[13px] ${active ? 'text-[#dc2626]' : 'text-muted-foreground'}`}>
                           {active ? fmtEuro(c.monthly_cost) : '—'}
                         </td>
                       )
                     })}
-                    <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--red)' }}>{fmtEuro(rowTotal)}</td>
+                    <td className="text-right font-bold text-[#dc2626]">{fmtEuro(rowTotal)}</td>
                   </tr>
                 )
               })}
@@ -587,33 +583,33 @@ export function ForecastView() {
                 const rowTotal = months.reduce((s, m) => s + (mc.amountByMonth.get(m) ?? 0), 0)
                 return (
                   <tr key={i}>
-                    <td style={{ fontSize: 13 }}>
-                      <div style={{ fontWeight: 600, color: 'var(--red)' }}>{mc.name}</div>
-                      {mc.clientName && <div style={{ fontSize: 11, color: 'var(--c3)', marginTop: 1 }}>{mc.clientName}</div>}
+                    <td className="text-[13px]">
+                      <div className="font-semibold text-[#dc2626]">{mc.name}</div>
+                      {mc.clientName && <div className="text-[11px] text-muted-foreground mt-px">{mc.clientName}</div>}
                     </td>
                     {months.map(m => {
                       const amt = mc.amountByMonth.get(m) ?? 0
                       return (
-                        <td key={m} className="td-right text-mono" style={{ fontSize: 13, color: amt ? 'var(--red)' : 'var(--c5)' }}>
+                        <td key={m} className={`text-right text-[13px] ${amt ? 'text-[#dc2626]' : 'text-muted-foreground'}`}>
                           {amt ? fmtEuro(amt) : '—'}
                         </td>
                       )
                     })}
-                    <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--red)' }}>{fmtEuro(rowTotal)}</td>
+                    <td className="text-right font-bold text-[#dc2626]">{fmtEuro(rowTotal)}</td>
                   </tr>
                 )
               })}
 
               {/* Costs subtotal */}
               {(costRows.length > 0 || maintCostRows.length > 0) && (
-                <tr style={{ ...subTotalRowStyle, borderTop: '2px solid #fca5a5' }}>
-                  <td style={{ ...subTotalLabelStyle, color: 'var(--red)' }}>Costs Total</td>
+                <tr className="bg-[#f9fafb] border-t-2 border-[#fca5a5]">
+                  <td className="font-bold text-[12px] uppercase tracking-[0.5px] text-[#dc2626]">Costs Total</td>
                   {months.map(m => (
-                    <td key={m} className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--red)' }}>
+                    <td key={m} className="text-right font-bold text-[#dc2626]">
                       {(costsByMonth.get(m) ?? 0) > 0 ? fmtEuro(costsByMonth.get(m)) : '—'}
                     </td>
                   ))}
-                  <td className="td-right text-mono" style={{ fontWeight: 800, color: 'var(--red)', fontSize: 14 }}>
+                  <td className="text-right font-extrabold text-sm text-[#dc2626]">
                     {fmtEuro(totalCosts)}
                   </td>
                 </tr>
@@ -626,14 +622,14 @@ export function ForecastView() {
                 )
                 const grandTotal = monthlyNets.reduce((s, v) => s + v, 0)
                 return (
-                  <tr style={{ background: 'var(--navy)', borderTop: '2px solid var(--navy)' }}>
-                    <td style={{ ...sectionHeaderStyle, color: '#fff', fontSize: 12 }}>Grand Total</td>
+                  <tr className="bg-primary border-t-2 border-primary">
+                    <td className={`${sectionHeaderCls} text-white text-[12px]`}>Grand Total</td>
                     {monthlyNets.map((net, i) => (
-                      <td key={months[i]} className="td-right text-mono" style={{ fontWeight: 700, color: net < 0 ? '#fca5a5' : '#fff', fontSize: 13 }}>
+                      <td key={months[i]} className={`text-right font-bold text-[13px] ${net < 0 ? 'text-[#fca5a5]' : 'text-white'}`}>
                         {net !== 0 ? fmtEuro(net) : '—'}
                       </td>
                     ))}
-                    <td className="td-right text-mono" style={{ fontWeight: 800, color: grandTotal < 0 ? '#fca5a5' : '#fff', fontSize: 14 }}>
+                    <td className={`text-right font-extrabold text-sm ${grandTotal < 0 ? 'text-[#fca5a5]' : 'text-white'}`}>
                       {fmtEuro(grandTotal)}
                     </td>
                   </tr>
@@ -642,7 +638,7 @@ export function ForecastView() {
 
             </tbody>
           </table>
-        </div>
+        </Card>
       </div>
     </div>
   )

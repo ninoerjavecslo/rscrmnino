@@ -1,0 +1,3 @@
+[   52094ms] [ERROR] Each child in a list should have a unique "key" prop.%s%s See https://react.dev/link/warning-keys for more information. 
+
+Check the render method of `ResourceYearlyView`.  @ http://localhost:5174/node_modules/.vite/deps/react-dom_client.js?v=b4cb9e24:18617

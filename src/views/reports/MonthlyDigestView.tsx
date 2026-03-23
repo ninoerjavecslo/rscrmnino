@@ -1,14 +1,16 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Link } from 'react-router-dom'
 import { useRevenuePlannerStore } from '../../stores/revenuePlanner'
 import { usePipelineStore } from '../../stores/pipeline'
 import { useResourceStore } from '../../stores/resource'
 import { useHolidayStore } from '../../stores/holidays'
 import { supabase } from '../../lib/supabase'
 import { workDaysInRange, adjustedCapacityForRange } from '../../lib/capacityUtils'
-import type { TimeOff, RevenuePlanner, ResourceAllocation, PipelineItem } from '../../lib/types'
+import { pipelineDealTotal } from '../../lib/pipelineUtils'
+import type { TimeOff, RevenuePlanner, ResourceAllocation } from '../../lib/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { ReportHeader } from '../../components/ReportHeader'
+import { StatCard } from '../../components/StatCard'
 
 function toMonthStr(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -16,20 +18,6 @@ function toMonthStr(d: Date) {
 
 function fmtEuro(n: number) {
   return n.toLocaleString('de-DE', { maximumFractionDigits: 0 }) + ' €'
-}
-
-function dealTotal(item: PipelineItem): number {
-  const amt = item.estimated_amount ?? 0
-  if (item.deal_type === 'fixed' && item.monthly_schedule?.length) {
-    return item.monthly_schedule.reduce((s, r) => s + r.amount, 0)
-  }
-  if (item.deal_type === 'monthly' && item.expected_month && item.expected_end_month) {
-    const s = new Date(item.expected_month + 'T00:00:00')
-    const e = new Date(item.expected_end_month + 'T00:00:00')
-    const count = Math.max(1, (e.getFullYear() - s.getFullYear()) * 12 + e.getMonth() - s.getMonth() + 1)
-    return amt * count
-  }
-  return amt
 }
 
 interface DigestDeliverable {
@@ -94,15 +82,23 @@ export function MonthlyDigestView() {
   const planned = monthRows.reduce((s: number, r: RevenuePlanner) => s + (r.planned_amount ?? 0), 0)
 
   const [yNum, moNum] = selectedMonthStr.split('-').map(Number)
-  const monthWorkDays = workDaysInRange(
-    `${yNum}-${String(moNum).padStart(2, '0')}-01`,
-    `${yNum}-${String(moNum).padStart(2, '0')}-${new Date(yNum, moNum, 0).getDate()}`
-  )
-  const activeMembers = resourceStore.members.filter(m => m.active)
+  const activeMembers = useMemo(() =>
+    resourceStore.members.filter(m => m.active),
+    [resourceStore.members])
   const holidays = holidayStore.holidays
 
-  const teamCapacity = activeMembers.reduce((s, m) =>
-    s + adjustedCapacityForRange(m, monthWorkDays, timeOff, holidays, [], yNum).adjustedCapacity, 0)
+  const monthWorkDays = useMemo(() =>
+    workDaysInRange(
+      `${yNum}-${String(moNum).padStart(2, '0')}-01`,
+      `${yNum}-${String(moNum).padStart(2, '0')}-${new Date(yNum, moNum, 0).getDate()}`
+    ),
+    [selectedMonthStr]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const teamCapacity = useMemo(() =>
+    activeMembers.reduce((s, m) =>
+      s + adjustedCapacityForRange(m, monthWorkDays, timeOff, holidays, [], yNum).adjustedCapacity, 0),
+    [activeMembers, monthWorkDays, timeOff, holidays, yNum])
+
   const totalAllocated = allocations.reduce((s, a) => s + a.hours, 0)
   const utilizationPct = teamCapacity > 0 ? Math.round(totalAllocated / teamCapacity * 100) : 0
   const billableHours = allocations.filter(a => a.is_billable).reduce((s, a) => s + a.hours, 0)
@@ -127,43 +123,27 @@ export function MonthlyDigestView() {
       map[m.id] = adjustedCapacityForRange(m, monthWorkDays, timeOff, holidays, [], yNum).adjustedCapacity
     }
     return map
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeMembers, monthWorkDays, timeOff, holidays, yNum])
 
   return (
     <div className="flex-1 overflow-auto">
-      <div className="flex items-center gap-3 px-6 py-5 bg-white border-b border-border">
-        <Link to="/reports" className="text-xs text-muted-foreground font-semibold flex items-center gap-1 no-underline">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-          Reports
-        </Link>
-        <span className="text-muted-foreground text-xs">/</span>
-        <h1 className="text-[18px] font-extrabold tracking-[-0.2px] m-0">Monthly Digest</h1>
-        <div className="ml-auto">
+      <ReportHeader
+        title="Monthly Digest"
+        extra={
           <input
             type="month"
             value={selectedMonthStr}
             onChange={e => setSelectedMonthStr(e.target.value)}
             className="text-sm border border-border rounded px-2 py-1"
           />
-        </div>
-      </div>
+        }
+      />
       <div className="p-6">
         <div className="grid grid-cols-4 gap-4 mb-6">
-          {[
-            { label: 'INVOICED REVENUE', value: fmtEuro(invoiced), sub: `of ${fmtEuro(planned)} planned` },
-            { label: 'TEAM UTILIZATION', value: `${utilizationPct}%`, sub: `${Math.round(totalAllocated)}h of ${Math.round(teamCapacity)}h` },
-            { label: 'DELIVERABLES DONE', value: deliverables.filter(d => d.status === 'completed').length, sub: `of ${deliverables.length} due this month` },
-            { label: 'DEALS WON', value: won.length, sub: won.length > 0 ? fmtEuro(won.reduce((s, i) => s + dealTotal(i), 0)) : 'no wins this month' },
-          ].map(s => (
-            <Card key={s.label}>
-              <CardContent className="p-4">
-                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.08em] mb-2">{s.label}</div>
-                <div className="text-[24px] font-extrabold tracking-[-0.5px] leading-none mb-1">{String(s.value)}</div>
-                <div className="text-xs text-muted-foreground">{s.sub}</div>
-              </CardContent>
-            </Card>
-          ))}
+          <StatCard label="INVOICED REVENUE" value={fmtEuro(invoiced)} sub={`of ${fmtEuro(planned)} planned`} />
+          <StatCard label="TEAM UTILIZATION" value={`${utilizationPct}%`} sub={`${Math.round(totalAllocated)}h of ${Math.round(teamCapacity)}h`} />
+          <StatCard label="DELIVERABLES DONE" value={deliverables.filter(d => d.status === 'completed').length} sub={`of ${deliverables.length} due this month`} />
+          <StatCard label="DEALS WON" value={won.length} sub={won.length > 0 ? fmtEuro(won.reduce((s, i) => s + pipelineDealTotal(i), 0)) : 'no wins this month'} />
         </div>
 
         <div className="grid grid-cols-2 gap-5 mb-5">
@@ -180,9 +160,7 @@ export function MonthlyDigestView() {
                 <div className="divide-y divide-border">
                   {monthRows.map((r: RevenuePlanner) => (
                     <div key={r.id} className="flex items-center justify-between px-5 py-2.5 text-[13px]">
-                      <div>
-                        <span className="font-medium text-foreground">{r.project?.name ?? r.notes ?? '—'}</span>
-                      </div>
+                      <span className="font-medium text-foreground">{r.project?.name ?? r.notes ?? '—'}</span>
                       <div className="flex items-center gap-3">
                         <Badge variant={r.status === 'paid' ? 'green' : r.status === 'issued' ? 'blue' : 'gray'}>
                           {r.status}
@@ -213,7 +191,7 @@ export function MonthlyDigestView() {
                       <span className="font-medium">{i.title}</span>
                       <div className="flex items-center gap-2">
                         <Badge variant={i.status === 'won' ? 'green' : i.status === 'lost' ? 'red' : 'amber'}>{i.status}</Badge>
-                        <span className="tabular-nums text-muted-foreground">{fmtEuro(dealTotal(i))}</span>
+                        <span className="tabular-nums text-muted-foreground">{fmtEuro(pipelineDealTotal(i))}</span>
                       </div>
                     </div>
                   ))}

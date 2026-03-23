@@ -32,7 +32,7 @@ function toOpenAITools(tools: typeof TOOL_DEFINITIONS) {
   }))
 }
 
-const SYSTEM_PROMPT = `You are Pixel AI, an intelligent assistant for an agency called Renderspace. You have access to the agency's live data: clients, projects, revenue, hosting, domains, maintenances, infrastructure costs, and sales pipeline.
+const SYSTEM_PROMPT = `You are Pixel AI, an intelligent assistant for an agency called Renderspace. You have access to the agency's live data: clients, projects, revenue, hosting, domains, maintenances, infrastructure costs, sales pipeline, team members, and resource planning.
 
 Today's date is ${new Date().toISOString().slice(0, 10)}.
 
@@ -45,11 +45,25 @@ TOOL USAGE RULES:
 - All clients → use list_clients
 - All projects → use list_projects
 - Hosting → use list_hosting_clients
-- Maintenance contracts → use list_maintenances
+- Maintenance contracts → use list_maintenances (has billing_cycle: monthly or annual; annual contracts bill once per year in a selected billing_month)
 - Domains → use list_domains
 - Sales pipeline → use list_pipeline
+- Team members / capacity / hours → use list_team_members
+- Resource allocations / who is working on what / hours per project → use list_resource_allocations
 
-Format numbers as currency (e.g. 1.200 €). Be concise and direct.`
+RESOURCE PLANNING CONCEPTS:
+- Team members have: hours_per_day (e.g. 8), overhead_meetings_month (h/mo for internal meetings), overhead_sales_month (h/mo for sales activities), vacation_days_year (vacation days per year).
+- Capacity = (working days in month × hours_per_day) − (vacation days pro-rated per month).
+- In "Estimated" mode: overhead hours (meetings + sales) are added to utilised hours (they count as work, not free time).
+- In "Allocated" mode: only project deliverables count; no overhead.
+- Deliverables are distributed across months weighted by working days in each month.
+- Unassigned hours = estimated project hours not yet assigned to a specific person.
+
+MAINTENANCE BILLING:
+- monthly: one revenue plan row per month with the monthly_retainer amount.
+- annual: one revenue plan row per year in the selected billing_month (e.g. billing_month=3 → March each year), with the full annual amount (monthly_retainer × 12). The monthly_retainer field stores the monthly equivalent even for annual contracts.
+
+Format numbers as currency (e.g. 1.200 €). Format hours as e.g. 48 h. Be concise and direct.`
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {

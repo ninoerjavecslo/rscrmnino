@@ -12,7 +12,7 @@ import { useChangeRequestsStore } from '../stores/changeRequests'
 import { useSettingsStore } from '../stores/settings'
 import { toast } from '../lib/toast'
 import type { Project, Domain, HostingClient, RevenuePlanner, Maintenance, PipelineItem } from '../lib/types'
-import { hostingContractValue } from '../lib/types'
+import { hostingAnnualValue } from '../lib/types'
 import { Select } from '../components/Select'
 import { Modal } from '../components/Modal'
 import { Button } from '@/components/ui/button'
@@ -349,6 +349,7 @@ export function ClientDetailView() {
   const [aiSummary, setAiSummary]   = useState<string | null>(null)
   const [aiIdeas, setAiIdeas]       = useState<{ title: string; description: string }[]>([])
   const [aiLoading, setAiLoading]   = useState(false)
+  const [aiTrigger, setAiTrigger]   = useState(0)
 
   // ── other income modal ───────────────────────────────────────────────────
   const [showOtherIncome, setShowOtherIncome] = useState(false)
@@ -373,18 +374,23 @@ export function ClientDetailView() {
 
   // ── AI summary generation (cached 24h in localStorage) ───────────────────
   useEffect(() => {
-    if (!client || !id || aiLoading || aiSummary) return
-    const cacheKey = `ai_client_summary_${id}`
-    const cached = localStorage.getItem(cacheKey)
-    if (cached) {
-      try {
-        const { text, ideas, ts } = JSON.parse(cached)
-        if (Date.now() - ts < 86_400_000) {
-          setAiSummary(text)
-          setAiIdeas(ideas ?? [])
-          return
-        }
-      } catch { /* stale, regenerate */ }
+    if (!client || !id || aiLoading) return
+    const cacheKey = `ai_client_summary_v4_${id}`
+    if (aiTrigger === 0) {
+      // Initial load: use cache if fresh
+      const cached = localStorage.getItem(cacheKey)
+      if (cached) {
+        try {
+          const { text, ideas, ts } = JSON.parse(cached)
+          if (Date.now() - ts < 86_400_000) {
+            setAiSummary(text)
+            setAiIdeas(ideas ?? [])
+            return
+          }
+        } catch { /* stale, regenerate */ }
+      }
+    } else {
+      // Manual regenerate: already cleared in button handler
     }
 
     async function generate() {
@@ -392,20 +398,27 @@ export function ClientDetailView() {
       try {
         const edgeUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/pixel-chat`
         const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-        const activeProj = pStore.projects.filter(p => p.client_id === id && p.status === 'active').map(p => p.name)
-        const activeMaint = mStore.maintenances.filter(m => m.client_id === id && m.status === 'active').map(m => m.name)
-        const prompt = `You are a strategic account manager at a digital agency. Based on this client profile, respond with ONLY valid JSON (no markdown, no explanation) in this exact format:
+        const clientProjects = pStore.projects.filter(p => p.client_id === id)
+        const clientMaint = mStore.maintenances.filter(m => m.client_id === id)
+        const projLines = clientProjects.map(p => `${p.name} (${p.status}${p.value ? `, value: ${p.value}€` : ''}${p.type ? `, type: ${p.type}` : ''})`).join(', ') || 'none'
+        const maintLines = clientMaint.map(m => `${m.name} (${m.status}, ${m.monthly_retainer}€/mo)`).join(', ') || 'none'
+        const builtWebsite = clientMaint.length > 0 || clientProjects.some(p => p.type === 'fixed')
+        const prompt = `You are a strategic account manager at a digital agency called Renderspace. Based on this client profile, respond with ONLY valid JSON (no markdown, no explanation) in this exact format:
 {"summary":"3-4 sentence strategic account summary focused on business health and relationship quality","ideas":[{"title":"short title","description":"one sentence specific suggestion"},{"title":"short title","description":"one sentence specific suggestion"}]}
+
+Agency context: Renderspace is a digital agency. A maintenance/retainer contract always means Renderspace previously built (or significantly refreshed) the client's website or digital product. Do not suggest building or auditing their website if they already have a maintenance contract — they already use Renderspace for ongoing support.
 
 Client profile:
 - Name: ${client!.name}
 - Website: ${client!.website || 'unknown'}
-- Active projects: ${activeProj.length > 0 ? activeProj.join(', ') : 'none'}
-- Active maintenance contracts: ${activeMaint.length > 0 ? activeMaint.join(', ') : 'none'}
+- Renderspace built their website: ${builtWebsite ? 'yes' : 'unknown'}
+- Projects (all): ${projLines}
+- Maintenance/retainer contracts: ${maintLines}
 - Hosting entries: ${infraStore.hostingClients.filter(h => h.client_id === id).length}
 - Domains: ${dStore.domains.filter(d => d.client_id === id && !d.archived).length}
-- Revenue YTD: ${invoicedYTD}€
-- Revenue last year: ${prevYearInvoiced}€
+- Invoiced YTD: ${invoicedYTD}€
+- Invoiced last year: ${prevYearInvoiced}€
+- Total lifetime value: ${pStore.projects.filter(p => p.client_id === id).reduce((s, p) => s + (p.value ?? 0), 0)}€
 - Open pipeline value: ${pipelineTotal}€`
 
         const res = await fetch(edgeUrl, {
@@ -414,19 +427,21 @@ Client profile:
           body: JSON.stringify({ message: prompt, conversation_id: null, history: [] }),
         })
         const json = await res.json()
-        const content = json.reply ?? json.content ?? ''
+        const content = json.message ?? json.reply ?? json.content ?? ''
         const parsed = JSON.parse(content)
         setAiSummary(parsed.summary ?? '')
         setAiIdeas(parsed.ideas ?? [])
-        localStorage.setItem(`ai_client_summary_${id}`, JSON.stringify({ text: parsed.summary, ideas: parsed.ideas, ts: Date.now() }))
+        localStorage.setItem(`ai_client_summary_v4_${id}`, JSON.stringify({ text: parsed.summary, ideas: parsed.ideas, ts: Date.now() }))
       } catch {
         setAiSummary('Unable to generate summary. Check client data and try again.')
       } finally {
         setAiLoading(false)
       }
     }
+    // Only generate once stores have loaded data
+    if (pStore.projects.length === 0 && mStore.maintenances.length === 0) return
     generate()
-  }, [client?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [client?.id, aiTrigger, pStore.projects.length, mStore.maintenances.length]) // eslint-disable-line react-hooks/exhaustive-deps
   const projects = pStore.projects.filter(p => p.client_id === id)
   const projectIds = new Set(projects.map(p => p.id))
   const hostingRows = infraStore.hostingClients.filter(h => h.client_id === id)
@@ -453,12 +468,12 @@ Client profile:
   // ── stats ────────────────────────────────────────────────────────────────
   const activeProjects = projects.filter(p => p.status === 'active')
   // Standalone hosting only — maintenance-linked hosting is counted inside maintAnnual
-  const hostingAnnual = hostingRows.filter(h => !h.maintenance_id).reduce((s, h) => s + hostingContractValue(h), 0)
+  const hostingAnnual = hostingRows.filter(h => !h.maintenance_id).reduce((s, h) => s + hostingAnnualValue(h), 0)
   const domainsAnnual = clientDomains.filter(d => !d.archived).reduce((s, d) => s + (d.yearly_amount ?? 0), 0)
   // Maintenance annual = retainer × months + linked hosting annual value
   const maintAnnual = maintenances.filter(m => m.status === 'active').reduce((s, m) => {
     const linkedHosting = infraStore.hostingClients.find(h => h.maintenance_id === m.id)
-    const hostingExtra = linkedHosting ? hostingContractValue(linkedHosting) : 0
+    const hostingExtra = linkedHosting ? hostingAnnualValue(linkedHosting) : 0
     return s + m.monthly_retainer * maintMonthsThisYear(m) + hostingExtra
   }, 0)
   const projectRegularRpSum = allClientRpRows
@@ -525,7 +540,13 @@ Client profile:
   const expiringDomains = clientDomains.filter(d => daysUntil(d.expiry_date) <= 30 && daysUntil(d.expiry_date) >= 0)
   const endingMaintenances = maintenances.filter(m => m.status === 'active' && m.contract_end && daysUntil(m.contract_end) <= 30 && daysUntil(m.contract_end) >= 0)
 
-  const activeCount = activeProjects.length
+  const activeCount =
+    activeProjects.length +
+    maintenances.filter(m => m.status === 'active').length +
+    hostingRows.length +
+    clientDomains.length +
+    otherIncomeRows.length +
+    activePipelineItems.length
 
   // ── pipeline forecast grouping ────────────────────────────────────────────
   const pipelineForecast = useMemo(() => {
@@ -1040,7 +1061,7 @@ Client profile:
                   <p className="m-0 text-[13px] text-muted-foreground">No summary yet.</p>
                 )}
                 <button
-                  onClick={() => { localStorage.removeItem(`ai_client_summary_${id}`); setAiSummary(null); setAiIdeas([]) }}
+                  onClick={() => { localStorage.removeItem(`ai_client_summary_v4_${id}`); setAiSummary(null); setAiIdeas([]); setAiTrigger(t => t + 1) }}
                   className="mt-[10px] bg-transparent border-none cursor-pointer text-[11px] text-muted-foreground p-0"
                 >↻ Regenerate</button>
               </div>
@@ -1266,7 +1287,7 @@ Client profile:
               </thead>
               <tbody>
                 {hostingRows.map((h: HostingClient) => {
-                  const totalVal = hostingContractValue(h)
+                  const totalVal = hostingAnnualValue(h)
                   return (
                     <tr key={h.id}>
                       <td><Badge variant="blue">Hosting</Badge></td>
@@ -1313,7 +1334,7 @@ Client profile:
                 {(hostingRows.length > 0 || clientDomains.length > 0) && (
                   <tr className="bg-gray-50 border-t-2 border-border">
                     <td colSpan={5} className="font-bold text-xs text-muted-foreground tracking-[0.05em]">TOTAL VALUE / YEAR</td>
-                    <td className="text-right font-bold text-primary text-sm">{fmtEuro(hostingRows.reduce((s, h) => s + hostingContractValue(h), 0) + domainsAnnual)}</td>
+                    <td className="text-right font-bold text-primary text-sm">{fmtEuro(hostingRows.reduce((s, h) => s + hostingAnnualValue(h), 0) + domainsAnnual)}</td>
                     <td colSpan={3} />
                   </tr>
                 )}
@@ -1329,7 +1350,7 @@ Client profile:
     const retainerValue = maintenances.filter(m => m.status === 'active').reduce((s, m) => s + m.monthly_retainer * maintMonthsThisYear(m), 0)
     const hostingValue = maintenances.filter(m => m.status === 'active').reduce((s, m) => {
       const linked = infraStore.hostingClients.find(h => h.maintenance_id === m.id)
-      return s + (linked ? hostingContractValue(linked) : 0)
+      return s + (linked ? hostingAnnualValue(linked) : 0)
     }, 0)
     const extraBilled = allClientRpRows
       .filter(r => r.maintenance_id != null && (r.status === 'issued' || r.status === 'paid'))

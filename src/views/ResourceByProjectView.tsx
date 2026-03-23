@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { Button } from '@/components/ui/button'
 import type { ResourceAllocation } from '../lib/types'
 
 /* ── types ─────────────────────────────────────────────────────── */
@@ -113,22 +114,17 @@ function SegmentedToggle<T extends string>({
   onChange: (v: T) => void
 }) {
   return (
-    <div style={{ display: 'flex', background: 'var(--c6)', borderRadius: 8, padding: 3, gap: 2 }}>
+    <div className="flex bg-[var(--c6)] rounded-lg p-[3px] gap-0.5">
       {options.map(opt => (
         <button
           key={opt}
           onClick={() => onChange(opt)}
-          style={{
-            padding: '5px 14px',
-            borderRadius: 6,
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: 13,
-            fontWeight: 500,
-            background: value === opt ? '#fff' : 'transparent',
-            color: value === opt ? 'var(--c0)' : 'var(--c3)',
-            boxShadow: value === opt ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-          }}
+          className={[
+            'px-[14px] py-[5px] rounded border-none cursor-pointer text-[13px] font-medium transition-all',
+            value === opt
+              ? 'bg-white text-[var(--c0)] shadow-sm'
+              : 'bg-transparent text-[var(--c3)]',
+          ].join(' ')}
         >
           {labels[opt]}
         </button>
@@ -277,28 +273,19 @@ export function ResourceByProjectView() {
   const colHeader = (col: string) =>
     timeMode === 'weekly' ? dayColLabel(col) : weekColLabel(col)
 
-  /* ── shared cell style ────────────────────────────────────────── */
-  const thStyle: React.CSSProperties = {
-    padding: '10px 12px',
-    textAlign: 'center',
-    borderBottom: '2px solid var(--c5)',
-    minWidth: 90,
-    color: 'var(--c2)',
-    fontWeight: 600,
-    fontSize: 12,
-    background: 'var(--c7)',
-  }
+  /* ── shared th classes ────────────────────────────────────────── */
+  const thClass = 'px-3 py-[10px] text-center border-b-2 border-border min-w-[90px] text-[var(--c2)] font-semibold text-xs bg-[var(--c7)]'
 
   return (
-    <div className="page-content">
-      <div className="page-header">
+    <div className="flex-1 overflow-auto p-6">
+      <div className="flex items-center justify-between px-6 py-4 bg-background border-b border-border -mx-6 -mt-6 mb-6">
         <div>
           <h1>{viewMode === 'project' ? 'By Project' : 'By People'}</h1>
-          <p style={{ color: 'var(--c3)', fontSize: 13, margin: 0 }}>
+          <p className="text-muted-foreground text-[13px] m-0">
             Allocation grouped by {viewMode === 'project' ? 'project' : 'team member'}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div className="flex gap-2 items-center">
           <SegmentedToggle<ViewMode>
             value={viewMode}
             options={['project', 'people']}
@@ -311,8 +298,9 @@ export function ResourceByProjectView() {
             labels={{ weekly: 'Weekly', monthly: 'Monthly' }}
             onChange={setTimeMode}
           />
-          <button
-            className="btn btn-ghost btn-sm"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() =>
               timeMode === 'weekly'
                 ? setWeekOffset(o => o - 1)
@@ -320,12 +308,13 @@ export function ResourceByProjectView() {
             }
           >
             ← Prev
-          </button>
-          <span style={{ fontWeight: 600, minWidth: 180, textAlign: 'center' }}>
+          </Button>
+          <span className="font-semibold min-w-[180px] text-center">
             {periodLabel}
           </span>
-          <button
-            className="btn btn-ghost btn-sm"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() =>
               timeMode === 'weekly'
                 ? setWeekOffset(o => o + 1)
@@ -334,78 +323,59 @@ export function ResourceByProjectView() {
             disabled={timeMode === 'weekly' ? weekOffset >= 0 : monthOffset >= 0}
           >
             Next →
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Stats strip */}
-      <div className="stats-strip">
-        <div className="stat-card">
-          <div className="stat-card-label">
+      <div className="grid grid-cols-4 gap-3 mb-4">
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">
             {viewMode === 'project' ? 'Total Projects' : 'Total Members'}
           </div>
-          <div className="stat-card-value">
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">
             {viewMode === 'project' ? totalProjects : totalMembers}
           </div>
-          <div className="stat-card-sub">with allocations</div>
+          <div className="text-xs text-muted-foreground mt-1">with allocations</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-card-label">Total Hours</div>
-          <div className="stat-card-value">{totalHours}h</div>
-          <div className="stat-card-sub">
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Total Hours</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{totalHours}h</div>
+          <div className="text-xs text-muted-foreground mt-1">
             {viewMode === 'project' ? 'project time' : 'team time'}
           </div>
         </div>
-        <div className="stat-card">
-          <div className="stat-card-label">Period</div>
-          <div className="stat-card-value" style={{ fontSize: 14 }}>
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Period</div>
+          <div className="text-sm font-extrabold tracking-[-0.5px] mt-2 text-foreground">
             {timeMode === 'weekly' ? 'Weekly' : 'Monthly'}
           </div>
-          <div className="stat-card-sub">{statLabel}</div>
+          <div className="text-xs text-muted-foreground mt-1">{statLabel}</div>
         </div>
       </div>
 
       {loading ? (
-        <p style={{ color: 'var(--c3)', padding: '8px 0' }}>Loading...</p>
+        <p className="text-muted-foreground py-2">Loading...</p>
       ) : (
-        <div className="card" style={{ overflowX: 'auto' }}>
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-x-auto">
           {isEmpty ? (
-            <div
-              style={{
-                padding: '40px 20px',
-                textAlign: 'center',
-                color: 'var(--c4)',
-                fontSize: 15,
-              }}
-            >
+            <div className="py-10 px-5 text-center text-muted-foreground text-[15px]">
               {emptyText}
             </div>
           ) : viewMode === 'project' ? (
             /* ── BY PROJECT TABLE ─────────────────────────────────── */
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <table className="w-full border-collapse text-[13px]">
               <thead>
                 <tr>
-                  <th
-                    style={{
-                      ...thStyle,
-                      textAlign: 'left',
-                      borderBottom: '2px solid var(--c5)',
-                      minWidth: 180,
-                    }}
-                  >
+                  <th className={`${thClass} text-left min-w-[180px]`}>
                     Project
                   </th>
                   {columns.map(col => (
-                    <th key={col} style={thStyle}>
+                    <th key={col} className={thClass}>
                       {colHeader(col)}
                     </th>
                   ))}
-                  <th
-                    style={{
-                      ...thStyle,
-                      textAlign: 'right',
-                    }}
-                  >
+                  <th className={`${thClass} text-right`}>
                     Total
                   </th>
                 </tr>
@@ -414,24 +384,14 @@ export function ResourceByProjectView() {
                 {projectRows.map((row, idx) => (
                   <tr
                     key={row.id}
-                    style={{
-                      borderBottom: idx < projectRows.length - 1 ? '1px solid var(--c6)' : 'none',
-                      background: idx % 2 === 1 ? 'var(--c7)' : undefined,
-                    }}
+                    className={`${idx % 2 === 1 ? 'bg-[var(--c7)]' : ''} ${idx < projectRows.length - 1 ? 'border-b border-[var(--c6)]' : ''}`}
                   >
-                    <td style={{ padding: '10px 14px' }}>
-                      <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--c0)' }}>
+                    <td className="px-[14px] py-[10px]">
+                      <div className="font-bold text-[13px] text-[var(--c0)]">
                         {row.name}
                       </div>
                       {row.pn && (
-                        <div
-                          style={{
-                            fontSize: 11,
-                            color: 'var(--navy)',
-                            fontFamily: 'monospace',
-                            marginTop: 2,
-                          }}
-                        >
+                        <div className="text-[11px] text-primary mt-0.5">
                           {row.pn}
                         </div>
                       )}
@@ -442,62 +402,36 @@ export function ResourceByProjectView() {
                       return (
                         <td
                           key={col}
-                          style={{ padding: '8px 10px', textAlign: 'center', verticalAlign: 'top' }}
+                          className="px-[10px] py-2 text-center align-top"
                         >
                           {hrs > 0 ? (
                             <div>
                               <div
-                                style={{
-                                  display: 'inline-block',
-                                  padding: '4px 10px',
-                                  borderRadius: 6,
-                                  background: 'var(--navy-light)',
-                                  color: 'var(--navy)',
-                                  fontWeight: 700,
-                                  fontSize: 13,
-                                  marginBottom: names.length > 0 ? 4 : 0,
-                                }}
+                                className={`inline-block px-[10px] py-1 rounded bg-[var(--navy-light)] text-primary font-bold text-[13px]${names.length > 0 ? ' mb-1' : ''}`}
                               >
                                 {hrs}h
                               </div>
                               {names.length > 0 && (
-                                <div
-                                  style={{ fontSize: 10, color: 'var(--c3)', lineHeight: 1.4 }}
-                                >
+                                <div className="text-[10px] text-muted-foreground leading-[1.4]">
                                   {names.join(', ')}
                                 </div>
                               )}
                             </div>
                           ) : (
-                            <span style={{ color: 'var(--c5)', fontSize: 14 }}>—</span>
+                            <span className="text-[var(--c5)] text-sm">—</span>
                           )}
                         </td>
                       )
                     })}
-                    <td
-                      style={{
-                        padding: '10px 14px',
-                        textAlign: 'right',
-                        fontWeight: 800,
-                        fontSize: 14,
-                        color: 'var(--c0)',
-                      }}
-                    >
+                    <td className="px-[14px] py-[10px] text-right font-extrabold text-sm text-[var(--c0)]">
                       {row.total}h
                     </td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
-                <tr style={{ borderTop: '2px solid var(--c5)', background: 'var(--c7)' }}>
-                  <td
-                    style={{
-                      padding: '8px 14px',
-                      fontWeight: 700,
-                      fontSize: 13,
-                      color: 'var(--c2)',
-                    }}
-                  >
+                <tr className="border-t-2 border-border bg-[var(--c7)]">
+                  <td className="px-[14px] py-2 font-bold text-[13px] text-[var(--c2)]">
                     Total
                   </td>
                   {columns.map(col => {
@@ -511,27 +445,13 @@ export function ResourceByProjectView() {
                     return (
                       <td
                         key={col}
-                        style={{
-                          padding: '8px 12px',
-                          textAlign: 'center',
-                          fontWeight: 700,
-                          fontSize: 13,
-                          color: 'var(--c1)',
-                        }}
+                        className="px-3 py-2 text-center font-bold text-[13px] text-[var(--c1)]"
                       >
                         {colTotal > 0 ? `${colTotal}h` : '—'}
                       </td>
                     )
                   })}
-                  <td
-                    style={{
-                      padding: '8px 14px',
-                      textAlign: 'right',
-                      fontWeight: 800,
-                      fontSize: 14,
-                      color: 'var(--c0)',
-                    }}
-                  >
+                  <td className="px-[14px] py-2 text-right font-extrabold text-sm text-[var(--c0)]">
                     {totalHours}h
                   </td>
                 </tr>
@@ -539,30 +459,18 @@ export function ResourceByProjectView() {
             </table>
           ) : (
             /* ── BY PEOPLE TABLE ──────────────────────────────────── */
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <table className="w-full border-collapse text-[13px]">
               <thead>
                 <tr>
-                  <th
-                    style={{
-                      ...thStyle,
-                      textAlign: 'left',
-                      borderBottom: '2px solid var(--c5)',
-                      minWidth: 160,
-                    }}
-                  >
+                  <th className={`${thClass} text-left min-w-[160px]`}>
                     Member
                   </th>
                   {columns.map(col => (
-                    <th key={col} style={thStyle}>
+                    <th key={col} className={thClass}>
                       {colHeader(col)}
                     </th>
                   ))}
-                  <th
-                    style={{
-                      ...thStyle,
-                      textAlign: 'right',
-                    }}
-                  >
+                  <th className={`${thClass} text-right`}>
                     Total
                   </th>
                 </tr>
@@ -571,13 +479,10 @@ export function ResourceByProjectView() {
                 {peopleRows.map((row, idx) => (
                   <tr
                     key={row.id}
-                    style={{
-                      borderBottom: idx < peopleRows.length - 1 ? '1px solid var(--c6)' : 'none',
-                      background: idx % 2 === 1 ? 'var(--c7)' : undefined,
-                    }}
+                    className={`${idx % 2 === 1 ? 'bg-[var(--c7)]' : ''} ${idx < peopleRows.length - 1 ? 'border-b border-[var(--c6)]' : ''}`}
                   >
-                    <td style={{ padding: '10px 14px' }}>
-                      <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--c0)' }}>
+                    <td className="px-[14px] py-[10px]">
+                      <div className="font-bold text-[13px] text-[var(--c0)]">
                         {row.name}
                       </div>
                     </td>
@@ -587,62 +492,36 @@ export function ResourceByProjectView() {
                       return (
                         <td
                           key={col}
-                          style={{ padding: '8px 10px', textAlign: 'center', verticalAlign: 'top' }}
+                          className="px-[10px] py-2 text-center align-top"
                         >
                           {hrs > 0 ? (
                             <div>
                               <div
-                                style={{
-                                  display: 'inline-block',
-                                  padding: '4px 10px',
-                                  borderRadius: 6,
-                                  background: 'var(--navy-light)',
-                                  color: 'var(--navy)',
-                                  fontWeight: 700,
-                                  fontSize: 13,
-                                  marginBottom: projects.length > 0 ? 4 : 0,
-                                }}
+                                className={`inline-block px-[10px] py-1 rounded bg-[var(--navy-light)] text-primary font-bold text-[13px]${projects.length > 0 ? ' mb-1' : ''}`}
                               >
                                 {hrs}h
                               </div>
                               {projects.length > 0 && (
-                                <div
-                                  style={{ fontSize: 10, color: 'var(--c3)', lineHeight: 1.4 }}
-                                >
+                                <div className="text-[10px] text-muted-foreground leading-[1.4]">
                                   {projects.join(', ')}
                                 </div>
                               )}
                             </div>
                           ) : (
-                            <span style={{ color: 'var(--c5)', fontSize: 14 }}>—</span>
+                            <span className="text-[var(--c5)] text-sm">—</span>
                           )}
                         </td>
                       )
                     })}
-                    <td
-                      style={{
-                        padding: '10px 14px',
-                        textAlign: 'right',
-                        fontWeight: 800,
-                        fontSize: 14,
-                        color: 'var(--c0)',
-                      }}
-                    >
+                    <td className="px-[14px] py-[10px] text-right font-extrabold text-sm text-[var(--c0)]">
                       {row.total}h
                     </td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
-                <tr style={{ borderTop: '2px solid var(--c5)', background: 'var(--c7)' }}>
-                  <td
-                    style={{
-                      padding: '8px 14px',
-                      fontWeight: 700,
-                      fontSize: 13,
-                      color: 'var(--c2)',
-                    }}
-                  >
+                <tr className="border-t-2 border-border bg-[var(--c7)]">
+                  <td className="px-[14px] py-2 font-bold text-[13px] text-[var(--c2)]">
                     Total
                   </td>
                   {columns.map(col => {
@@ -656,27 +535,13 @@ export function ResourceByProjectView() {
                     return (
                       <td
                         key={col}
-                        style={{
-                          padding: '8px 12px',
-                          textAlign: 'center',
-                          fontWeight: 700,
-                          fontSize: 13,
-                          color: 'var(--c1)',
-                        }}
+                        className="px-3 py-2 text-center font-bold text-[13px] text-[var(--c1)]"
                       >
                         {colTotal > 0 ? `${colTotal}h` : '—'}
                       </td>
                     )
                   })}
-                  <td
-                    style={{
-                      padding: '8px 14px',
-                      textAlign: 'right',
-                      fontWeight: 800,
-                      fontSize: 14,
-                      color: 'var(--c0)',
-                    }}
-                  >
+                  <td className="px-[14px] py-2 text-right font-extrabold text-sm text-[var(--c0)]">
                     {totalHours}h
                   </td>
                 </tr>

@@ -4,6 +4,9 @@ import { supabase } from '../lib/supabase'
 import type { TeamMember, ResourceAllocation, ResourceConfirmation, AllocationCategory } from '../lib/types'
 import { generatePPSCsv, downloadCsv } from '../lib/exportPPS'
 import { toast } from '../lib/toast'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Modal } from '../components/Modal'
 
 // ─── Utility functions ────────────────────────────────────────────────────────
 
@@ -57,32 +60,40 @@ function DayPill({ dateStr, label, hours, capacity, status, isSelected, isToday,
   onClick: () => void
 }) {
   const pct = Math.min(1, capacity > 0 ? hours / capacity : 0)
-  const barColor = status === 'confirmed' ? 'var(--green)' : status === 'delayed' ? 'var(--amber)' : isToday ? 'var(--navy)' : 'var(--c5)'
-  const borderLeft = status === 'confirmed' ? '3px solid var(--green)' : status === 'delayed' ? '3px solid var(--amber)' : isToday ? '3px solid var(--navy)' : '3px solid transparent'
+  const barColor =
+    status === 'confirmed' ? 'var(--green)'
+    : status === 'delayed' ? 'var(--amber)'
+    : isToday ? 'var(--navy)'
+    : 'var(--c5)'
+  const borderLeftColor =
+    status === 'confirmed' ? 'var(--green)'
+    : status === 'delayed' ? 'var(--amber)'
+    : isToday ? 'var(--navy)'
+    : 'transparent'
+
   return (
     <div
       onClick={onClick}
-      style={{
-        padding: '9px 10px', borderRadius: 8, cursor: 'pointer', marginBottom: 4,
-        background: isSelected ? 'var(--navy-light)' : 'transparent',
-        border: isSelected ? '1.5px solid var(--navy-muted)' : '1.5px solid transparent',
-        borderLeft: isSelected ? '1.5px solid var(--navy-muted)' : borderLeft,
-        transition: 'all 0.12s',
-      }}
+      className={`px-[10px] py-[9px] rounded-lg cursor-pointer mb-1 transition-all ${
+        isSelected
+          ? 'bg-[var(--navy-light)] border-[1.5px] border-[var(--navy-muted)]'
+          : 'bg-transparent border-[1.5px] border-transparent'
+      }`}
+      style={{ borderLeftColor: isSelected ? 'var(--navy-muted)' : borderLeftColor, borderLeftWidth: '3px' }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div className="flex justify-between items-start">
         <div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: isToday ? 'var(--navy)' : 'var(--c1)' }}>{label}</div>
-          <div style={{ fontSize: 10, color: 'var(--c3)', marginTop: 1 }}>{dateStr}{isToday ? ' · Today' : ''}</div>
+          <div className={`text-xs font-bold ${isToday ? 'text-primary' : 'text-[var(--c1)]'}`}>{label}</div>
+          <div className="text-[10px] text-muted-foreground mt-[1px]">{dateStr}{isToday ? ' · Today' : ''}</div>
         </div>
-        {status === 'confirmed' && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--green)' }}>✓</span>}
-        {status === 'delayed' && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--amber)' }}>⚠</span>}
+        {status === 'confirmed' && <span className="text-[10px] font-bold text-[#16a34a]">✓</span>}
+        {status === 'delayed' && <span className="text-[10px] font-bold text-[#d97706]">⚠</span>}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 5 }}>
-        <div style={{ flex: 1, height: 3, background: 'var(--c6)', borderRadius: 2 }}>
+      <div className="flex items-center gap-[5px] mt-[5px]">
+        <div className="flex-1 h-[3px] bg-[var(--c6)] rounded-sm">
           <div style={{ width: `${pct * 100}%`, height: 3, borderRadius: 2, background: barColor }} />
         </div>
-        <span style={{ fontSize: 10, color: hours > capacity ? 'var(--red)' : 'var(--c3)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+        <span className={`text-[10px] font-semibold whitespace-nowrap ${hours > capacity ? 'text-[#dc2626]' : 'text-muted-foreground'}`}>
           {hours}h{hours > capacity ? '!' : ''}
         </span>
       </div>
@@ -99,7 +110,7 @@ function HourChips({ planned, actual, onChange }: { planned: number; actual: num
   }
   const unique = [...new Set(options)]
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
+    <div className="flex flex-wrap gap-[5px] mt-2">
       {unique.map(h => {
         const isSelected = h === actual
         const isPlanned = h === planned
@@ -110,10 +121,12 @@ function HourChips({ planned, actual, onChange }: { planned: number; actual: num
         else if (isSelected && isLess) { bg = 'var(--amber-bg)'; color = 'var(--amber)'; border = 'var(--amber-border)' }
         else if (isSelected && isMore) { bg = 'var(--blue-bg)'; color = 'var(--blue)'; border = 'var(--blue-border)' }
         return (
-          <button key={h} onClick={() => onChange(h)} style={{
-            padding: '5px 12px', borderRadius: 100, fontSize: 12, fontWeight: 700,
-            border: `1.5px solid ${border}`, background: bg, color, cursor: 'pointer', fontFamily: 'inherit',
-          }}>
+          <button
+            key={h}
+            onClick={() => onChange(h)}
+            className="px-3 py-[5px] rounded-full text-xs font-bold cursor-pointer"
+            style={{ border: `1.5px solid ${border}`, background: bg, color, fontFamily: 'inherit' }}
+          >
             {h}h{isPlanned && !isSelected ? ' ✓' : ''}
           </button>
         )
@@ -232,11 +245,11 @@ export function MyWeekView() {
 
   async function markDelayed(date: string) {
     if (!member) return
-    const { error } = await supabase.from('resource_confirmations').upsert(
+    const { error: delayErr } = await supabase.from('resource_confirmations').upsert(
       { member_id: member.id, date, status: 'delayed', delay_reason: null },
       { onConflict: 'member_id,date' }
     )
-    if (error) { toast('error', 'Failed to save: ' + error.message); return }
+    if (delayErr) { toast('error', 'Failed to save: ' + delayErr.message); return }
     setConfirmations(prev => [
       ...prev.filter(c => c.date !== date),
       { id: '', member_id: member.id, date, status: 'delayed', delay_reason: null, confirmed_at: new Date().toISOString() },
@@ -315,10 +328,10 @@ export function MyWeekView() {
     setEodLoading(false)
   }
 
-  async function fetchAiAdvice(selectedAllocs: ResourceAllocation[], snapDate: string) {
+  async function fetchAiAdvice(selectedAllocsArg: ResourceAllocation[], snapDate: string) {
     if (!member) return
     setAiLoading(true)
-    const today_tasks = selectedAllocs.map(a => ({
+    const today_tasks = selectedAllocsArg.map(a => ({
       id: a.id,
       project_name: a.project?.name ?? a.label ?? a.category,
       category: a.category,
@@ -466,17 +479,17 @@ export function MyWeekView() {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg)', fontFamily: "'Figtree', sans-serif" }}>
-        <div style={{ fontSize: 14, color: 'var(--c3)', fontWeight: 600 }}>Loading your week…</div>
+      <div className="flex items-center justify-center h-screen bg-[var(--bg)]">
+        <div className="text-sm text-muted-foreground font-semibold">Loading your week…</div>
       </div>
     )
   }
   if (error || !member) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg)', fontFamily: "'Figtree', sans-serif" }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--c0)', marginBottom: 8 }}>Link not found</div>
-          <div style={{ fontSize: 14, color: 'var(--c3)' }}>{error ?? 'This link may be invalid or expired.'}</div>
+      <div className="flex items-center justify-center h-screen bg-[var(--bg)]">
+        <div className="text-center">
+          <div className="text-lg font-extrabold text-foreground mb-2">Link not found</div>
+          <div className="text-sm text-muted-foreground">{error ?? 'This link may be invalid or expired.'}</div>
         </div>
       </div>
     )
@@ -487,93 +500,75 @@ export function MyWeekView() {
   const initials = member.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
 
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: '220px 1fr 280px',
-      gridTemplateRows: '52px 1fr',
-      height: '100vh',
-      background: 'var(--bg)',
-      fontFamily: "'Figtree', sans-serif",
-      overflow: 'hidden',
-    }}>
+    <div
+      className="grid h-screen bg-[var(--bg)] overflow-hidden"
+      style={{ gridTemplateColumns: '220px 1fr 280px', gridTemplateRows: '52px 1fr', fontFamily: "'Figtree', sans-serif" }}
+    >
 
       {/* ── TOPBAR ─────────────────────────────────────────────────────────── */}
-      <div style={{
-        gridColumn: '1 / -1',
-        gridRow: '1',
-        background: '#fff',
-        borderBottom: '1px solid var(--c6)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0 18px',
-        gap: 12,
-      }}>
+      <div
+        className="flex items-center justify-between bg-white border-b border-[var(--c6)] px-[18px] gap-3"
+        style={{ gridColumn: '1 / -1', gridRow: '1' }}
+      >
         {/* Left: avatar + greeting + week nav */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: '50%',
-            background: 'var(--navy)', color: '#fff',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 11, fontWeight: 800, flexShrink: 0,
-          }}>{initials}</div>
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-[11px] font-extrabold flex-shrink-0">
+            {initials}
+          </div>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--c0)', lineHeight: 1.2 }}>Hi, {firstName}</div>
-            <div style={{ fontSize: 10, color: 'var(--c3)', lineHeight: 1.2 }}>
+            <div className="text-sm font-extrabold text-foreground leading-tight">Hi, {firstName}</div>
+            <div className="text-[10px] text-muted-foreground leading-tight">
               {new Date(today + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
             </div>
           </div>
-          <div style={{ width: 1, height: 24, background: 'var(--c6)', margin: '0 4px' }} />
+          <div className="w-px h-6 bg-[var(--c6)] mx-1" />
           {/* Week nav */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <button
-              className="btn btn-ghost btn-xs"
+          <div className="flex items-center gap-[6px]">
+            <Button
+              variant="ghost"
+              size="xs"
               onClick={() => {
                 const m = getOffsetMonday(weekOffset - 1)
                 setWeekOffset(w => w - 1)
                 setSelectedDate(getWeekDays(m)[0])
               }}
-            >← Prev</button>
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--c2)', minWidth: 110, textAlign: 'center' }}>
+            >← Prev</Button>
+            <span className="text-xs font-semibold text-[var(--c2)] min-w-[110px] text-center">
               {formatWeekRange(weekStart)}
             </span>
-            <button
-              className="btn btn-ghost btn-xs"
-              disabled={false}
-              style={{ opacity: 1, cursor: 'pointer' }}
+            <Button
+              variant="ghost"
+              size="xs"
               onClick={() => {
                 const m = getOffsetMonday(weekOffset + 1)
                 setWeekOffset(w => w + 1)
                 setSelectedDate(getWeekDays(m)[0])
               }}
-            >Next →</button>
+            >Next →</Button>
           </div>
         </div>
 
         {/* Right: actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button className="btn btn-ghost btn-sm" onClick={handleExportPPS}>Export PPS</button>
-          <button
-            className="btn btn-sm"
-            style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1.5px solid var(--red-border)' }}
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={handleExportPPS}>Export PPS</Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-[var(--red-border)] bg-[var(--red-bg)] text-[var(--red)] hover:bg-[var(--red-bg)]"
             onClick={() => { setShowUnplanned(true); setUnplannedQuery('leave') }}
           >
             🤒 Report sick
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* ── LEFT SIDEBAR ───────────────────────────────────────────────────── */}
-      <div style={{
-        gridColumn: '1',
-        gridRow: '2',
-        background: '#fff',
-        borderRight: '1px solid var(--c6)',
-        overflowY: 'auto',
-        padding: '12px 10px',
-      }}>
+      <div
+        className="bg-white border-r border-[var(--c6)] overflow-y-auto px-[10px] py-3"
+        style={{ gridColumn: '1', gridRow: '2' }}
+      >
         {/* This week label */}
-        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, paddingLeft: 2 }}>
+        <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.08em] mb-[6px] pl-[2px]">
           This week
         </div>
 
@@ -597,10 +592,10 @@ export function MyWeekView() {
         })}
 
         {/* Divider */}
-        <div style={{ height: 1, background: 'var(--c6)', margin: '10px 0' }} />
+        <div className="h-px bg-[var(--c6)] my-[10px]" />
 
         {/* Team section */}
-        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6, paddingLeft: 2 }}>
+        <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.08em] mb-[6px] pl-[2px]">
           Team
         </div>
 
@@ -608,38 +603,30 @@ export function MyWeekView() {
           const status = getTeamMemberStatus(tm.id, weekDays, teamAllocations, tm.hours_per_day)
           const tmInitials = tm.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
           return (
-            <div key={tm.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 4px', borderRadius: 6 }}>
-              <div style={{
-                width: 24, height: 24, borderRadius: '50%',
-                background: 'var(--navy)', color: '#fff',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 9, fontWeight: 800, flexShrink: 0,
-              }}>{tmInitials}</div>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--c1)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tm.name}</span>
-              {status === 'ok' && <span className="badge badge-green" style={{ fontSize: 9, padding: '2px 6px' }}>ok</span>}
-              {status === 'busy' && <span className="badge badge-amber" style={{ fontSize: 9, padding: '2px 6px' }}>busy</span>}
-              {status === 'light' && <span className="badge badge-gray" style={{ fontSize: 9, padding: '2px 6px' }}>light</span>}
+            <div key={tm.id} className="flex items-center gap-2 px-1 py-[6px] rounded">
+              <div className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center text-[9px] font-extrabold flex-shrink-0">
+                {tmInitials}
+              </div>
+              <span className="text-xs font-semibold text-[var(--c1)] flex-1 truncate">{tm.name}</span>
+              {status === 'ok' && <Badge variant="green" className="text-[9px] px-[6px] py-[2px]">ok</Badge>}
+              {status === 'busy' && <Badge variant="amber" className="text-[9px] px-[6px] py-[2px]">busy</Badge>}
+              {status === 'light' && <Badge variant="gray" className="text-[9px] px-[6px] py-[2px]">light</Badge>}
             </div>
           )
         })}
       </div>
 
       {/* ── MAIN PANEL ─────────────────────────────────────────────────────── */}
-      <div style={{
-        gridColumn: '2',
-        gridRow: '2',
-        overflowY: 'auto',
-        padding: '20px 24px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 16,
-      }}>
+      <div
+        className="overflow-y-auto px-6 py-5 flex flex-col gap-4"
+        style={{ gridColumn: '2', gridRow: '2' }}
+      >
         {/* Day title */}
         <div>
-          <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.4px', color: 'var(--c0)' }}>
+          <div className="text-xl font-extrabold tracking-tight text-foreground">
             {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
           </div>
-          <div style={{ fontSize: 13, color: 'var(--c3)', marginTop: 2 }}>
+          <div className="text-[13px] text-muted-foreground mt-[2px]">
             {isConfirmed
               ? '✓ Day confirmed'
               : selectedConf?.status === 'delayed'
@@ -653,47 +640,41 @@ export function MyWeekView() {
         </div>
 
         {/* Stats strip */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+        <div className="grid grid-cols-4 gap-[10px]">
           {[
-            { label: 'Confirmed hours', value: `${weekConfirmedHours}h`, color: 'var(--c0)' },
-            { label: 'Today planned', value: `${todayHours}h`, color: todayHours > capacity ? 'var(--red)' : 'var(--c0)' },
-            { label: 'Billable %', value: `${billablePct}%`, color: 'var(--c0)' },
-            { label: 'Delayed days', value: `${delayedDaysCount}`, color: delayedDaysCount > 0 ? 'var(--red)' : 'var(--c0)' },
+            { label: 'Confirmed hours', value: `${weekConfirmedHours}h`, isRed: false },
+            { label: 'Today planned', value: `${todayHours}h`, isRed: todayHours > capacity },
+            { label: 'Billable %', value: `${billablePct}%`, isRed: false },
+            { label: 'Delayed days', value: `${delayedDaysCount}`, isRed: delayedDaysCount > 0 },
           ].map(stat => (
-            <div key={stat.label} style={{
-              background: 'rgba(255,255,255,0.7)',
-              backdropFilter: 'blur(12px)',
-              border: '1px solid var(--c6)',
-              borderRadius: 10,
-              padding: '10px 14px',
-            }}>
-              <div style={{ fontSize: 10, color: 'var(--c3)', fontWeight: 600, marginBottom: 4 }}>{stat.label}</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: stat.color }}>{stat.value}</div>
+            <div key={stat.label} className="bg-white/70 backdrop-blur-sm border border-[var(--c6)] rounded-[10px] px-[14px] py-[10px]">
+              <div className="text-[10px] text-muted-foreground font-semibold mb-1">{stat.label}</div>
+              <div className={`text-xl font-extrabold ${stat.isRed ? 'text-[#dc2626]' : 'text-foreground'}`}>{stat.value}</div>
             </div>
           ))}
         </div>
 
         {/* Weekly project progress */}
         {weekProjectProgress.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          <div className="flex flex-col gap-[6px]">
+            <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-[0.08em]">
               This week — project progress
             </div>
             {weekProjectProgress.map(g => {
               const remaining = Math.max(0, g.planned - g.done)
               const pct = g.planned > 0 ? Math.min(1, g.done / g.planned) : 0
               return (
-                <div key={g.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--c1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.label}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
-                      <div style={{ flex: 1, height: 4, background: 'var(--c6)', borderRadius: 2 }}>
+                <div key={g.key} className="flex items-center gap-[10px]">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-semibold text-[var(--c1)] truncate">{g.label}</div>
+                    <div className="flex items-center gap-[6px] mt-[3px]">
+                      <div className="flex-1 h-1 bg-[var(--c6)] rounded-sm">
                         <div style={{ width: `${pct * 100}%`, height: 4, borderRadius: 2, background: pct >= 1 ? 'var(--green)' : 'var(--navy)', transition: 'width .3s' }} />
                       </div>
-                      <span style={{ fontSize: 10, color: 'var(--c3)', whiteSpace: 'nowrap' }}>
+                      <span className="text-[10px] text-muted-foreground whitespace-nowrap">
                         {g.done}h / {g.planned}h
-                        {remaining > 0 && <span style={{ color: 'var(--amber)', fontWeight: 700 }}> · {remaining}h left</span>}
-                        {pct >= 1 && <span style={{ color: 'var(--green)', fontWeight: 700 }}> · done</span>}
+                        {remaining > 0 && <span className="text-[#d97706] font-bold"> · {remaining}h left</span>}
+                        {pct >= 1 && <span className="text-[#16a34a] font-bold"> · done</span>}
                       </span>
                     </div>
                   </div>
@@ -705,29 +686,20 @@ export function MyWeekView() {
 
         {/* EOD check-in / task view */}
         {isConfirmed ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{
-              background: 'var(--green-bg)', border: '1px solid var(--green-border)',
-              borderRadius: 10, padding: '10px 14px',
-              display: 'flex', alignItems: 'center', gap: 8,
-            }}>
-              <span style={{ fontSize: 16 }}>✓</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--green)' }}>Day confirmed</span>
+          <div className="flex flex-col gap-[10px]">
+            <div className="bg-[var(--green-bg)] border border-[var(--green-border)] rounded-[10px] px-[14px] py-[10px] flex items-center gap-2">
+              <span className="text-base">✓</span>
+              <span className="text-[13px] font-bold text-[#16a34a]">Day confirmed</span>
             </div>
             {weekProjectList.filter(g => g.todayPlanned > 0 || (projectDailyInputs[g.key] ?? 0) > 0).map(g => (
-              <div key={g.key} style={{
-                borderRadius: 10, border: '1px solid var(--c6)', padding: '10px 14px',
-                display: 'flex', alignItems: 'center', gap: 10,
-              }}>
-                <div style={{ width: 3, borderRadius: 3, background: 'var(--green)', flexShrink: 0, alignSelf: 'stretch' }} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--c0)' }}>{g.label}</div>
-                  <div style={{ fontSize: 11, color: 'var(--c3)', marginTop: 2 }}>
+              <div key={g.key} className="rounded-[10px] border border-[var(--c6)] px-[14px] py-[10px] flex items-center gap-[10px]">
+                <div className="w-[3px] rounded-sm bg-[#16a34a] flex-shrink-0 self-stretch" />
+                <div className="flex-1">
+                  <div className="text-[13px] font-bold text-foreground">{g.label}</div>
+                  <div className="text-[11px] text-muted-foreground mt-[2px]">
                     {projectDailyInputs[g.key] ?? g.todayPlanned}h confirmed
                     {g.todayPlanned > 0 && Math.abs((projectDailyInputs[g.key] ?? g.todayPlanned) - g.todayPlanned) > 0.1 && (
-                      <span style={{ marginLeft: 6, color: 'var(--amber)', fontWeight: 600 }}>
-                        (planned {g.todayPlanned}h)
-                      </span>
+                      <span className="ml-[6px] text-[#d97706] font-semibold">(planned {g.todayPlanned}h)</span>
                     )}
                   </div>
                 </div>
@@ -735,12 +707,12 @@ export function MyWeekView() {
             ))}
           </div>
         ) : isFutureDay ? (
-          <div style={{ fontSize: 13, color: 'var(--c3)', padding: '12px 0' }}>No check-in needed for future days.</div>
+          <div className="text-[13px] text-muted-foreground py-3">No check-in needed for future days.</div>
         ) : weekProjectList.length === 0 ? (
-          <div style={{ fontSize: 13, color: 'var(--c3)', padding: '12px 0' }}>No work planned for this day.</div>
+          <div className="text-[13px] text-muted-foreground py-3">No work planned for this day.</div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          <div className="flex flex-col gap-[10px]">
+            <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-[0.08em]">
               End of day check-in — how many hours did you work?
             </div>
 
@@ -750,30 +722,31 @@ export function MyWeekView() {
               const delta = actual - g.todayPlanned
               const isExtra = g.todayPlanned === 0
               return (
-                <div key={g.key} style={{
-                  borderRadius: 10,
-                  background: isExtra && actual > 0 ? 'var(--blue-bg)' : changed ? 'var(--amber-bg)' : '#fff',
-                  border: isExtra && actual > 0 ? '1px solid var(--blue-border)' : changed ? '1px solid var(--amber-border)' : '1px solid var(--c6)',
-                  padding: '12px 14px',
-                  display: 'flex',
-                  gap: 12,
-                }}>
+                <div
+                  key={g.key}
+                  className="rounded-[10px] px-[14px] py-3 flex gap-3"
+                  style={{
+                    background: isExtra && actual > 0 ? 'var(--blue-bg)' : changed ? 'var(--amber-bg)' : '#fff',
+                    border: isExtra && actual > 0 ? '1px solid var(--blue-border)' : changed ? '1px solid var(--amber-border)' : '1px solid var(--c6)',
+                  }}
+                >
                   <div style={{ width: 3, borderRadius: 3, background: isExtra ? 'var(--blue)' : 'var(--navy)', flexShrink: 0, alignSelf: 'stretch' }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--c0)' }}>{g.label}</span>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[13px] font-bold text-foreground">{g.label}</span>
                       {isExtra
-                        ? <span style={{ fontSize: 11, color: 'var(--blue)', fontWeight: 600 }}>not planned today</span>
-                        : <span style={{ fontSize: 11, color: 'var(--c3)' }}>Planned: {g.todayPlanned}h</span>
+                        ? <span className="text-[11px] text-primary font-semibold">not planned today</span>
+                        : <span className="text-[11px] text-muted-foreground">Planned: {g.todayPlanned}h</span>
                       }
                       {!isExtra && changed && (
-                        <span style={{
-                          fontSize: 11, fontWeight: 700,
-                          color: delta < 0 ? 'var(--amber)' : 'var(--blue)',
-                          background: delta < 0 ? 'var(--amber-bg)' : 'var(--blue-bg)',
-                          border: `1px solid ${delta < 0 ? 'var(--amber-border)' : 'var(--blue-border)'}`,
-                          borderRadius: 100, padding: '2px 8px',
-                        }}>
+                        <span
+                          className="text-[11px] font-bold rounded-full px-2 py-[2px]"
+                          style={{
+                            color: delta < 0 ? 'var(--amber)' : 'var(--blue)',
+                            background: delta < 0 ? 'var(--amber-bg)' : 'var(--blue-bg)',
+                            border: `1px solid ${delta < 0 ? 'var(--amber-border)' : 'var(--blue-border)'}`,
+                          }}
+                        >
                           {delta > 0 ? '+' : ''}{delta}h vs plan
                         </span>
                       )}
@@ -791,123 +764,99 @@ export function MyWeekView() {
             {/* Report unplanned trigger */}
             <div
               onClick={() => setShowUnplanned(true)}
-              style={{
-                borderRadius: 10, border: '1.5px dashed var(--red-border)',
-                padding: '10px 14px', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: 8,
-                color: 'var(--red)', fontSize: 12, fontWeight: 700,
-              }}
+              className="rounded-[10px] border-[1.5px] border-dashed border-[var(--red-border)] px-[14px] py-[10px] flex items-center gap-2 cursor-pointer text-[#dc2626] text-xs font-bold"
             >
               ⚡ Report unplanned work
             </div>
 
             {/* Submit row */}
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <button
-                className="btn btn-secondary btn-sm"
+            <div className="flex gap-2 items-center">
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => markDelayed(selectedDate)}
               >
                 Mark delayed
-              </button>
-              <button
-                className="btn btn-primary btn-sm"
+              </Button>
+              <Button
+                size="sm"
                 onClick={handleEodSubmit}
                 disabled={eodLoading}
               >
                 {eodLoading ? 'Saving…' : 'Submit →'}
-              </button>
+              </Button>
             </div>
           </div>
         )}
       </div>
 
       {/* ── RIGHT AI PANEL ─────────────────────────────────────────────────── */}
-      <div style={{
-        gridColumn: '3',
-        gridRow: '2',
-        borderLeft: '1px solid var(--c6)',
-        overflowY: 'auto',
-        padding: '16px 14px',
-        background: '#fff',
-      }}>
+      <div
+        className="border-l border-[var(--c6)] overflow-y-auto px-[14px] py-4 bg-white"
+        style={{ gridColumn: '3', gridRow: '2' }}
+      >
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 14 }}>
-          <div style={{
-            width: 28, height: 28, borderRadius: 6,
-            background: 'var(--navy)', color: '#fff',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 14, flexShrink: 0,
-          }}>✦</div>
+        <div className="flex items-start gap-2 mb-[14px]">
+          <div className="w-7 h-7 rounded bg-primary text-white flex items-center justify-center text-sm flex-shrink-0">✦</div>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--c0)' }}>AI Advisor</div>
-            <div style={{ fontSize: 11, color: 'var(--c3)' }}>Updates after check-in</div>
+            <div className="text-[13px] font-extrabold text-foreground">AI Advisor</div>
+            <div className="text-[11px] text-muted-foreground">Updates after check-in</div>
           </div>
         </div>
 
         {/* Team overload alert */}
         {teamOverloaded.length > 0 && (
-          <div style={{
-            background: 'var(--amber-bg)', border: '1px solid var(--amber-border)',
-            borderRadius: 8, padding: '10px 12px', marginBottom: 12,
-          }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--amber)', marginBottom: 4 }}>⚠ Team overload</div>
-            <div style={{ fontSize: 11, color: 'var(--c2)' }}>
+          <div className="bg-[var(--amber-bg)] border border-[var(--amber-border)] rounded-lg px-3 py-[10px] mb-3">
+            <div className="text-[11px] font-bold text-[#d97706] mb-1">⚠ Team overload</div>
+            <div className="text-[11px] text-[var(--c2)]">
               {teamOverloaded.map(tm => tm.name).join(', ')} {teamOverloaded.length === 1 ? 'is' : 'are'} at ≥90% capacity this week.
             </div>
           </div>
         )}
 
         {aiLoading && (
-          <div style={{
-            background: 'var(--navy-light)', borderRadius: 8,
-            padding: '12px 14px', marginBottom: 12,
-            display: 'flex', alignItems: 'center', gap: 8,
-          }}>
-            <span style={{ fontSize: 14, color: 'var(--navy)' }}>✦</span>
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--navy)' }}>Analyzing changes…</span>
+          <div className="bg-[var(--navy-light)] rounded-lg px-[14px] py-3 mb-3 flex items-center gap-2">
+            <span className="text-sm text-primary">✦</span>
+            <span className="text-xs font-semibold text-primary">Analyzing changes…</span>
           </div>
         )}
 
         {!aiLoading && aiOptions.length > 0 && (
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
+          <div className="mb-3">
+            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.08em] mb-2">
               Reschedule options
             </div>
             {aiOptions.map(opt => (
               <div
                 key={opt.id}
                 onClick={() => setSelectedAiOption(prev => prev === opt.id ? null : opt.id)}
+                className="rounded-lg px-3 py-[10px] mb-2 cursor-pointer transition-all"
                 style={{
-                  borderRadius: 8, padding: '10px 12px', marginBottom: 8, cursor: 'pointer',
                   border: selectedAiOption === opt.id ? '1.5px solid var(--navy-muted)' : '1px solid var(--c6)',
                   background: selectedAiOption === opt.id ? 'var(--navy-light)' : '#fff',
-                  transition: 'all 0.12s',
                 }}
               >
-                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--c0)', marginBottom: 2 }}>{opt.title}</div>
-                <div style={{ fontSize: 11, color: 'var(--c2)', marginBottom: 4 }}>{opt.description}</div>
-                <div style={{ fontSize: 10, color: 'var(--navy)', fontWeight: 600 }}>{opt.impact}</div>
+                <div className="text-xs font-bold text-foreground mb-[2px]">{opt.title}</div>
+                <div className="text-[11px] text-[var(--c2)] mb-1">{opt.description}</div>
+                <div className="text-[10px] text-primary font-semibold">{opt.impact}</div>
               </div>
             ))}
           </div>
         )}
 
         {!aiLoading && aiInsights.length > 0 && (
-          <div style={{ marginBottom: 12 }}>
+          <div className="mb-3">
             {aiInsights.map((ins, i) => (
-              <div key={i} style={{
-                background: 'var(--c7)', borderRadius: 8,
-                padding: '10px 12px', marginBottom: 8,
-              }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>{ins.label}</div>
-                <div style={{ fontSize: 12, color: 'var(--c1)' }}>{ins.text}</div>
+              <div key={i} className="bg-[var(--c7)] rounded-lg px-3 py-[10px] mb-2">
+                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.06em] mb-[3px]">{ins.label}</div>
+                <div className="text-xs text-[var(--c1)]">{ins.text}</div>
               </div>
             ))}
           </div>
         )}
 
         {!aiLoading && aiOptions.length === 0 && aiInsights.length === 0 && (
-          <div style={{ fontSize: 12, color: 'var(--c3)', lineHeight: 1.6 }}>
+          <div className="text-xs text-muted-foreground leading-relaxed">
             Complete your end-of-day check-in. If any hours differ from plan, AI will suggest reschedule.
           </div>
         )}
@@ -915,125 +864,82 @@ export function MyWeekView() {
 
       {/* ── UNPLANNED MODAL ─────────────────────────────────────────────────── */}
       {showUnplanned && (
-        <div
-          style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 1000,
-          }}
-          onClick={() => setShowUnplanned(false)}
+        <Modal
+          title="⚡ Report unplanned work"
+          onClose={() => setShowUnplanned(false)}
+          maxWidth={460}
+          footer={
+            <>
+              <Button variant="outline" size="sm" onClick={() => setShowUnplanned(false)}>Cancel</Button>
+              <Button size="sm" onClick={() => handleReportUnplanned('project')}>Log & save →</Button>
+            </>
+          }
         >
-          <div
-            style={{
-              background: '#fff', borderRadius: 14, width: 460,
-              maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
-            }}
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Modal header */}
-            <div style={{
-              padding: '16px 18px', borderBottom: '1px solid var(--c6)',
-              display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-            }}>
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--c0)' }}>⚡ Report unplanned work</div>
-                <div style={{ fontSize: 11, color: 'var(--c3)', marginTop: 2 }}>
-                  {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} · {member.name}
-                </div>
-              </div>
-              <button
-                onClick={() => setShowUnplanned(false)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: 'var(--c3)', lineHeight: 1 }}
-              >×</button>
-            </div>
-
-            <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {/* Smart search */}
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c2)', marginBottom: 6 }}>Project search</div>
-                <div style={{ position: 'relative' }}>
-                  <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--c3)', fontSize: 13 }}>🔍</span>
-                  <input
-                    type="text"
-                    placeholder="Search project..."
-                    value={unplannedQuery}
-                    onChange={e => { setUnplannedQuery(e.target.value); setUnplannedProject('') }}
-                    style={{
-                      width: '100%', padding: '8px 10px 8px 32px',
-                      borderRadius: 8, border: '1px solid var(--c6)',
-                      fontSize: 13, fontFamily: 'inherit', boxSizing: 'border-box',
-                    }}
-                    autoFocus
-                  />
-                </div>
-                <div style={{ fontSize: 10, color: 'var(--c4)', marginTop: 4 }}>AI matches to a project</div>
-
-                {unplannedQuery.trim() && matchedProject && (
-                  <div
-                    onClick={() => { setUnplannedProject(matchedProject.id); setUnplannedQuery(`${matchedProject.pn} — ${matchedProject.name}`) }}
-                    style={{
-                      marginTop: 8, borderRadius: 8, padding: '10px 12px', cursor: 'pointer',
-                      border: unplannedProject === matchedProject.id ? '1.5px solid var(--navy-muted)' : '1px solid var(--c6)',
-                      background: unplannedProject === matchedProject.id ? 'var(--navy-light)' : 'var(--c7)',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--navy)', fontFamily: 'monospace' }}>{matchedProject.pn}</span>
-                      <span style={{ fontSize: 12, color: 'var(--c1)' }}>{matchedProject.name}</span>
-                      <span className="badge badge-navy" style={{ fontSize: 9, marginLeft: 'auto' }}>matched</span>
-                    </div>
-                  </div>
-                )}
-
-                {unplannedQuery.trim() && !matchedProject && (
-                  <div style={{
-                    marginTop: 8, borderRadius: 8, padding: '10px 12px',
-                    background: 'var(--amber-bg)', border: '1px solid var(--amber-border)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  }}>
-                    <span style={{ fontSize: 12, color: 'var(--amber)', fontWeight: 600 }}>No project found</span>
-                    <button
-                      className="btn btn-ghost btn-xs"
-                      onClick={() => { setUnplannedProject(''); setUnplannedQuery('') }}
-                    >+ Log anyway</button>
-                  </div>
-                )}
-              </div>
-
-              {/* Hours */}
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c2)', marginBottom: 6 }}>Hours</div>
-                <HourChips planned={2} actual={unplannedHours} onChange={setUnplannedHours} />
-              </div>
-
-              {/* Note */}
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c2)', marginBottom: 6 }}>Note (optional)</div>
-                <textarea
-                  rows={2}
-                  placeholder="What happened?"
-                  value={unplannedDesc}
-                  onChange={e => setUnplannedDesc(e.target.value)}
-                  style={{
-                    width: '100%', padding: '8px 10px', borderRadius: 8,
-                    border: '1px solid var(--c6)', fontSize: 13,
-                    fontFamily: 'inherit', resize: 'none', boxSizing: 'border-box',
-                  }}
+          <div className="flex flex-col gap-[14px]">
+            {/* Smart search */}
+            <div>
+              <div className="text-[11px] font-bold text-[var(--c2)] mb-[6px]">Project search</div>
+              <div className="relative">
+                <span className="absolute left-[10px] top-1/2 -translate-y-1/2 text-muted-foreground text-[13px]">🔍</span>
+                <input
+                  type="text"
+                  placeholder="Search project..."
+                  value={unplannedQuery}
+                  onChange={e => { setUnplannedQuery(e.target.value); setUnplannedProject('') }}
+                  className="w-full py-2 pl-8 pr-[10px] rounded-lg border border-[var(--c6)] text-[13px] box-border"
+                  autoFocus
                 />
               </div>
+              <div className="text-[10px] text-muted-foreground mt-1">AI matches to a project</div>
+
+              {unplannedQuery.trim() && matchedProject && (
+                <div
+                  onClick={() => { setUnplannedProject(matchedProject.id); setUnplannedQuery(`${matchedProject.pn} — ${matchedProject.name}`) }}
+                  className="mt-2 rounded-lg px-3 py-[10px] cursor-pointer"
+                  style={{
+                    border: unplannedProject === matchedProject.id ? '1.5px solid var(--navy-muted)' : '1px solid var(--c6)',
+                    background: unplannedProject === matchedProject.id ? 'var(--navy-light)' : 'var(--c7)',
+                  }}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-primary">{matchedProject.pn}</span>
+                    <span className="text-xs text-[var(--c1)]">{matchedProject.name}</span>
+                    <Badge variant="navy" className="text-[9px] ml-auto">matched</Badge>
+                  </div>
+                </div>
+              )}
+
+              {unplannedQuery.trim() && !matchedProject && (
+                <div className="mt-2 rounded-lg px-3 py-[10px] bg-[var(--amber-bg)] border border-[var(--amber-border)] flex items-center justify-between">
+                  <span className="text-xs text-[#d97706] font-semibold">No project found</span>
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    onClick={() => { setUnplannedProject(''); setUnplannedQuery('') }}
+                  >+ Log anyway</Button>
+                </div>
+              )}
             </div>
 
-            {/* Modal footer */}
-            <div style={{
-              padding: '12px 18px', borderTop: '1px solid var(--c6)',
-              display: 'flex', justifyContent: 'flex-end', gap: 8,
-            }}>
-              <button className="btn btn-secondary btn-sm" onClick={() => setShowUnplanned(false)}>Cancel</button>
-              <button className="btn btn-primary btn-sm" onClick={() => handleReportUnplanned('project')}>Log & save →</button>
+            {/* Hours */}
+            <div>
+              <div className="text-[11px] font-bold text-[var(--c2)] mb-[6px]">Hours</div>
+              <HourChips planned={2} actual={unplannedHours} onChange={setUnplannedHours} />
+            </div>
+
+            {/* Note */}
+            <div>
+              <div className="text-[11px] font-bold text-[var(--c2)] mb-[6px]">Note (optional)</div>
+              <textarea
+                rows={2}
+                placeholder="What happened?"
+                value={unplannedDesc}
+                onChange={e => setUnplannedDesc(e.target.value)}
+                className="w-full px-[10px] py-2 rounded-lg border border-[var(--c6)] text-[13px] resize-none box-border"
+              />
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   )

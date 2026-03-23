@@ -541,26 +541,28 @@ export function RevenuePlannerView() {
                                   background: row ? cellBg : rowBg, verticalAlign: 'middle', textAlign: 'right',
                                 }}>
                                   {planned != null ? (
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 3 }}>
-                                      <span style={{
-                                        fontWeight: 600, fontSize: 11, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
-                                        color: isDeferred ? '#ef4444' : isIssued ? '#9ca3af' : probText,
-                                        textDecoration: isDeferred ? 'line-through' : undefined,
-                                      }}>
-                                        {fmtAmt(planned)}
-                                      </span>
-                                      {isDeferred && (
-                                        <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: '#fef2f2', color: '#ef4444', border: '1px solid #fca5a5', whiteSpace: 'nowrap' }}>
-                                          defer
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                                        <span style={{
+                                          fontWeight: 600, fontSize: 11, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
+                                          color: isDeferred ? '#ef4444' : isIssued ? '#9ca3af' : probText,
+                                          textDecoration: isDeferred ? 'line-through' : undefined,
+                                        }}>
+                                          {fmtAmt(planned)}
                                         </span>
-                                      )}
+                                        {isDeferred && (
+                                          <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 3, background: '#fef2f2', color: '#ef4444', border: '1px solid #fca5a5', whiteSpace: 'nowrap' }}>
+                                            defer
+                                          </span>
+                                        )}
+                                      </div>
                                       {!isIssued && !isDeferred && row && (
                                         <span style={{
                                           display: 'inline-block', fontSize: 9, fontWeight: 700,
                                           padding: '1px 3px', borderRadius: 3,
                                           background: probColors(prob).bg, color: probColors(prob).text,
                                           border: `1px solid ${probColors(prob).border}`,
-                                          whiteSpace: 'nowrap', flexShrink: 0,
+                                          whiteSpace: 'nowrap',
                                         }}>
                                           {prob}%
                                         </span>

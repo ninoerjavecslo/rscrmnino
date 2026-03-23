@@ -1,28 +1,16 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Link } from 'react-router-dom'
 import { usePipelineStore } from '../../stores/pipeline'
 import { useResourceStore } from '../../stores/resource'
 import { useHolidayStore } from '../../stores/holidays'
 import { useSettingsStore } from '../../stores/settings'
 import { supabase } from '../../lib/supabase'
 import { workDaysInRange, adjustedCapacityForRange } from '../../lib/capacityUtils'
-import type { PipelineItem, TimeOff } from '../../lib/types'
+import { pipelineDealTotal } from '../../lib/pipelineUtils'
+import type { TimeOff, TeamMember, CompanyHoliday } from '../../lib/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-
-function dealTotal(item: PipelineItem): number {
-  const amt = item.estimated_amount ?? 0
-  if (item.deal_type === 'fixed' && item.monthly_schedule?.length) {
-    return item.monthly_schedule.reduce((s, r) => s + r.amount, 0)
-  }
-  if (item.deal_type === 'monthly' && item.expected_month && item.expected_end_month) {
-    const s = new Date(item.expected_month + 'T00:00:00')
-    const e = new Date(item.expected_end_month + 'T00:00:00')
-    const count = Math.max(1, (e.getFullYear() - s.getFullYear()) * 12 + e.getMonth() - s.getMonth() + 1)
-    return amt * count
-  }
-  return amt
-}
+import { ReportHeader } from '../../components/ReportHeader'
+import { StatCard } from '../../components/StatCard'
 
 function fmtEuro(n: number) {
   return n.toLocaleString('de-DE', { maximumFractionDigits: 0 }) + ' €'
@@ -30,6 +18,24 @@ function fmtEuro(n: number) {
 
 function fmtMonth(m: string) {
   return new Date(m + 'T00:00:00').toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
+}
+
+function calcTeamCapacityInMonth(
+  month: string,
+  activeMembers: TeamMember[],
+  timeOff: TimeOff[],
+  holidays: CompanyHoliday[],
+): number {
+  const [yStr, moStr] = month.split('-')
+  const y = Number(yStr)
+  const mo = Number(moStr)
+  const start = `${y}-${String(mo).padStart(2, '0')}-01`
+  const lastDay = new Date(y, mo, 0).getDate()
+  const end = `${y}-${String(mo).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+  const days = workDaysInRange(start, end)
+  return activeMembers.reduce((s, m) =>
+    s + adjustedCapacityForRange(m, days, timeOff, holidays, [], y).adjustedCapacity,
+    0)
 }
 
 export function PipelineImpactView() {
@@ -88,46 +94,35 @@ export function PipelineImpactView() {
   const rate = settingsStore.internalHourlyRate
   const holidays = holidayStore.holidays
 
-  function teamCapacityInMonth(month: string): number {
-    const [yStr, moStr] = month.split('-')
-    const y = Number(yStr)
-    const mo = Number(moStr)
-    const start = `${y}-${String(mo).padStart(2, '0')}-01`
-    const lastDay = new Date(y, mo, 0).getDate()
-    const end = `${y}-${String(mo).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
-    const days = workDaysInRange(start, end)
-    return activeMembers.reduce((s, m) =>
-      s + adjustedCapacityForRange(m, days, timeOff, holidays, [], y).adjustedCapacity,
-      0)
-  }
+  // Cache capacity per unique month to avoid recomputing for multiple proposals targeting the same month
+  const capacityByMonth = useMemo(() => {
+    const months = new Set(proposals.map(i => i.expected_month).filter(Boolean) as string[])
+    const map: Record<string, number> = {}
+    for (const month of months) {
+      map[month] = calcTeamCapacityInMonth(month, activeMembers, timeOff, holidays)
+    }
+    return map
+  }, [proposals, activeMembers, timeOff, holidays])
 
   const rows = useMemo(() => proposals.map(item => {
-    const total = dealTotal(item)
+    const total = pipelineDealTotal(item)
     const hours = rate > 0 ? total / rate : 0
     const month = item.expected_month ?? null
-    const capacity = month ? teamCapacityInMonth(month) : 0
+    const capacity = month ? (capacityByMonth[month] ?? 0) : 0
     const committed = month ? (committedByMonth[month] ?? 0) : 0
     const remaining = Math.max(0, capacity - committed)
     const impactPct = capacity > 0 ? Math.round((hours / capacity) * 100) : 0
     const riskLevel = impactPct > 60 ? 'critical' : impactPct > 30 ? 'warning' : 'ok'
     return { item, total, hours, month, capacity, committed, remaining, impactPct, riskLevel }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [proposals, rate, timeOff, committedByMonth, activeMembers, holidays])
+  }), [proposals, rate, capacityByMonth, committedByMonth])
 
-  const weightedValue = proposals.reduce((s, i) => s + dealTotal(i) * i.probability / 100, 0)
-  const totalHours = rate > 0 ? proposals.reduce((s, i) => s + dealTotal(i) / rate, 0) : 0
+  const weightedValue = proposals.reduce((s, i) => s + pipelineDealTotal(i) * i.probability / 100, 0)
+  const totalHours = rate > 0 ? proposals.reduce((s, i) => s + pipelineDealTotal(i) / rate, 0) : 0
   const atRiskMonths = new Set(rows.filter(r => r.riskLevel !== 'ok' && r.month).map(r => r.month!)).size
 
   return (
     <div className="flex-1 overflow-auto">
-      <div className="flex items-center gap-3 px-6 py-5 bg-white border-b border-border">
-        <Link to="/reports" className="text-xs text-muted-foreground font-semibold flex items-center gap-1 no-underline">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-          Reports
-        </Link>
-        <span className="text-muted-foreground text-xs">/</span>
-        <h1 className="text-[18px] font-extrabold tracking-[-0.2px] m-0">Pipeline Impact</h1>
-      </div>
+      <ReportHeader title="Pipeline Impact" />
       <div className="p-6">
         {rate === 0 && (
           <div className="mb-4 rounded-lg border border-[#fde68a] bg-[#fefce8] px-4 py-3 text-sm text-[#92400e] flex items-center gap-2">
@@ -136,20 +131,10 @@ export function PipelineImpactView() {
           </div>
         )}
         <div className="grid grid-cols-4 gap-4 mb-6">
-          {[
-            { label: 'OPEN PROPOSALS', value: proposals.length, sub: 'active deals' },
-            { label: 'WEIGHTED VALUE', value: fmtEuro(weightedValue), sub: 'probability-adjusted' },
-            { label: 'EXPECTED HOURS', value: rate > 0 ? `${Math.round(totalHours)}h` : '—', sub: rate > 0 ? 'based on hourly rate' : 'rate not set' },
-            { label: 'AT-RISK MONTHS', value: atRiskMonths, sub: 'capacity >30% impacted' },
-          ].map(s => (
-            <Card key={s.label}>
-              <CardContent className="p-4">
-                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.08em] mb-2">{s.label}</div>
-                <div className="text-[24px] font-extrabold tracking-[-0.5px] leading-none mb-1">{String(s.value)}</div>
-                <div className="text-xs text-muted-foreground">{s.sub}</div>
-              </CardContent>
-            </Card>
-          ))}
+          <StatCard label="OPEN PROPOSALS" value={proposals.length} sub="active deals" />
+          <StatCard label="WEIGHTED VALUE" value={fmtEuro(weightedValue)} sub="probability-adjusted" />
+          <StatCard label="EXPECTED HOURS" value={rate > 0 ? `${Math.round(totalHours)}h` : '—'} sub={rate > 0 ? 'based on hourly rate' : 'rate not set'} />
+          <StatCard label="AT-RISK MONTHS" value={atRiskMonths} sub="capacity >30% impacted" />
         </div>
 
         <Card>

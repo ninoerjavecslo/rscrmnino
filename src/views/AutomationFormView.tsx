@@ -5,6 +5,9 @@ import { useClientsStore } from '../stores/clients'
 import { useInfraStore } from '../stores/infrastructure'
 import { Select } from '../components/Select'
 import { toast } from '../lib/toast'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Label } from '@/components/ui/label'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -203,106 +206,108 @@ export function AutomationFormView() {
   return (
     <div>
       {/* ── Page header ─────────────────────────────────────────────────────── */}
-      <div className="page-header">
+      <div className="flex items-center justify-between px-6 py-4 bg-background border-b border-border">
         <div>
           <h1>{isEdit ? 'Edit Automation' : 'New Automation'}</h1>
           <p>{isEdit ? name : 'Configure a recurring monthly invoice batch'}</p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => navigate('/automations')}>Cancel</button>
-          <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving}>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => navigate('/automations')}>Cancel</Button>
+          <Button size="sm" onClick={handleSave} disabled={saving}>
             {saving ? <span className="spinner" /> : null}
             {isEdit ? 'Save changes' : 'Create automation'}
-          </button>
+          </Button>
         </div>
       </div>
 
-      <div className="page-content" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div className="flex-1 overflow-auto p-6 flex flex-col gap-5">
 
         {/* ── Top row: settings + summary ──────────────────────────────────── */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, alignItems: 'start' }}>
 
           {/* Settings card */}
-          <div className="card">
-            <div className="card-body">
-              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--c3)', marginBottom: 18 }}>Automation settings</div>
-              <div className="form-row" style={{ marginBottom: 14 }}>
-                <div className="form-group" style={{ flex: 2 }}>
-                  <label className="form-label">Name *</label>
-                  <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Gostovanja - Renderspace" autoFocus />
+          <Card>
+            <CardContent>
+              <div className="text-[11px] font-bold uppercase tracking-[0.5px] text-muted-foreground mb-4">Automation settings</div>
+              <div className="grid grid-cols-2 gap-4 mb-3.5" style={{ gridTemplateColumns: '2fr 2fr 1fr' }}>
+                <div className="mb-4">
+                  <Label>Name *</Label>
+                  <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Gostovanja - Renderspace" autoFocus className="w-full mt-1" />
                 </div>
-                <div className="form-group" style={{ flex: 2 }}>
-                  <label className="form-label">Recipient email *</label>
-                  <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@renderspace.si" />
+                <div className="mb-4">
+                  <Label>Recipient email *</Label>
+                  <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@renderspace.si" className="w-full mt-1" />
                 </div>
-                <div className="form-group" style={{ flex: 1 }}>
-                  <label className="form-label">Send on day</label>
+                <div className="mb-4">
+                  <Label>Send on day</Label>
                   <input
                     type="number" min={1} max={28}
                     value={sendDay}
                     onChange={e => setSendDay(Math.max(1, Math.min(28, parseInt(e.target.value) || 1)))}
+                    className="w-full mt-1"
                   />
-                  <div className="form-hint">{sendDay}. of each month</div>
+                  <div className="text-xs text-muted-foreground mt-1">{sendDay}. of each month</div>
                 </div>
               </div>
-              <div className="form-group" style={{ marginBottom: 14 }}>
-                <label className="form-label">Email subject <span className="form-hint" style={{ display: 'inline' }}>optional — defaults to "{name || 'Automation name'} — {'{month} {year}'}"</span></label>
-                <input value={subject} onChange={e => setSubject(e.target.value)} placeholder={`e.g. Računi za gostovanje — {month} {year}`} />
+              <div className="mb-3.5">
+                <Label>Email subject <span className="text-xs text-muted-foreground ml-1">optional — defaults to "{name || 'Automation name'} — {'{month} {year}'}"</span></Label>
+                <input value={subject} onChange={e => setSubject(e.target.value)} placeholder={`e.g. Računi za gostovanje — {month} {year}`} className="w-full mt-1" />
               </div>
-              <div className="form-group" style={{ marginBottom: 14 }}>
-                <label className="form-label">Email message <span className="form-hint" style={{ display: 'inline' }}>optional — appears at top of email</span></label>
+              <div className="mb-3.5">
+                <Label>Email message <span className="text-xs text-muted-foreground ml-1">optional — appears at top of email</span></Label>
                 <textarea
                   value={message}
                   onChange={e => setMessage(e.target.value)}
                   placeholder="e.g. Prosim izdajte račune za storitve, ki so navedene spodaj."
                   rows={3}
-                  style={{ resize: 'vertical', fontSize: 13 }}
+                  className="w-full mt-1 text-[13px]"
+                  style={{ resize: 'vertical' }}
                 />
               </div>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Notes <span className="form-hint" style={{ display: 'inline' }}>internal only</span></label>
-                <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Internal notes…" />
+              <div>
+                <Label>Notes <span className="text-xs text-muted-foreground ml-1">internal only</span></Label>
+                <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Internal notes…" className="w-full mt-1" />
               </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
 
           {/* Summary + save (sticky) */}
           <div style={{ position: 'sticky', top: 20 }}>
-            <div className="card">
-              <div className="card-body">
-                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--c3)', marginBottom: 16 }}>Summary</div>
+            <Card>
+              <CardContent>
+                <div className="text-[11px] font-bold uppercase tracking-[0.5px] text-muted-foreground mb-4">Summary</div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                    <span style={{ color: 'var(--c3)' }}>Clients</span>
-                    <span style={{ fontWeight: 600, color: 'var(--c1)' }}>{validClientCount}</span>
+                <div className="flex flex-col gap-2.5 mb-5">
+                  <div className="flex justify-between text-[13px]">
+                    <span className="text-muted-foreground">Clients</span>
+                    <span className="font-semibold text-[var(--c1)]">{validClientCount}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                    <span style={{ color: 'var(--c3)' }}>Service lines</span>
-                    <span style={{ fontWeight: 600, color: 'var(--c1)' }}>{totalLines}</span>
+                  <div className="flex justify-between text-[13px]">
+                    <span className="text-muted-foreground">Service lines</span>
+                    <span className="font-semibold text-[var(--c1)]">{totalLines}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                    <span style={{ color: 'var(--c3)' }}>Sends on</span>
-                    <span style={{ fontWeight: 600, color: 'var(--c1)' }}>{sendDay}. of month</span>
+                  <div className="flex justify-between text-[13px]">
+                    <span className="text-muted-foreground">Sends on</span>
+                    <span className="font-semibold text-[var(--c1)]">{sendDay}. of month</span>
                   </div>
-                  <div style={{ height: 1, background: 'var(--c6)', margin: '4px 0' }} />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--c3)' }}>Grand total</span>
-                    <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--navy)', fontVariantNumeric: 'tabular-nums' }}>{fmtEuro(grandTotal)}</span>
+                  <div className="h-px bg-[var(--c6)] my-1" />
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-xs font-bold uppercase tracking-[0.4px] text-muted-foreground">Grand total</span>
+                    <span className="text-[22px] font-extrabold text-primary" style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtEuro(grandTotal)}</span>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving} style={{ width: '100%', justifyContent: 'center' }}>
+                <div className="flex flex-col gap-2">
+                  <Button size="sm" onClick={handleSave} disabled={saving} className="w-full justify-center">
                     {saving ? <span className="spinner" /> : null}
                     {isEdit ? 'Save changes' : 'Create automation'}
-                  </button>
-                  <button className="btn btn-secondary btn-sm" onClick={() => navigate('/automations')} style={{ width: '100%', justifyContent: 'center' }}>
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => navigate('/automations')} className="w-full justify-center">
                     Cancel
-                  </button>
+                  </Button>
                 </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
 
@@ -314,23 +319,15 @@ export function AutomationFormView() {
             : []
 
           return (
-            <div key={block._key} className="card" style={{ overflow: 'hidden' }}>
+            <Card key={block._key} className="overflow-hidden">
 
               {/* Client header bar */}
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 14,
-                padding: '12px 20px',
-                borderBottom: '2px solid var(--c6)',
-                background: 'var(--c7)',
-              }}>
-                <div style={{
-                  fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
-                  letterSpacing: '0.5px', color: 'var(--c4)', minWidth: 56, flexShrink: 0,
-                }}>
+              <div className="flex items-center gap-3.5 px-5 py-3 border-b-2 border-[var(--c6)] bg-[var(--c7)]">
+                <div className="text-[11px] font-bold uppercase tracking-[0.5px] text-[var(--c4)] min-w-14 shrink-0">
                   Client {bi + 1}
                 </div>
 
-                <div style={{ flex: '0 0 260px' }}>
+                <div className="w-[260px] shrink-0">
                   <Select
                     value={block.client_id}
                     onChange={val => updateBlock(block._key, 'client_id', val)}
@@ -339,7 +336,7 @@ export function AutomationFormView() {
                   />
                 </div>
 
-                <div style={{ flex: 1 }}>
+                <div className="flex-1">
                   <input
                     value={block.contract_ref}
                     onChange={e => updateBlock(block._key, 'contract_ref', e.target.value)}
@@ -348,8 +345,8 @@ export function AutomationFormView() {
                   />
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                  <span style={{ fontSize: 12, color: 'var(--c3)', whiteSpace: 'nowrap' }}>Due days</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">Due days</span>
                   <input
                     type="number" min={1}
                     value={block.due_days}
@@ -358,48 +355,46 @@ export function AutomationFormView() {
                   />
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
+                <div className="flex items-center gap-4 shrink-0">
                   {blockTotal > 0 && (
-                    <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--navy)', fontVariantNumeric: 'tabular-nums' }}>
+                    <span className="font-bold text-[15px] text-primary" style={{ fontVariantNumeric: 'tabular-nums' }}>
                       {fmtEuro(blockTotal)}
                     </span>
                   )}
                   {blocks.length > 1 && (
                     <button
                       onClick={() => removeBlock(block._key)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c4)', fontSize: 20, lineHeight: 1, padding: '0 4px', transition: 'color 0.15s' }}
+                      className="bg-transparent border-0 cursor-pointer text-[var(--c4)] text-[20px] leading-none px-1 transition-colors hover:text-[#dc2626]"
                       title="Remove client"
-                      onMouseEnter={e => (e.currentTarget.style.color = 'var(--red)')}
-                      onMouseLeave={e => (e.currentTarget.style.color = 'var(--c4)')}
                     >×</button>
                   )}
                 </div>
               </div>
 
               {/* Services table */}
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <table className="w-full border-collapse text-[13px]">
                 <thead>
-                  <tr style={{ background: 'var(--c7)', borderBottom: '1px solid var(--c6)' }}>
-                    <th style={{ padding: '9px 20px', textAlign: 'left', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--c3)', width: 100, whiteSpace: 'nowrap' }}>PN</th>
-                    <th style={{ padding: '9px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--c3)', width: '100%' }}>Description *</th>
-                    <th style={{ padding: '9px 12px', textAlign: 'right', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--c3)', width: 80, whiteSpace: 'nowrap' }}>Qty</th>
-                    <th style={{ padding: '9px 12px', textAlign: 'right', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--c3)', width: 130, whiteSpace: 'nowrap' }}>Unit price €</th>
-                    <th style={{ padding: '9px 20px', textAlign: 'right', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--c3)', width: 120, whiteSpace: 'nowrap' }}>Total</th>
-                    <th style={{ width: 44 }}></th>
+                  <tr className="bg-[var(--c7)] border-b border-[var(--c6)]">
+                    <th className="px-5 py-2.5 text-left text-[11px] font-bold uppercase tracking-[0.4px] text-muted-foreground w-24 whitespace-nowrap">PN</th>
+                    <th className="px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-[0.4px] text-muted-foreground w-full">Description *</th>
+                    <th className="px-3 py-2.5 text-right text-[11px] font-bold uppercase tracking-[0.4px] text-muted-foreground w-20 whitespace-nowrap">Qty</th>
+                    <th className="px-3 py-2.5 text-right text-[11px] font-bold uppercase tracking-[0.4px] text-muted-foreground w-32 whitespace-nowrap">Unit price €</th>
+                    <th className="px-5 py-2.5 text-right text-[11px] font-bold uppercase tracking-[0.4px] text-muted-foreground w-28 whitespace-nowrap">Total</th>
+                    <th className="w-11"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {block.services.map((svc) => (
-                    <tr key={svc._key} style={{ borderBottom: '1px solid var(--c6)' }}>
-                      <td style={{ padding: '10px 20px' }}>
+                    <tr key={svc._key} className="border-b border-[var(--c6)]">
+                      <td className="px-5 py-2.5">
                         <input
                           value={svc.pn}
                           onChange={e => updateService(block._key, svc._key, 'pn', e.target.value)}
                           style={{ height: 38, width: '100%', fontSize: 13, fontFamily: 'monospace' }}
                         />
                       </td>
-                      <td style={{ padding: '10px 12px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <td className="px-3 py-2.5">
+                        <div className="flex flex-col gap-1.5">
                           <input
                             value={svc.description_template}
                             onChange={e => updateService(block._key, svc._key, 'description_template', e.target.value)}
@@ -420,7 +415,7 @@ export function AutomationFormView() {
                           )}
                         </div>
                       </td>
-                      <td style={{ padding: '10px 12px' }}>
+                      <td className="px-3 py-2.5">
                         <input
                           type="number" min={1}
                           value={svc.quantity}
@@ -428,7 +423,7 @@ export function AutomationFormView() {
                           style={{ height: 38, width: '100%', fontSize: 13, textAlign: 'right' }}
                         />
                       </td>
-                      <td style={{ padding: '10px 12px' }}>
+                      <td className="px-3 py-2.5">
                         <input
                           type="number" min={0} step="0.01"
                           value={svc.unit_price}
@@ -436,54 +431,48 @@ export function AutomationFormView() {
                           style={{ height: 38, width: '100%', fontSize: 13, textAlign: 'right' }}
                         />
                       </td>
-                      <td style={{ padding: '10px 20px', textAlign: 'right', fontWeight: 600, fontSize: 14, fontVariantNumeric: 'tabular-nums', color: 'var(--c1)', whiteSpace: 'nowrap' }}>
+                      <td className="px-5 py-2.5 text-right font-semibold text-sm text-[var(--c1)] whitespace-nowrap" style={{ fontVariantNumeric: 'tabular-nums' }}>
                         {fmtEuro(svc.quantity * svc.unit_price)}
                       </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      <td className="px-3 py-2.5 text-center">
                         <button
                           onClick={() => removeService(block._key, svc._key)}
                           disabled={block.services.length === 1}
-                          style={{
-                            background: 'none', border: 'none', cursor: 'pointer',
-                            color: block.services.length === 1 ? 'var(--c5)' : 'var(--c4)',
-                            fontSize: 18, lineHeight: 1, padding: '2px 4px',
-                            transition: 'color 0.15s',
-                          }}
-                          onMouseEnter={e => block.services.length > 1 && (e.currentTarget.style.color = 'var(--red)')}
-                          onMouseLeave={e => (e.currentTarget.style.color = block.services.length === 1 ? 'var(--c5)' : 'var(--c4)')}
+                          className="bg-transparent border-0 cursor-pointer text-[18px] leading-none px-1 py-0.5 transition-colors hover:text-[#dc2626] disabled:opacity-30 disabled:cursor-not-allowed"
+                          style={{ color: block.services.length === 1 ? 'var(--c5)' : 'var(--c4)' }}
                         >×</button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr style={{ background: 'var(--c7)' }}>
-                    <td colSpan={3} style={{ padding: '10px 20px' }}>
-                      <button className="btn btn-ghost btn-xs" onClick={() => addService(block._key)}>
+                  <tr className="bg-[var(--c7)]">
+                    <td colSpan={3} className="px-5 py-2.5">
+                      <Button variant="ghost" size="xs" onClick={() => addService(block._key)}>
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                         Add service
-                      </button>
+                      </Button>
                     </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                    <td className="px-3 py-2.5 text-right text-[11px] font-bold text-muted-foreground uppercase tracking-[0.4px]">
                       Subtotal
                     </td>
-                    <td style={{ padding: '10px 20px', textAlign: 'right', fontWeight: 700, fontSize: 15, color: 'var(--navy)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                    <td className="px-5 py-2.5 text-right font-bold text-[15px] text-primary whitespace-nowrap" style={{ fontVariantNumeric: 'tabular-nums' }}>
                       {fmtEuro(blockTotal)}
                     </td>
                     <td></td>
                   </tr>
                 </tfoot>
               </table>
-            </div>
+            </Card>
           )
         })}
 
         {/* ── Add client ────────────────────────────────────────────────────── */}
         <div>
-          <button className="btn btn-secondary btn-sm" onClick={addBlock}>
+          <Button variant="outline" size="sm" onClick={addBlock}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Add another client
-          </button>
+          </Button>
         </div>
 
       </div>

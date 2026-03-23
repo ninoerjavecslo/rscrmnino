@@ -1,9 +1,10 @@
+import type { ReactNode } from 'react'
 import { Modal } from './Modal'
 
 export function ConfirmDialog({ open, title = 'Confirm', message, onConfirm, onCancel, confirmLabel = 'Delete' }: {
   open: boolean
   title?: string
-  message: string
+  message: ReactNode
   onConfirm: () => void
   onCancel: () => void
   confirmLabel?: string

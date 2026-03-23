@@ -1,6 +1,9 @@
 import { useState, useMemo } from 'react'
 import { useProjectsStore } from '../stores/projects'
 import { useClientsStore } from '../stores/clients'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Label } from '@/components/ui/label'
 
 interface ServiceLine {
   ref: string
@@ -90,41 +93,41 @@ nino@renderspace.si`
 
   return (
     <div>
-      <div className="page-header">
+      <div className="flex items-center justify-between px-6 py-4 bg-background border-b border-border">
         <div>
           <h1>Email Tool</h1>
           <p>Generate a Slovenian invoice request for your accountant</p>
         </div>
       </div>
 
-      <div className="page-content">
-        <div className="grid-2" style={{ gap: 24, alignItems: 'start' }}>
+      <div className="flex-1 overflow-auto p-6">
+        <div className="grid grid-cols-2 gap-6 items-start">
 
           {/* ── Left panel ── */}
-          <div className="card">
-            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--c6)' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+          <Card>
+            <div className="px-6 py-5 border-b border-border">
+              <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-[0.07em]">
                 Invoice request for accounting
               </div>
             </div>
-            <div style={{ padding: '20px 24px' }}>
+            <CardContent className="p-6">
 
               {/* Row 1: month + payment terms */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label" style={{ fontSize: 10, letterSpacing: '0.06em' }}>DATE OF SERVICE (MONTH)</label>
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div>
+                  <Label className="text-[10px] tracking-[0.06em]">DATE OF SERVICE (MONTH)</Label>
                   <input type="month" value={serviceMonth} onChange={e => setServiceMonth(e.target.value)} />
                 </div>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label" style={{ fontSize: 10, letterSpacing: '0.06em' }}>PAYMENT TERMS (DAYS)</label>
+                <div>
+                  <Label className="text-[10px] tracking-[0.06em]">PAYMENT TERMS (DAYS)</Label>
                   <input type="number" value={paymentDays} onChange={e => setPaymentDays(e.target.value)} min="0" />
                 </div>
               </div>
 
               {/* Row 2: client + project ref */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label" style={{ fontSize: 10, letterSpacing: '0.06em' }}>CLIENT / COMPANY</label>
+              <div className="grid grid-cols-2 gap-3 mb-5">
+                <div>
+                  <Label className="text-[10px] tracking-[0.06em]">CLIENT / COMPANY</Label>
                   <input
                     list="client-list"
                     value={clientName}
@@ -135,8 +138,8 @@ nino@renderspace.si`
                     {cStore.clients.map(c => <option key={c.id} value={c.name} />)}
                   </datalist>
                 </div>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label" style={{ fontSize: 10, letterSpacing: '0.06em' }}>PROJECT REF (OPTIONAL)</label>
+                <div>
+                  <Label className="text-[10px] tracking-[0.06em]">PROJECT REF (OPTIONAL)</Label>
                   <input
                     list="project-list"
                     value={projectRef}
@@ -150,46 +153,42 @@ nino@renderspace.si`
               </div>
 
               {/* Services table */}
-              <div style={{ marginBottom: 6 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>
+              <div className="mb-4">
+                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.07em] mb-2">
                   SERVICES / LINE ITEMS
                 </div>
-                <div style={{ border: '1px solid var(--c6)', borderRadius: 6, overflow: 'hidden' }}>
+                <div className="border border-border rounded overflow-hidden">
                   {/* Header */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr 140px 32px', background: 'var(--c7)', borderBottom: '1px solid var(--c6)', padding: '6px 10px' }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--c4)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>REF #</span>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--c4)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>DESCRIPTION</span>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--c4)', letterSpacing: '0.06em', textTransform: 'uppercase', textAlign: 'right' }}>AMOUNT (EUR)</span>
+                  <div className="grid bg-muted border-b border-border px-[10px] py-[6px]" style={{ gridTemplateColumns: '130px 1fr 140px 32px' }}>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.06em]">REF #</span>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.06em]">DESCRIPTION</span>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.06em] text-right">AMOUNT (EUR)</span>
                     <span />
                   </div>
                   {/* Lines */}
                   {lines.map((line, i) => (
-                    <div key={i} style={{
-                      display: 'grid', gridTemplateColumns: '130px 1fr 140px 32px',
-                      borderBottom: i < lines.length - 1 ? '1px solid var(--c6)' : 'none',
-                      alignItems: 'center',
-                    }}>
+                    <div key={i} className={`grid items-center ${i < lines.length - 1 ? 'border-b border-border' : ''}`} style={{ gridTemplateColumns: '130px 1fr 140px 32px' }}>
                       <input
-                        style={{ border: 'none', borderRight: '1px solid var(--c6)', borderRadius: 0, padding: '9px 10px', fontSize: 12, outline: 'none', background: 'transparent' }}
+                        className="border-0 border-r border-border rounded-none px-[10px] py-[9px] text-xs outline-none bg-transparent"
                         placeholder="RS-2026-001"
                         value={line.ref}
                         onChange={e => updateLine(i, 'ref', e.target.value)}
                       />
                       <input
-                        style={{ border: 'none', borderRight: '1px solid var(--c6)', borderRadius: 0, padding: '9px 10px', fontSize: 12, outline: 'none', background: 'transparent' }}
+                        className="border-0 border-r border-border rounded-none px-[10px] py-[9px] text-xs outline-none bg-transparent"
                         placeholder="Razvoj faza 1 — Marec 2026"
                         value={line.description}
                         onChange={e => updateLine(i, 'description', e.target.value)}
                       />
                       <input
                         type="number"
-                        style={{ border: 'none', borderRight: '1px solid var(--c6)', borderRadius: 0, padding: '9px 10px', fontSize: 12, outline: 'none', background: 'transparent', textAlign: 'right' }}
+                        className="border-0 border-r border-border rounded-none px-[10px] py-[9px] text-xs outline-none bg-transparent text-right"
                         placeholder="0"
                         value={line.amount}
                         onChange={e => updateLine(i, 'amount', e.target.value)}
                       />
                       {lines.length > 1 ? (
-                        <button onClick={() => removeLine(i)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--c4)', fontSize: 16, padding: '0 8px', height: '100%' }}>×</button>
+                        <button onClick={() => removeLine(i)} className="border-0 bg-transparent cursor-pointer text-muted-foreground text-base px-2 h-full hover:text-foreground">×</button>
                       ) : <div />}
                     </div>
                   ))}
@@ -197,78 +196,63 @@ nino@renderspace.si`
               </div>
 
               {/* Add line + total */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                <button className="btn btn-secondary btn-xs" onClick={addLine}>+ Add line</button>
+              <div className="flex items-center justify-between mb-5">
+                <Button variant="outline" size="xs" onClick={addLine}>+ Add line</Button>
                 {total > 0 && (
-                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--c1)' }}>
+                  <span className="text-[13px] font-bold text-foreground">
                     Total: {fmtAmt(total.toString())}
                   </span>
                 )}
               </div>
 
               {/* Generate button */}
-              <button
-                className="btn btn-primary"
-                style={{ width: '100%', padding: '12px', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              <Button
+                className="w-full flex items-center justify-center gap-2"
                 onClick={() => {}}
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
                 </svg>
                 Generate email
-              </button>
-            </div>
-          </div>
+              </Button>
+            </CardContent>
+          </Card>
 
           {/* ── Right panel ── */}
-          <div className="card">
-            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--c6)' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+          <Card>
+            <div className="px-6 py-5 border-b border-border">
+              <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-[0.07em]">
                 Generated email
               </div>
             </div>
-            <div style={{ padding: '20px 24px' }}>
-              <pre style={{
-                fontFamily: 'ui-monospace, "Cascadia Code", monospace',
-                fontSize: 12.5,
-                lineHeight: 1.75,
-                color: 'var(--c1)',
-                background: '#f9fafb',
-                border: '1px solid var(--c6)',
-                borderRadius: 6,
-                padding: '16px 18px',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-                marginBottom: 16,
-                minHeight: 340,
-              }}>
+            <CardContent className="p-6">
+              <pre className="text-[12.5px] leading-[1.75] text-[#374151] bg-[#f9fafb] border border-border rounded p-4 whitespace-pre-wrap break-words mb-4 min-h-[340px]">
                 {emailText}
               </pre>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <button
-                  className="btn btn-secondary"
-                  style={{ padding: '10px', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+              <div className="grid grid-cols-2 gap-[10px]">
+                <Button
+                  variant="outline"
                   onClick={handleCopy}
+                  className="flex items-center justify-center gap-[6px]"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
                   </svg>
                   Copy
-                </button>
-                <button
-                  className="btn btn-primary"
-                  style={{ padding: '10px', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                </Button>
+                <Button
                   onClick={handleOpenMail}
+                  className="flex items-center justify-center gap-[6px]"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
                   </svg>
                   Open in Mail
-                </button>
+                </Button>
               </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
 
         </div>
       </div>

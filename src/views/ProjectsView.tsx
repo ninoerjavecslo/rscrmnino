@@ -80,7 +80,7 @@ function TypePills({ value, onChange }: { value: string; onChange: (v: string) =
 
 // ── Main view ─────────────────────────────────────────────────────────────────
 
-const EMPTY = { pn:'', name:'', client_id:'', type:'fixed', pm:'Nino', value:'', start_month:'', end_month:'', starting_from:'', probability:'50', num_months:'12' }
+const EMPTY = { pn:'', name:'', client_id:'', type:'fixed', pm:'Nino', value:'', start_month:'', end_month:'', starting_from:'', probability:'50', num_months:'12', is_maintenance: false, cms: '' }
 
 interface VarRow { month: string; amount: string; probability: string }
 
@@ -181,6 +181,8 @@ export function ProjectsView() {
           start_date:     form.start_month ? form.start_month + '-01' : null,
           end_date:       form.end_month   ? form.end_month   + '-01' : null,
           notes:          null,
+          is_maintenance: form.type !== 'internal' ? form.is_maintenance : false,
+          cms:            form.cms.trim() || null,
         })
         .select('id').single()
       if (pe) throw pe
@@ -276,59 +278,91 @@ export function ProjectsView() {
           </div>
         )}
 
-        {!pStore.loading && pStore.projects.length === 0 ? (
-          <Card>
-            <div className="text-center py-14 px-5">
-              <div className="text-3xl mb-2">📁</div>
-              <div className="font-bold text-[15px] text-[#374151] mb-1">No projects yet</div>
-              <div className="text-sm mb-4">Create your first project</div>
-              <Button size="sm" onClick={() => setShowAdd(true)}>New Project</Button>
-            </div>
-          </Card>
-        ) : (
-          <Card>
-            <table>
-              <thead>
-                <tr>
-                  <th>#</th><th>Project</th><th>Client</th><th>Type</th>
-                  <th className="text-right">Value</th><th>PM</th><th>Status</th><th style={{width:60}}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {pStore.loading ? (
-                  <tr><td colSpan={8} className="text-center text-muted-foreground" style={{padding:32}}>Loading…</td></tr>
-                ) : pStore.projects.map((p: Project) => (
-                  <tr key={p.id}>
-                    <td className="text-muted-foreground text-[11px] font-semibold whitespace-nowrap">{p.pn}</td>
-                    <td className="font-medium text-primary hover:underline cursor-pointer font-bold" onClick={() => navigate(`/projects/${p.id}`)}>{p.name}</td>
-                    <td className="text-sm text-muted-foreground" style={{cursor: p.client ? 'pointer' : 'default'}}
-                      onClick={() => p.client && navigate(`/clients/${p.client.id}`)}>{p.client?.name ?? '—'}</td>
-                    <td><Badge variant={TYPE_BADGE[p.type] ?? 'gray'}>{TYPE_LABEL[p.type] ?? p.type}</Badge></td>
-                    <td className="text-right font-semibold">
-                      {(() => {
-                        const isRecurring = p.type === 'maintenance' || p.type === 'variable'
-                        const regularRows = rpStore.rows.filter(r => r.project_id === p.id && !r.notes?.startsWith('CR:') && r.status !== 'cost')
-                        const crTotal = crStore.approvedCRs.filter(cr => cr.project_id === p.id).reduce((s, cr) => s + (cr.amount ?? 0), 0)
-                        const base = isRecurring
-                          ? regularRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0)
-                          : (p.initial_contract_value ?? p.contract_value ?? null)
-                        const val = base != null ? base + crTotal : null
-                        return val ? `${val.toLocaleString()} €` : <span className="text-muted-foreground">—</span>
-                      })()}
-                    </td>
-                    <td className="text-sm text-[#374151]">{p.pm ?? <span className="text-muted-foreground">—</span>}</td>
-                    <td><Badge variant={STATUS_BADGE[p.status] ?? 'gray'}>{p.status.charAt(0).toUpperCase()+p.status.slice(1)}</Badge></td>
-                    <td className="whitespace-nowrap">
-                      <Button variant="outline" size="xs" onClick={() => navigate(`/projects/${p.id}`)}>Edit</Button>
-                      {' '}
-                      <Button variant="ghost" size="xs" className="text-[#dc2626]" onClick={() => setDeleteTarget(p)}>Delete</Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Card>
-        )}
+        {(() => {
+          const clientProjects = pStore.projects.filter((p: Project) => p.type !== 'internal')
+          const internalProjects = pStore.projects.filter((p: Project) => p.type === 'internal')
+
+          function ProjectRow({ p }: { p: Project }) {
+            return (
+              <tr key={p.id}>
+                <td className="text-muted-foreground text-[11px] font-semibold whitespace-nowrap">{p.pn}</td>
+                <td className="font-medium text-primary hover:underline cursor-pointer font-bold" onClick={() => navigate(`/projects/${p.id}`)}>{p.name}</td>
+                <td className="text-sm text-muted-foreground" style={{cursor: p.client ? 'pointer' : 'default'}}
+                  onClick={() => p.client && navigate(`/clients/${p.client!.id}`)}>{p.client?.name ?? '—'}</td>
+                <td><Badge variant={TYPE_BADGE[p.type] ?? 'gray'}>{TYPE_LABEL[p.type] ?? p.type}</Badge></td>
+                <td className="text-right font-semibold">
+                  {(() => {
+                    const isRecurring = p.type === 'maintenance' || p.type === 'variable'
+                    const regularRows = rpStore.rows.filter(r => r.project_id === p.id && !r.notes?.startsWith('CR:') && r.status !== 'cost')
+                    const crTotal = crStore.approvedCRs.filter(cr => cr.project_id === p.id).reduce((s, cr) => s + (cr.amount ?? 0), 0)
+                    const base = isRecurring
+                      ? regularRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0)
+                      : (p.initial_contract_value ?? p.contract_value ?? null)
+                    const val = base != null ? base + crTotal : null
+                    return val ? `${val.toLocaleString()} €` : <span className="text-muted-foreground">—</span>
+                  })()}
+                </td>
+                <td className="text-sm text-[#374151]">{p.pm ?? <span className="text-muted-foreground">—</span>}</td>
+                <td><Badge variant={STATUS_BADGE[p.status] ?? 'gray'}>{p.status.charAt(0).toUpperCase()+p.status.slice(1)}</Badge></td>
+                <td className="whitespace-nowrap">
+                  <Button variant="outline" size="xs" onClick={() => navigate(`/projects/${p.id}`)}>Edit</Button>
+                  {' '}
+                  <Button variant="ghost" size="xs" className="text-[#dc2626]" onClick={() => setDeleteTarget(p)}>Delete</Button>
+                </td>
+              </tr>
+            )
+          }
+
+          return (
+            <>
+              {!pStore.loading && clientProjects.length === 0 ? (
+                <Card>
+                  <div className="text-center py-14 px-5">
+                    <div className="text-3xl mb-2">📁</div>
+                    <div className="font-bold text-[15px] text-[#374151] mb-1">No projects yet</div>
+                    <div className="text-sm mb-4">Create your first project</div>
+                    <Button size="sm" onClick={() => setShowAdd(true)}>New Project</Button>
+                  </div>
+                </Card>
+              ) : (
+                <Card className="mb-4">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>#</th><th>Project</th><th>Client</th><th>Type</th>
+                        <th className="text-right">Value</th><th>PM</th><th>Status</th><th style={{width:60}}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pStore.loading ? (
+                        <tr><td colSpan={8} className="text-center text-muted-foreground" style={{padding:32}}>Loading…</td></tr>
+                      ) : clientProjects.map((p: Project) => <ProjectRow key={p.id} p={p} />)}
+                    </tbody>
+                  </table>
+                </Card>
+              )}
+
+              {internalProjects.length > 0 && (
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2 mt-2">Internal Projects</div>
+                  <Card>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>#</th><th>Project</th><th>Client</th><th>Type</th>
+                          <th className="text-right">Value</th><th>PM</th><th>Status</th><th style={{width:60}}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {internalProjects.map((p: Project) => <ProjectRow key={p.id} p={p} />)}
+                      </tbody>
+                    </table>
+                  </Card>
+                </div>
+              )}
+            </>
+          )
+        })()}
       </div>
 
       <Modal open={showAdd} title="New Project" onClose={closeModal} maxWidth={form.type === 'variable' ? 680 : 560}
@@ -341,6 +375,21 @@ export function ProjectsView() {
         </>}
       >
         <TypePills value={form.type} onChange={v => setF('type', v)} />
+
+        {form.type !== 'internal' && (
+          <label className="flex items-center gap-2.5 mb-4 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.is_maintenance}
+              onChange={e => setForm(f => ({ ...f, is_maintenance: e.target.checked }))}
+              style={{ width: 15, height: 15, accentColor: 'var(--navy)' }}
+            />
+            <div>
+              <div className="text-[13px] font-semibold">Is Maintenance</div>
+              <div className="text-xs text-muted-foreground">Include this project in maintenance planning</div>
+            </div>
+          </label>
+        )}
 
         <div className="grid grid-cols-2 gap-4 mb-3">
           <div className="mb-4" style={{maxWidth:160}}>
@@ -377,6 +426,15 @@ export function ProjectsView() {
               value={form.pm}
               onChange={val => setF('pm', val)}
               options={pmOptions}
+            />
+          </div>
+          <div className="mb-4">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">CMS / Technology</label>
+            <Select
+              value={form.cms}
+              onChange={val => setF('cms', val)}
+              placeholder="— None —"
+              options={[{ value: '', label: '— None —' }, ...settingsStore.cmsOptions.map(c => ({ value: c, label: c }))]}
             />
           </div>
           {form.type !== 'variable' && form.type !== 'internal' && (

@@ -7,6 +7,10 @@ import { toast } from '../lib/toast'
 import type { Domain } from '../lib/types'
 import { Select } from '../components/Select'
 import { Modal } from '../components/Modal'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
 
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -40,26 +44,25 @@ function Pagination({ page, total, perPage, onChange }: { page: number; total: n
   const pages = Math.ceil(total / perPage)
   if (pages <= 1) return null
   return (
-    <div style={{display:'flex',alignItems:'center',justifyContent:'flex-end',gap:4,padding:'12px 16px 4px'}}>
-      <span style={{fontSize:12,color:'var(--c3)',marginRight:8}}>{((page-1)*perPage)+1}–{Math.min(page*perPage,total)} of {total}</span>
-      <button className="btn btn-ghost btn-xs" disabled={page === 1} onClick={() => onChange(page - 1)}>‹ Prev</button>
+    <div className="flex items-center justify-end gap-1 px-4 py-3">
+      <span className="text-xs text-muted-foreground mr-2">{((page-1)*perPage)+1}–{Math.min(page*perPage,total)} of {total}</span>
+      <Button variant="ghost" size="xs" disabled={page === 1} onClick={() => onChange(page - 1)}>‹ Prev</Button>
       {Array.from({length: pages}, (_, i) => i + 1).map(p => (
-        <button key={p} className="btn btn-xs" onClick={() => onChange(p)}
-          style={p === page ? {background:'var(--navy)',color:'#fff',borderColor:'var(--navy)'} : {}}>
+        <Button key={p} size="xs" variant={p === page ? 'default' : 'outline'} onClick={() => onChange(p)}>
           {p}
-        </button>
+        </Button>
       ))}
-      <button className="btn btn-ghost btn-xs" disabled={page === pages} onClick={() => onChange(page + 1)}>Next ›</button>
+      <Button variant="ghost" size="xs" disabled={page === pages} onClick={() => onChange(page + 1)}>Next ›</Button>
     </div>
   )
 }
 
 function ExpiryBadge({ expiryDate }: { expiryDate: string }) {
   const days = daysUntil(expiryDate)
-  if (days < 0)   return <span className="badge badge-red">Expired</span>
-  if (days <= 7)  return <span className="badge badge-red">Expires in {days}d</span>
-  if (days <= 30) return <span className="badge badge-amber">Expires in {days}d</span>
-  return <span className="badge badge-green">Active</span>
+  if (days < 0)   return <Badge variant="red">Expired</Badge>
+  if (days <= 7)  return <Badge variant="red">Expires in {days}d</Badge>
+  if (days <= 30) return <Badge variant="amber">Expires in {days}d</Badge>
+  return <Badge variant="green">Active</Badge>
 }
 
 // ── Domain row input (in add modal) ──────────────────────────────────────────
@@ -76,50 +79,25 @@ function DomainRowInputs({ rows, onChange }: { rows: DomainRow[]; onChange: (r: 
   const cols = '2fr 140px 90px 32px'
   return (
     <div>
-      <div style={{display:'grid',gridTemplateColumns:cols,gap:'4px 10px',marginBottom:6,paddingBottom:4,borderBottom:'1px solid var(--c6)'}}>
-        <span className="form-label" style={{margin:0}}>Domain</span>
-        <span className="form-label" style={{margin:0}}>Expiry date</span>
-        <span className="form-label" style={{margin:0}}>€ / year</span>
+      <div className="grid mb-1.5 pb-1 border-b border-border" style={{gridTemplateColumns:cols,gap:'4px 10px'}}>
+        <span className="form-label m-0">Domain</span>
+        <span className="form-label m-0">Expiry date</span>
+        <span className="form-label m-0">€ / year</span>
         <span></span>
       </div>
       {rows.map((row, i) => (
-        <div key={i} style={{display:'grid',gridTemplateColumns:cols,gap:'6px 10px',alignItems:'center',marginBottom:8}}>
-          <input value={row.domain_name} onChange={e => update(i,'domain_name',e.target.value)} placeholder="example.si" style={{height:36}} />
-          <input type="date" lang="en-GB" value={row.expiry_date} onChange={e => update(i,'expiry_date',e.target.value)} style={{height:36,width:'100%'}} />
-          <input type="number" value={row.yearly_amount} onChange={e => update(i,'yearly_amount',e.target.value)} placeholder="25" style={{height:36}} />
+        <div key={i} className="grid items-center mb-2" style={{gridTemplateColumns:cols,gap:'6px 10px'}}>
+          <input value={row.domain_name} onChange={e => update(i,'domain_name',e.target.value)} placeholder="example.si" className="h-9" />
+          <input type="date" lang="en-GB" value={row.expiry_date} onChange={e => update(i,'expiry_date',e.target.value)} className="h-9 w-full" />
+          <input type="number" value={row.yearly_amount} onChange={e => update(i,'yearly_amount',e.target.value)} placeholder="25" className="h-9" />
           <button onClick={() => remove(i)} disabled={rows.length === 1}
-            style={{width:32,height:36,border:'1px solid var(--c6)',borderRadius:6,background:'#fff',cursor:'pointer',color:'var(--c4)',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>×</button>
+            className="flex items-center justify-center rounded cursor-pointer text-muted-foreground border border-border bg-white w-8 h-9 text-lg leading-none">×</button>
         </div>
       ))}
-      <button className="btn btn-ghost btn-xs" onClick={add} style={{marginTop:4}}>
+      <Button variant="ghost" size="xs" onClick={add} className="mt-1">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         Add domain
-      </button>
-    </div>
-  )
-}
-
-// ── Confirm popup ─────────────────────────────────────────────────────────────
-
-function ConfirmModal({ open, title, message, confirmLabel, danger, onConfirm, onClose }: {
-  open: boolean; title: string; message: string; confirmLabel: string; danger?: boolean
-  onConfirm: () => void; onClose: () => void
-}) {
-  if (!open) return null
-  return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box" style={{ maxWidth: 400 }}>
-        <div className="modal-header"><h2>{title}</h2><button className="modal-close" onClick={onClose}>×</button></div>
-        <div className="modal-body">
-          <p style={{margin:0,fontSize:14,color:'var(--c1)'}}>{message}</p>
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-secondary btn-sm" onClick={onClose}>Cancel</button>
-          <button className="btn btn-sm btn-primary"
-            style={danger ? {background:'var(--red)',borderColor:'var(--red)'} : {}}
-            onClick={onConfirm}>{confirmLabel}</button>
-        </div>
-      </div>
+      </Button>
     </div>
   )
 }
@@ -149,58 +127,58 @@ function Step2Panel({
   return (
     <div>
       {/* Step indicator */}
-      <div style={{display:'flex',justifyContent:'flex-end',marginBottom:12}}>
-        <span style={{fontSize:12,color:'var(--c3)',background:'var(--c7)',padding:'3px 10px',borderRadius:20}}>Step 2 of 2</span>
+      <div className="flex justify-end mb-3">
+        <span className="text-xs text-muted-foreground bg-[var(--c7)] px-[10px] py-[3px] rounded-[20px]">Step 2 of 2</span>
       </div>
 
       {/* Success banner */}
-      <div style={{display:'flex',alignItems:'center',gap:10,background:'#e8f5e9',border:'1px solid #c8e6c9',borderRadius:8,padding:'10px 14px',marginBottom:16,fontSize:13,color:'#2e7d32',fontWeight:600}}>
+      <div className="flex items-center gap-[10px] bg-[#e8f5e9] border border-[#c8e6c9] rounded-lg px-[14px] py-[10px] mb-4 text-[13px] text-[#2e7d32] font-semibold">
         <span>✓</span>
         <span>{savedDomains.length} domain{savedDomains.length > 1 ? 's' : ''} saved — {domainNames}</span>
         {invoicePlanned && (
-          <span className="badge badge-green" style={{marginLeft:'auto'}}>{statusLabel}: {monthLabel}</span>
+          <Badge variant="green" className="ml-auto">{statusLabel}: {monthLabel}</Badge>
         )}
       </div>
 
       {/* Invoice summary */}
       {invoicePlanned && (
-        <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',background:'#f0f4ff',border:'1px solid #d0d8f0',borderRadius:8,marginBottom:14,fontSize:13}}>
+        <div className="flex items-center gap-2 px-[14px] py-[10px] bg-[#f0f4ff] border border-[#d0d8f0] rounded-lg mb-[14px] text-[13px]">
           {'📅'} <span>Dodano v plan računov za <strong>{monthLabel}</strong> · {fmtEur(savedDomains.reduce((s, d) => s + (d.yearly_amount ?? 0), 0))} · <strong>{statusLabel}</strong></span>
         </div>
       )}
 
       {/* Siel email */}
-      <div style={{border:'1px solid var(--c6)',borderRadius:8,marginBottom:12,overflow:'hidden'}}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',background:'var(--c7)',borderBottom:'1px solid var(--c6)'}}>
+      <div className="border border-[var(--c6)] rounded-lg mb-3 overflow-hidden">
+        <div className="flex items-center justify-between px-[14px] py-[10px] bg-[var(--c7)] border-b border-[var(--c6)]">
           <div>
-            <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.5px',color:'var(--c3)'}}>Naročilo — Siel</div>
-            <div style={{fontSize:12,color:'var(--c1)',fontWeight:600}}>registrar@siel.si</div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.5px] text-muted-foreground">Naročilo — Siel</div>
+            <div className="text-xs text-[var(--c1)] font-semibold">registrar@siel.si</div>
           </div>
-          <button className="btn btn-secondary btn-xs" onClick={() => onCopy(sielEmail, 'Siel email')}>Copy</button>
+          <Button variant="outline" size="xs" onClick={() => onCopy(sielEmail, 'Siel email')}>Copy</Button>
         </div>
-        <pre style={{margin:0,padding:'12px 14px',fontSize:12,lineHeight:1.7,color:'var(--c1)',fontFamily:'inherit',whiteSpace:'pre-wrap',background:'#fff'}}>{sielEmail}</pre>
+        <pre className="m-0 px-[14px] py-3 text-xs leading-[1.7] text-[var(--c1)] font-[inherit] whitespace-pre-wrap bg-white">{sielEmail}</pre>
       </div>
 
       {/* Accounting email */}
-      <div style={{border:'1px solid var(--c6)',borderRadius:8,overflow:'hidden'}}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',background:'var(--c7)',borderBottom:'1px solid var(--c6)'}}>
+      <div className="border border-[var(--c6)] rounded-lg overflow-hidden">
+        <div className="flex items-center justify-between px-[14px] py-[10px] bg-[var(--c7)] border-b border-[var(--c6)]">
           <div>
-            <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.5px',color:'var(--c3)'}}>Obvestilo — računovodstvo</div>
-            <div style={{fontSize:12,color:'var(--c1)',fontWeight:600}}>fakturiranje@pristop.si</div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.5px] text-muted-foreground">Obvestilo — računovodstvo</div>
+            <div className="text-xs text-[var(--c1)] font-semibold">fakturiranje@pristop.si</div>
           </div>
-          <button className="btn btn-secondary btn-xs" onClick={() => onCopy(accountingEmail, 'Accounting email')}>Copy</button>
+          <Button variant="outline" size="xs" onClick={() => onCopy(accountingEmail, 'Accounting email')}>Copy</Button>
         </div>
-        <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 14px',borderBottom:'1px solid var(--c6)',background:'#fafbfd'}}>
-          <span style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.4px',color:'var(--c3)'}}>Rok plačila (dni):</span>
+        <div className="flex items-center gap-2 px-[14px] py-2 border-b border-[var(--c6)] bg-[#fafbfd]">
+          <span className="text-[11px] font-bold uppercase tracking-[0.4px] text-muted-foreground">Rok plačila (dni):</span>
           <input
             type="number"
             value={paymentDays}
             onChange={e => onPaymentDaysChange(Number(e.target.value) || 30)}
-            style={{width:60,height:28,textAlign:'center',fontSize:13,fontWeight:600}}
+            className="w-[60px] h-7 text-center text-[13px] font-semibold"
           />
-          <span style={{fontSize:11,color:'var(--c4)'}}>— spremenite pred kopiranjem</span>
+          <span className="text-[11px] text-muted-foreground">— spremenite pred kopiranjem</span>
         </div>
-        <pre style={{margin:0,padding:'12px 14px',fontSize:12,lineHeight:1.7,color:'var(--c1)',fontFamily:'inherit',whiteSpace:'pre-wrap',background:'#fff'}}>{accountingEmail}</pre>
+        <pre className="m-0 px-[14px] py-3 text-xs leading-[1.7] text-[var(--c1)] font-[inherit] whitespace-pre-wrap bg-white">{accountingEmail}</pre>
       </div>
     </div>
   )
@@ -592,13 +570,13 @@ export function DomainsView() {
   return (
     <div>
       {/* Header */}
-      <div className="page-header">
+      <div className="flex items-center justify-between px-6 py-4 bg-background border-b border-border">
         <div>
           <h1>Domains</h1>
           <p>Domain expiry tracking &amp; renewals</p>
         </div>
-        <div style={{display:'flex',gap:8,alignItems:'center'}}>
-          <div style={{minWidth:160}}>
+        <div className="flex gap-2 items-center">
+          <div className="min-w-[160px]">
             <Select
               value={clientFilter}
               onChange={setClientFilter}
@@ -609,96 +587,96 @@ export function DomainsView() {
               ]}
             />
           </div>
-          <div style={{position:'relative'}}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{position:'absolute',left:9,top:'50%',transform:'translateY(-50%)',color:'var(--c4)',pointerEvents:'none'}}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <div className="relative">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="absolute left-[9px] top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input placeholder="Search domains…" value={search} onChange={e => setSearch(e.target.value)}
-              style={{paddingLeft:28,maxWidth:160,width:'100%',height:34,fontSize:13}} />
+              className="pl-7 max-w-[160px] w-full h-[34px] text-[13px]" />
           </div>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>
+          <Button size="sm" onClick={() => setShowAdd(true)}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Add Client Domains
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Stats strip */}
-      <div className="stats-strip" style={{gridTemplateColumns:'repeat(4,1fr)'}}>
-        <div className="stat-card" style={{'--left-color':'var(--navy)'} as React.CSSProperties}>
-          <div className="stat-card-label">Total domains</div>
-          <div className="stat-card-value">{activeDomains.length}</div>
-          <div className="stat-card-sub">active</div>
+      <div className="grid grid-cols-4 gap-3 mb-4 px-6 pt-4">
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Total domains</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{activeDomains.length}</div>
+          <div className="text-xs text-muted-foreground mt-1">active</div>
         </div>
-        <div className="stat-card" style={{'--left-color':'var(--green)'} as React.CSSProperties}>
-          <div className="stat-card-label">Yearly revenue</div>
-          <div className="stat-card-value">{totalYearly > 0 ? fmtEur(totalYearly) : '—'}</div>
-          <div className="stat-card-sub">from domain renewals</div>
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Yearly revenue</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{totalYearly > 0 ? fmtEur(totalYearly) : '—'}</div>
+          <div className="text-xs text-muted-foreground mt-1">from domain renewals</div>
         </div>
-        <div className="stat-card" style={{'--left-color': critical.length > 0 ? 'var(--red)' : 'var(--c5)'} as React.CSSProperties}>
-          <div className="stat-card-label">Critical</div>
-          <div className="stat-card-value" style={{color: critical.length > 0 ? 'var(--red)' : undefined}}>
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Critical</div>
+          <div className={`text-[28px] font-extrabold tracking-[-0.5px] mb-2 ${critical.length > 0 ? 'text-[#dc2626]' : 'text-foreground'}`}>
             {critical.length}
           </div>
-          <div className="stat-card-sub">expires ≤ 7 days</div>
+          <div className="text-xs text-muted-foreground mt-1">expires ≤ 7 days</div>
         </div>
-        <div className="stat-card" style={{'--left-color': warningSoon.length > 0 ? 'var(--amber)' : 'var(--c5)'} as React.CSSProperties}>
-          <div className="stat-card-label">Expiring soon</div>
-          <div className="stat-card-value" style={{color: warningSoon.length > 0 ? 'var(--amber)' : undefined}}>
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Expiring soon</div>
+          <div className={`text-[28px] font-extrabold tracking-[-0.5px] mb-2 ${warningSoon.length > 0 ? 'text-[#d97706]' : 'text-foreground'}`}>
             {warningSoon.length}
           </div>
-          <div className="stat-card-sub">expires ≤ 30 days</div>
+          <div className="text-xs text-muted-foreground mt-1">expires ≤ 30 days</div>
         </div>
       </div>
 
-      <div className="page-content">
+      <div className="flex-1 overflow-auto p-6">
         {store.error && (
-          <div className="alert alert-red" style={{marginBottom:12}}>Failed to load data. Please check your connection.</div>
+          <div className="rounded-lg border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-sm text-[#be123c] mb-3">Failed to load data. Please check your connection.</div>
         )}
-        <div className="section-bar">
+        <div className="flex items-center justify-between mb-3">
           <h2>Active Domains <span className="text-xs" style={{fontWeight:400,textTransform:'none',letterSpacing:0}}>· {filtered.length} domain{filtered.length !== 1 ? 's' : ''}</span></h2>
         </div>
 
         {/* Bulk action bar */}
         {selected.size > 0 && (
-          <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',background:'var(--navy)',borderRadius:8,marginBottom:8}}>
-            <span style={{fontSize:13,fontWeight:600,color:'#fff',marginRight:6}}>{selected.size} selected</span>
-            <button className="btn btn-sm" style={{background:'rgba(255,255,255,0.15)',borderColor:'rgba(255,255,255,0.2)',color:'#fff'}}
+          <div className="flex items-center gap-2 px-[14px] py-[10px] bg-primary rounded-lg mb-2">
+            <span className="text-[13px] font-semibold text-white mr-[6px]">{selected.size} selected</span>
+            <Button size="sm" className="bg-white/15 border-white/20 text-white"
               onClick={() => { setBulkClientId(''); setBulkProjectPn(''); setShowBulkEdit(true) }}>
               Edit
-            </button>
-            <button className="btn btn-sm" style={{background:'rgba(255,255,255,0.15)',borderColor:'rgba(255,255,255,0.2)',color:'#fff'}}
+            </Button>
+            <Button size="sm" className="bg-white/15 border-white/20 text-white"
               onClick={() => setBulkArchiveOpen(true)}>
               Archive
-            </button>
-            <button className="btn btn-sm" style={{background:'rgba(220,38,38,0.7)',borderColor:'rgba(220,38,38,0.5)',color:'#fff'}}
+            </Button>
+            <Button size="sm" className="bg-[rgba(220,38,38,0.7)] border-[rgba(220,38,38,0.5)] text-white"
               onClick={() => setBulkDeleteOpen(true)}>
               Delete
-            </button>
+            </Button>
             <button onClick={clearSelection}
-              style={{marginLeft:'auto',background:'none',border:'none',cursor:'pointer',fontSize:13,color:'rgba(255,255,255,0.5)',padding:'0 4px',fontFamily:'inherit'}}>
+              className="ml-auto bg-none border-none cursor-pointer text-[13px] text-white/50 px-1 font-[inherit]">
               ✕ Clear
             </button>
           </div>
         )}
 
-        <div className="card">
+        <Card>
           {filtered.length === 0 ? (
-            <div style={{padding:'40px 20px',textAlign:'center',color:'var(--c4)'}}>
-              <div style={{fontWeight:600,color:'var(--c3)',marginBottom:4}}>No domains tracked yet</div>
-              <div className="text-sm">Add client domains to start monitoring expiry dates</div>
-            </div>
+            <CardContent className="py-10 text-center">
+              <div className="font-semibold text-muted-foreground mb-1">No domains tracked yet</div>
+              <div className="text-sm text-muted-foreground">Add client domains to start monitoring expiry dates</div>
+            </CardContent>
           ) : (
             <table>
               <thead>
                 <tr>
                   <th style={{width:36}}>
                     <input type="checkbox" checked={allSelected} onChange={toggleAll}
-                      style={{cursor:'pointer',width:14,height:14}} />
+                      className="cursor-pointer w-[14px] h-[14px]" />
                   </th>
                   <th>Client</th>
                   <th>Domain</th>
                   <th style={{width:110}}>Project #</th>
                   <th style={{width:110}}>Contract ID</th>
-                  <th className="th-right" style={{width:90}}>€/yr</th>
+                  <th className="text-right" style={{width:90}}>€/yr</th>
                   <th style={{width:110}}>Expiry</th>
                   <th style={{width:100}}>Status</th>
                   <th style={{width:100}}>Billing</th>
@@ -710,39 +688,39 @@ export function DomainsView() {
                   <tr key={d.id} style={selected.has(d.id) ? {background:'#eef2ff'} : {}}>
                     <td>
                       <input type="checkbox" checked={selected.has(d.id)} onChange={() => toggleRow(d.id)}
-                        style={{cursor:'pointer',width:14,height:14}} />
+                        className="cursor-pointer w-[14px] h-[14px]" />
                     </td>
-                    <td style={{fontWeight:600}}>
+                    <td className="font-semibold">
                       {d.client?.name
                         ? d.client.name
-                        : <span style={{color:'var(--c4)',fontStyle:'italic',fontWeight:400}}>own cost</span>}
+                        : <span className="text-muted-foreground italic font-normal">own cost</span>}
                     </td>
-                    <td style={{fontWeight:700,color:'var(--c0)'}}>{d.domain_name}</td>
-                    <td style={{fontSize:13,color:'var(--c2)'}}>{d.project_pn ?? '—'}</td>
-                    <td style={{fontSize:13,color:'var(--c2)'}}>{d.contract_id ?? <span className="text-xs">—</span>}</td>
-                    <td className="td-right text-mono" style={{fontWeight:700}}>
-                      {d.yearly_amount ? `${d.yearly_amount} €` : <span className="text-xs" style={{fontWeight:400}}>—</span>}
+                    <td className="font-bold text-[var(--c0)]">{d.domain_name}</td>
+                    <td className="text-[13px] text-[#374151]">{d.project_pn ?? '—'}</td>
+                    <td className="text-[13px] text-[#374151]">{d.contract_id ?? <span className="text-xs">—</span>}</td>
+                    <td className="text-right font-bold">
+                      {d.yearly_amount ? `${d.yearly_amount} €` : <span className="text-xs font-normal">—</span>}
                     </td>
-                    <td style={{fontSize:13,color:'var(--c2)'}}>{fmtDate(d.expiry_date)}</td>
+                    <td className="text-[13px] text-[#374151]">{fmtDate(d.expiry_date)}</td>
                     <td><ExpiryBadge expiryDate={d.expiry_date} /></td>
                     <td>
                       {domainBillingStatus.get(d.id) === 'billed'
-                        ? <span className="badge badge-green">Billed</span>
+                        ? <Badge variant="green">Billed</Badge>
                         : domainBillingStatus.get(d.id) === 'planned'
-                          ? <span className="badge badge-amber">In plan</span>
+                          ? <Badge variant="amber">In plan</Badge>
                           : daysUntil(d.expiry_date) <= 60
-                            ? <button className="btn btn-ghost btn-xs" onClick={() => openInvoiceDomain(d)} style={{color:'var(--navy)',fontWeight:600}}>Invoice</button>
+                            ? <Button variant="ghost" size="xs" onClick={() => openInvoiceDomain(d)} className="text-primary font-semibold">Invoice</Button>
                             : null}
                     </td>
                     <td>
-                      <div style={{display:'flex',gap:4,justifyContent:'flex-end'}}>
-                        <button className="btn btn-secondary btn-xs" onClick={() => setEditDomain({ ...d })}>Edit</button>
-                        <button className="btn btn-ghost btn-xs" onClick={() => setArchiveTarget(d)} title="Archive">
+                      <div className="flex gap-1 justify-end">
+                        <Button variant="outline" size="xs" onClick={() => setEditDomain({ ...d })}>Edit</Button>
+                        <Button variant="ghost" size="xs" onClick={() => setArchiveTarget(d)} title="Archive">
                           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
-                        </button>
-                        <button className="btn btn-ghost btn-xs" onClick={() => setDeleteTarget(d)} title="Delete" style={{color:'var(--red)'}}>
+                        </Button>
+                        <Button variant="ghost" size="xs" onClick={() => setDeleteTarget(d)} title="Delete" className="text-[#dc2626]">
                           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                        </button>
+                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -753,25 +731,25 @@ export function DomainsView() {
                   <tr>
                     <td colSpan={7}></td>
                     <td></td>
-                    <td style={{textAlign:'right',fontSize:10,fontWeight:700,color:'var(--c3)',textTransform:'uppercase',letterSpacing:'0.6px',paddingRight:8}}>Total / year</td>
-                    <td className="td-right text-mono" style={{fontSize:15,fontWeight:800,color:'var(--navy)',paddingRight:16}}>{totalYearly.toFixed(0)} €</td>
+                    <td className="text-right text-[10px] font-bold text-muted-foreground uppercase tracking-[0.6px] pr-2 whitespace-nowrap">Total / year</td>
+                    <td className="text-right pr-4 text-[15px] font-extrabold text-primary whitespace-nowrap">{totalYearly.toFixed(0)} €</td>
                   </tr>
                 </tfoot>
               )}
             </table>
           )}
           <Pagination page={activePage} total={filtered.length} perPage={ACTIVE_PER_PAGE} onChange={setActivePage} />
-        </div>
+        </Card>
 
         {/* Archived domains */}
-        <div className="section-bar" style={{marginTop:32}}>
+        <div className="flex items-center justify-between mb-3 mt-8">
           <h2>Archived Domains <span className="text-xs" style={{fontWeight:400,textTransform:'none',letterSpacing:0}}>· {archivedDomains.length}</span></h2>
         </div>
-        <div className="card">
+        <Card>
           {archivedDomains.length === 0 ? (
-            <div style={{padding:'28px 20px',textAlign:'center',color:'var(--c4)'}}>
-              <div className="text-sm">No archived domains</div>
-            </div>
+            <CardContent className="py-7 text-center">
+              <div className="text-sm text-muted-foreground">No archived domains</div>
+            </CardContent>
           ) : (
             <table>
               <thead>
@@ -780,27 +758,27 @@ export function DomainsView() {
                   <th>Domain</th>
                   <th style={{width:90}}>Project #</th>
                   <th style={{width:110}}>Expiry</th>
-                  <th className="th-right" style={{width:90}}>€/yr</th>
+                  <th className="text-right" style={{width:90}}>€/yr</th>
                   <th style={{width:80}}></th>
                 </tr>
               </thead>
               <tbody>
                 {pagedArchived.map(d => (
                   <tr key={d.id} style={{opacity:0.65}}>
-                    <td style={{fontWeight:600,color:'var(--c2)'}}>
-                      {d.client?.name ?? <span style={{fontStyle:'italic',color:'var(--c4)',fontWeight:400}}>own cost</span>}
+                    <td className="font-semibold text-[#374151]">
+                      {d.client?.name ?? <span className="italic text-muted-foreground font-normal">own cost</span>}
                     </td>
-                    <td style={{fontWeight:600,color:'var(--c2)'}}>{d.domain_name}</td>
-                    <td style={{fontSize:13,color:'var(--c2)'}}>{d.project_pn ?? '—'}</td>
-                    <td style={{fontSize:13,color:'var(--c3)'}}>{fmtDate(d.expiry_date)}</td>
-                    <td className="td-right text-mono" style={{color:'var(--c3)'}}>
+                    <td className="font-semibold text-[#374151]">{d.domain_name}</td>
+                    <td className="text-[13px] text-[#374151]">{d.project_pn ?? '—'}</td>
+                    <td className="text-[13px] text-muted-foreground">{fmtDate(d.expiry_date)}</td>
+                    <td className="text-right text-muted-foreground">
                       {d.yearly_amount ? `${d.yearly_amount} €` : <span className="text-xs">—</span>}
                     </td>
                     <td>
-                      <div style={{display:'flex',gap:4,justifyContent:'flex-end'}}>
-                        <button className="btn btn-ghost btn-xs" style={{color:'var(--red)'}} onClick={() => setDeleteTarget(d)} title="Delete permanently">
+                      <div className="flex gap-1 justify-end">
+                        <Button variant="ghost" size="xs" className="text-[#dc2626]" onClick={() => setDeleteTarget(d)} title="Delete permanently">
                           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                        </button>
+                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -809,7 +787,7 @@ export function DomainsView() {
             </table>
           )}
           <Pagination page={archivePage} total={archivedDomains.length} perPage={ARCHIVE_PER_PAGE} onChange={setArchivePage} />
-        </div>
+        </Card>
       </div>
 
       {/* ── Add domains modal ── */}
@@ -817,45 +795,45 @@ export function DomainsView() {
         footer={
           wizardStep === 1 ? (
             <>
-              <button className="btn btn-secondary btn-sm" onClick={() => { setShowAdd(false); resetAddForm() }}>Cancel</button>
-              <button className="btn btn-secondary btn-sm" onClick={() => handleSave(true)} disabled={saving}>Save &amp; add new</button>
-              <button className="btn btn-primary btn-sm" onClick={() => handleSave(false)} disabled={saving}>
+              <Button variant="outline" size="sm" onClick={() => { setShowAdd(false); resetAddForm() }}>Cancel</Button>
+              <Button variant="outline" size="sm" onClick={() => handleSave(true)} disabled={saving}>Save &amp; add new</Button>
+              <Button size="sm" onClick={() => handleSave(false)} disabled={saving}>
                 {saving ? <span className="spinner"/> : null} Save › Next step
-              </button>
+              </Button>
             </>
           ) : (
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',width:'100%'}}>
-              <span style={{fontSize:12,color:'var(--c4)'}}>Kopirajte kar potrebujete, nato zaprite</span>
-              <button className="btn btn-primary btn-sm" onClick={closeWizard}>Done</button>
+            <div className="flex items-center justify-between w-full">
+              <span className="text-xs text-muted-foreground">Kopirajte kar potrebujete, nato zaprite</span>
+              <Button size="sm" onClick={closeWizard}>Done</Button>
             </div>
           )
         }>
 
         {wizardStep === 1 ? (
           <>
-            {domainError && <div className="alert alert-red" style={{marginBottom:12}}>{domainError}</div>}
+            {domainError && <div className="rounded-lg border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-sm text-[#be123c] mb-3">{domainError}</div>}
 
             {/* Own agency domain toggle */}
-            <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',marginBottom:12,fontSize:13,fontWeight:500,color:'var(--c1)'}}>
+            <label className="flex items-center gap-2 cursor-pointer mb-3 text-[13px] font-medium text-[var(--c1)]">
               <input
                 type="checkbox"
                 checked={isOwn}
                 onChange={e => { setIsOwn(e.target.checked); setClientId(''); setShowNewClient(false) }}
-                style={{width:15,height:15,cursor:'pointer'}}
+                className="w-[15px] h-[15px] cursor-pointer"
               />
               This is our agency domain
               {settingsStore.agencyName && (
-                <span className="form-hint" style={{fontSize:11,marginLeft:4}}>({settingsStore.agencyName}) — will be set as non-billable</span>
+                <span className="text-xs text-muted-foreground ml-1">({settingsStore.agencyName}) — will be set as non-billable</span>
               )}
             </label>
 
             {/* Client */}
             {!isOwn && (
-            <div className="form-group" style={{marginBottom:12}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+            <div className="mb-3">
+              <div className="flex items-center justify-between mb-[6px]">
                 <label className="form-label" style={{marginBottom:0}}>Client</label>
                 <button type="button" onClick={() => { setShowNewClient(!showNewClient); setClientId('') }}
-                  style={{background:'none',border:'none',cursor:'pointer',fontSize:12,color:'var(--navy)',fontWeight:600,padding:0,fontFamily:'inherit'}}>
+                  className="bg-none border-none cursor-pointer text-xs text-primary font-semibold p-0 font-[inherit]">
                   {showNewClient ? '← Pick existing' : '+ New client'}
                 </button>
               </div>
@@ -873,7 +851,7 @@ export function DomainsView() {
             )}
 
             {/* Project # + Contract ID */}
-            <div className="form-row" style={{marginBottom:14}}>
+            <div className="grid grid-cols-2 gap-4 mb-[14px]">
               <div className="form-group">
                 <label className="form-label">Project #</label>
                 <input placeholder="e.g. 1159" value={projectPn} onChange={e => setProjectPn(e.target.value)} />
@@ -885,17 +863,17 @@ export function DomainsView() {
             </div>
 
             {/* Domains */}
-            <div style={{borderTop:'1px solid var(--c6)',paddingTop:14}}>
-              <p style={{margin:'0 0 10px',fontWeight:700,fontSize:15,color:'var(--c0)'}}>Domains</p>
+            <div className="border-t border-border pt-[14px]">
+              <p className="m-0 mb-[10px] font-bold text-[15px] text-[var(--c0)]">Domains</p>
               <DomainRowInputs rows={domainRows} onChange={setDomainRows} />
             </div>
 
             {/* Billing */}
-            <div style={{borderTop:'1px solid var(--c6)',paddingTop:14,marginTop:14}}>
-              <p style={{margin:'0 0 12px',fontWeight:700,fontSize:13,color:'var(--c0)'}}>
-                Billing <span style={{fontWeight:400,fontSize:11,color:'var(--c4)'}}>— optional</span>
+            <div className="border-t border-border pt-[14px] mt-[14px]">
+              <p className="m-0 mb-3 font-bold text-[13px] text-[var(--c0)]">
+                Billing <span className="font-normal text-[11px] text-muted-foreground">— optional</span>
               </p>
-              <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',marginBottom:12,fontSize:13,fontWeight:500}}>
+              <label className="flex items-center gap-2 cursor-pointer mb-3 text-[13px] font-medium">
                 <input
                   type="checkbox"
                   checked={invoicePlanStatus === 'issued'}
@@ -906,18 +884,18 @@ export function DomainsView() {
                       setInvoicePlanMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
                     }
                   }}
-                  style={{width:15,height:15}}
+                  className="w-[15px] h-[15px]"
                 />
                 Already billed
               </label>
               {invoicePlanStatus === 'issued' ? (
-                <div className="form-group" style={{marginBottom:0,maxWidth:200}}>
+                <div className="mb-0 max-w-[200px]">
                   <label className="form-label">Billed in which month?</label>
                   <input type="month" value={invoicePlanMonth} onChange={e => setInvoicePlanMonth(e.target.value)} />
                 </div>
               ) : (
                 <div>
-                  <div className="form-group" style={{marginBottom:0,maxWidth:200}}>
+                  <div className="mb-0 max-w-[200px]">
                     <label className="form-label">Add to invoice month</label>
                     <input
                       type="month"
@@ -929,7 +907,7 @@ export function DomainsView() {
                     />
                   </div>
                   {!invoicePlanMonth && (
-                    <p style={{margin:'6px 0 0',fontSize:11,color:'var(--c4)'}}>Leave empty to skip — you can invoice from the table later.</p>
+                    <p className="mt-[6px] mb-0 text-[11px] text-muted-foreground">Leave empty to skip — you can invoice from the table later.</p>
                   )}
                 </div>
               )}
@@ -954,34 +932,34 @@ export function DomainsView() {
       {editDomain && (
         <Modal open={!!editDomain} title="Edit Domain" onClose={() => setEditDomain(null)}
           footer={<>
-            <button className="btn btn-secondary btn-sm" onClick={() => setEditDomain(null)}>Cancel</button>
-            <button className="btn btn-primary btn-sm" onClick={handleSaveEdit} disabled={saving}>{saving ? <span className="spinner"/> : null} Save</button>
+            <Button variant="outline" size="sm" onClick={() => setEditDomain(null)}>Cancel</Button>
+            <Button size="sm" onClick={handleSaveEdit} disabled={saving}>{saving ? <span className="spinner"/> : null} Save</Button>
           </>}>
-          <div className="form-row" style={{marginBottom:14}}>
+          <div className="grid grid-cols-2 gap-4 mb-[14px]">
             <div className="form-group">
               <label className="form-label">Domain name</label>
               <input value={editDomain.domain_name} onChange={e => setEditDomain(d => d ? {...d, domain_name: e.target.value} : d)} />
             </div>
             <div className="form-group">
               <label className="form-label">Expiry date</label>
-              <input type="text" value={isoToDMY(editDomain.expiry_date)} readOnly style={{background:'var(--c7)',color:'var(--c3)',cursor:'not-allowed'}} />
+              <input type="text" value={isoToDMY(editDomain.expiry_date)} readOnly className="bg-[var(--c7)] text-muted-foreground cursor-not-allowed" />
             </div>
           </div>
-          <div className="form-row" style={{marginBottom:14}}>
+          <div className="grid grid-cols-2 gap-4 mb-[14px]">
             <div className="form-group">
               <label className="form-label">Client</label>
-              <input value={editDomain.client?.name ?? '— own cost —'} readOnly style={{background:'var(--c7)',color:'var(--c3)',cursor:'not-allowed'}} />
+              <input value={editDomain.client?.name ?? '— own cost —'} readOnly className="bg-[var(--c7)] text-muted-foreground cursor-not-allowed" />
             </div>
             <div className="form-group">
               <label className="form-label">Project #</label>
               <input placeholder="e.g. RS-2026-001" value={editDomain.project_pn ?? ''} onChange={e => setEditDomain(d => d ? {...d, project_pn: e.target.value} : d)} />
             </div>
           </div>
-          <div className="form-group" style={{marginBottom:14}}>
+          <div className="mb-[14px]">
             <label className="form-label">€ / year</label>
-            <input type="number" value={editDomain.yearly_amount ?? ''} readOnly style={{background:'var(--c7)',color:'var(--c3)',cursor:'not-allowed'}} />
+            <input type="number" value={editDomain.yearly_amount ?? ''} readOnly className="bg-[var(--c7)] text-muted-foreground cursor-not-allowed" />
           </div>
-          <div className="form-group" style={{marginBottom:14}}>
+          <div className="mb-[14px]">
             <label className="form-label">Contract / Order ID</label>
             <input value={editDomain.contract_id ?? ''} onChange={e => setEditDomain(d => d ? {...d, contract_id: e.target.value || null} : d)} />
           </div>
@@ -993,19 +971,19 @@ export function DomainsView() {
         maxWidth={440}
         onClose={() => setShowBulkEdit(false)}
         footer={<>
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowBulkEdit(false)}>Cancel</button>
-          <button className="btn btn-primary btn-sm" onClick={handleBulkEdit} disabled={bulkSaving}>
+          <Button variant="outline" size="sm" onClick={() => setShowBulkEdit(false)}>Cancel</Button>
+          <Button size="sm" onClick={handleBulkEdit} disabled={bulkSaving}>
             {bulkSaving ? <span className="spinner"/> : null} Apply to all
-          </button>
+          </Button>
         </>}>
-        <p style={{margin:'0 0 16px',fontSize:13,color:'var(--c3)'}}>Only filled fields will be updated. Leave blank to keep existing values.</p>
-        <div className="form-group" style={{marginBottom:14}}>
-          <label className="form-label" style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+        <p className="m-0 mb-4 text-[13px] text-muted-foreground">Only filled fields will be updated. Leave blank to keep existing values.</p>
+        <div className="mb-[14px]">
+          <label className="form-label flex items-center justify-between">
             Set client
-            <button type="button" className="btn btn-ghost btn-xs" style={{padding:'0 4px',fontWeight:500}}
+            <Button variant="ghost" size="xs" className="px-1 font-medium"
               onClick={() => { setShowBulkNewClient(!showBulkNewClient); setBulkClientId('') }}>
               {showBulkNewClient ? '← Pick existing' : '+ New client'}
-            </button>
+            </Button>
           </label>
           {showBulkNewClient ? (
             <input placeholder="Client name" value={bulkNewClientName} onChange={e => setBulkNewClientName(e.target.value)} autoFocus />
@@ -1025,22 +1003,21 @@ export function DomainsView() {
       </Modal>
 
       {/* ── Single confirm modals ── */}
-      <ConfirmModal
+      <ConfirmDialog
         open={!!archiveTarget}
         title="Archive domain"
         message={`Archive ${archiveTarget?.domain_name ?? ''}? Past invoices in the Revenue Planner and Statistics will be preserved. The domain will no longer appear as active or be billed going forward.`}
         confirmLabel="Archive"
         onConfirm={() => archiveTarget && handleArchive(archiveTarget)}
-        onClose={() => setArchiveTarget(null)}
+        onCancel={() => setArchiveTarget(null)}
       />
-      <ConfirmModal
+      <ConfirmDialog
         open={!!deleteTarget}
         title="Delete domain"
         message={`Permanently delete ${deleteTarget?.domain_name ?? ''}? This cannot be undone.`}
         confirmLabel="Delete"
-        danger
         onConfirm={() => deleteTarget && handleDelete(deleteTarget)}
-        onClose={() => setDeleteTarget(null)}
+        onCancel={() => setDeleteTarget(null)}
       />
 
       {/* ── Domain renewal invoice modal ── */}
@@ -1049,20 +1026,20 @@ export function DomainsView() {
         title={`Issue Invoice — ${invoiceDomain?.domain_name ?? ''}`}
         onClose={() => setInvoiceDomain(null)}
         footer={<>
-          <button className="btn btn-secondary btn-sm" onClick={() => setInvoiceDomain(null)}>Cancel</button>
-          <button className="btn btn-primary btn-sm" onClick={saveInvoiceDomain} disabled={invoiceSaving || !invoiceMonth}>
+          <Button variant="outline" size="sm" onClick={() => setInvoiceDomain(null)}>Cancel</Button>
+          <Button size="sm" onClick={saveInvoiceDomain} disabled={invoiceSaving || !invoiceMonth}>
             {invoiceSaving ? 'Saving…' : 'Add to Invoice Plan'}
-          </button>
+          </Button>
         </>}
       >
         {invoiceDomain && (
           <>
             {invoiceDomain.client && (
-              <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--c2)' }}>
+              <div className="mb-3 text-[13px] text-[#374151]">
                 Client: <strong>{invoiceDomain.client.name}</strong>
               </div>
             )}
-            <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+            <div className="grid grid-cols-2 gap-3 mb-3">
               <div className="form-group">
                 <label className="form-label">Month</label>
                 <input type="month" value={invoiceMonth} onChange={e => setInvoiceMonth(e.target.value)} />
@@ -1081,22 +1058,21 @@ export function DomainsView() {
       </Modal>
 
       {/* ── Bulk confirm modals ── */}
-      <ConfirmModal
+      <ConfirmDialog
         open={bulkArchiveOpen}
         title="Archive domains"
         message={`Archive ${selected.size} domain${selected.size > 1 ? 's' : ''}? Past invoices will be preserved. Domains will no longer be billed going forward.`}
         confirmLabel="Archive all"
         onConfirm={handleBulkArchive}
-        onClose={() => setBulkArchiveOpen(false)}
+        onCancel={() => setBulkArchiveOpen(false)}
       />
-      <ConfirmModal
+      <ConfirmDialog
         open={bulkDeleteOpen}
         title="Delete domains"
         message={`Permanently delete ${selected.size} domain${selected.size > 1 ? 's' : ''}? This cannot be undone.`}
         confirmLabel="Delete all"
-        danger
         onConfirm={handleBulkDelete}
-        onClose={() => setBulkDeleteOpen(false)}
+        onCancel={() => setBulkDeleteOpen(false)}
       />
     </div>
   )

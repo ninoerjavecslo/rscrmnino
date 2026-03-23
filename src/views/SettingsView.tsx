@@ -31,8 +31,9 @@ type SettingsTab = 'general' | 'team' | 'holidays'
 
 interface MemberForm {
   name: string; email: string; team_id: string; role: string; skills: string
+  overhead_meetings_month: number; overhead_sales_month: number; vacation_days_year: number
 }
-const EMPTY_FORM: MemberForm = { name: '', email: '', team_id: '', role: '', skills: '' }
+const EMPTY_FORM: MemberForm = { name: '', email: '', team_id: '', role: '', skills: '', overhead_meetings_month: 0, overhead_sales_month: 0, vacation_days_year: 0 }
 
 function getTeamCategory(m: TeamMember): 'uxui' | 'dev' | 'content' | 'other' {
   const teamName = (m.team?.name ?? '').toLowerCase()
@@ -63,6 +64,8 @@ export function SettingsView() {
   const [pmInput, setPmInput] = useState('')
   const [pmSaving, setPmSaving] = useState(false)
   const [internalRate, setInternalRate] = useState(String(settingsStore.internalHourlyRate || ''))
+  const [cmsInput, setCmsInput] = useState('')
+  const [cmsSaving, setCmsSaving] = useState(false)
 
   // ── Team ─────────────────────────────────────────────────────────────────
   const [showMemberModal, setShowMemberModal] = useState(false)
@@ -164,6 +167,24 @@ export function SettingsView() {
     finally { setPmSaving(false) }
   }
 
+  async function addCms() {
+    const name = cmsInput.trim()
+    if (!name || settingsStore.cmsOptions.includes(name)) return
+    setCmsSaving(true)
+    try {
+      await settingsStore.setCmsOptions([...settingsStore.cmsOptions, name])
+      setCmsInput(''); toast('success', `${name} added`)
+    } catch { toast('error', 'Failed') }
+    finally { setCmsSaving(false) }
+  }
+
+  async function removeCms(name: string) {
+    setCmsSaving(true)
+    try { await settingsStore.setCmsOptions(settingsStore.cmsOptions.filter(c => c !== name)) }
+    catch { toast('error', 'Failed') }
+    finally { setCmsSaving(false) }
+  }
+
   async function generateCode() {
     setTgLoading(true)
     try {
@@ -189,7 +210,7 @@ export function SettingsView() {
 
   function openEdit(m: TeamMember) {
     setEditTarget(m)
-    setMemberForm({ name: m.name, email: m.email ?? '', team_id: m.team_id ?? '', role: m.role ?? '', skills: m.skills ?? '' })
+    setMemberForm({ name: m.name, email: m.email ?? '', team_id: m.team_id ?? '', role: m.role ?? '', skills: m.skills ?? '', overhead_meetings_month: m.overhead_meetings_month ?? 0, overhead_sales_month: m.overhead_sales_month ?? 0, vacation_days_year: m.vacation_days_year ?? 0 })
     setShowMemberModal(true)
   }
 
@@ -197,6 +218,11 @@ export function SettingsView() {
     if (!memberForm.name.trim()) return
     setMemberSaving(true)
     try {
+      const overheadPayload = {
+        overhead_meetings_month: memberForm.overhead_meetings_month || null,
+        overhead_sales_month: memberForm.overhead_sales_month || null,
+        vacation_days_year: memberForm.vacation_days_year || null,
+      }
       if (editTarget) {
         await resourceStore.updateMember(editTarget.id, {
           name: memberForm.name.trim(),
@@ -204,6 +230,7 @@ export function SettingsView() {
           team_id: memberForm.team_id || null,
           role: memberForm.role || null,
           skills: memberForm.skills || null,
+          ...overheadPayload,
         })
         toast('success', 'Member updated')
       } else {
@@ -213,6 +240,7 @@ export function SettingsView() {
           team_id: memberForm.team_id || null,
           role: memberForm.role || undefined,
           skills: memberForm.skills || undefined,
+          ...overheadPayload,
         })
         toast('success', 'Member added')
       }
@@ -246,7 +274,7 @@ export function SettingsView() {
     return (
       <div className="flex flex-col gap-4">
         {/* Top row: General Info | Team summary */}
-        <div className="grid gap-8 items-start [grid-template-columns:1fr_260px]">
+        <div className="grid gap-4 items-start [grid-template-columns:1fr_260px]">
 
           {/* General Information */}
           <Card>
@@ -389,27 +417,50 @@ export function SettingsView() {
           </div>
         </div>
 
-        {/* Project Managers */}
-        <Card>
-          <CardContent className="px-6 py-5">
-            <div className="font-bold text-[15px] text-foreground mb-1">Project Managers</div>
-            <div className="text-[13px] text-muted-foreground mb-4">People available as PMs in project forms.</div>
-            <div className="flex flex-wrap gap-2 mb-3.5">
-              {settingsStore.projectManagers.map(name => (
-                <div key={name} className="flex items-center gap-1.5 bg-[var(--c7)] rounded border border-border px-2.5 py-1 text-[13px] text-foreground">
-                  <span>{name}</span>
-                  <button onClick={() => removePM(name)} disabled={pmSaving}
-                    className="bg-transparent border-none cursor-pointer text-muted-foreground text-[15px] leading-none p-0 hover:text-[#dc2626]">×</button>
-                </div>
-              ))}
-            </div>
-            <div className="flex gap-2 max-w-[360px]">
-              <input value={pmInput} onChange={e => setPmInput(e.target.value)} placeholder="Add name…"
-                onKeyDown={e => e.key === 'Enter' && addPM()} className="flex-1" />
-              <Button size="sm" onClick={addPM} disabled={pmSaving || !pmInput.trim()}>Add</Button>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Project Managers + CMS side by side */}
+        <div className="grid grid-cols-2 gap-4">
+          <Card>
+            <CardContent className="px-6 py-5">
+              <div className="font-bold text-[15px] text-foreground mb-0.5">Project Managers</div>
+              <div className="text-[13px] text-muted-foreground mb-4">People available as PMs in project forms.</div>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {settingsStore.projectManagers.map(name => (
+                  <div key={name} className="flex items-center gap-1.5 bg-[var(--c7)] rounded border border-border px-2.5 py-1 text-[13px] text-foreground">
+                    <span>{name}</span>
+                    <button onClick={() => removePM(name)} disabled={pmSaving}
+                      className="bg-transparent border-none cursor-pointer text-muted-foreground text-[15px] leading-none p-0 hover:text-[#dc2626]">×</button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input value={pmInput} onChange={e => setPmInput(e.target.value)} placeholder="Add name…"
+                  onKeyDown={e => e.key === 'Enter' && addPM()} className="flex-1" />
+                <Button size="sm" onClick={addPM} disabled={pmSaving || !pmInput.trim()}>Add</Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="px-6 py-5">
+              <div className="font-bold text-[15px] text-foreground mb-0.5">CMS / Technology</div>
+              <div className="text-[13px] text-muted-foreground mb-4">Options available when adding projects or maintenances.</div>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {settingsStore.cmsOptions.map(name => (
+                  <div key={name} className="flex items-center gap-1.5 bg-[var(--c7)] rounded border border-border px-2.5 py-1 text-[13px] text-foreground">
+                    <span>{name}</span>
+                    <button onClick={() => removeCms(name)} disabled={cmsSaving}
+                      className="bg-transparent border-none cursor-pointer text-muted-foreground text-[15px] leading-none p-0 hover:text-[#dc2626]">×</button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input value={cmsInput} onChange={e => setCmsInput(e.target.value)} placeholder="Add CMS…"
+                  onKeyDown={e => e.key === 'Enter' && addCms()} className="flex-1" />
+                <Button size="sm" onClick={addCms} disabled={cmsSaving || !cmsInput.trim()}>Add</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
         {/* Telegram */}
         <Card>
@@ -834,9 +885,26 @@ export function SettingsView() {
               <input value={memberForm.role} onChange={e => setMemberForm(f => ({ ...f, role: e.target.value }))} placeholder="e.g. Senior Designer" />
             </div>
           </div>
-          <div className="mb-5">
+          <div className="mb-3.5">
             <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Skills <span className="font-normal text-muted-foreground">comma-separated</span></label>
             <input value={memberForm.skills} onChange={e => setMemberForm(f => ({ ...f, skills: e.target.value }))} placeholder="e.g. Figma, UI/UX, Prototyping" />
+          </div>
+          <div className="border-t border-border pt-4 mb-5">
+            <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-3">Capacity Overhead</div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Meetings <span className="font-normal normal-case">h/mo</span></label>
+                <input type="number" value={memberForm.overhead_meetings_month} onChange={e => setMemberForm(f => ({ ...f, overhead_meetings_month: Number(e.target.value) }))} min={0} step={1} />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Sales <span className="font-normal normal-case">h/mo</span></label>
+                <input type="number" value={memberForm.overhead_sales_month} onChange={e => setMemberForm(f => ({ ...f, overhead_sales_month: Number(e.target.value) }))} min={0} step={1} />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Vacation <span className="font-normal normal-case">days/yr</span></label>
+                <input type="number" value={memberForm.vacation_days_year} onChange={e => setMemberForm(f => ({ ...f, vacation_days_year: Number(e.target.value) }))} min={0} step={1} />
+              </div>
+            </div>
           </div>
           <div className="flex gap-2 justify-end">
             <Button variant="outline" size="sm" onClick={() => setShowMemberModal(false)}>Cancel</Button>

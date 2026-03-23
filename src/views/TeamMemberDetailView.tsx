@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, type ReactNode } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useResourceStore } from '../stores/resource'
 import { useProjectsStore } from '../stores/projects'
@@ -6,6 +6,9 @@ import { useHolidayStore } from '../stores/holidays'
 import { supabase } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import type { TimeOff, AllocationCategory, MemberProject } from '../lib/types'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
 
 const CAT_COLORS: Record<AllocationCategory, string> = {
   project: 'var(--navy)',
@@ -17,13 +20,6 @@ const CAT_COLORS: Record<AllocationCategory, string> = {
   sales: '#7c3aed',
 }
 
-const STATUS_BADGE: Record<string, string> = {
-  active: 'badge-green',
-  paused: 'badge-amber',
-  completed: 'badge-gray',
-  cancelled: 'badge-red',
-}
-
 const STATUS_BORDER: Record<string, string> = {
   active: 'var(--green)',
   paused: 'var(--amber)',
@@ -31,10 +27,19 @@ const STATUS_BORDER: Record<string, string> = {
   cancelled: 'var(--red)',
 }
 
-const TYPE_BADGE: Record<string, string> = {
-  fixed: 'badge-navy',
-  maintenance: 'badge-blue',
-  variable: 'badge-amber',
+type StatusBadgeVariant = 'green' | 'amber' | 'gray' | 'red'
+const STATUS_BADGE: Record<string, StatusBadgeVariant> = {
+  active: 'green',
+  paused: 'amber',
+  completed: 'gray',
+  cancelled: 'red',
+}
+
+type TypeBadgeVariant = 'navy' | 'blue' | 'amber'
+const TYPE_BADGE: Record<string, TypeBadgeVariant> = {
+  fixed: 'navy',
+  maintenance: 'blue',
+  variable: 'amber',
 }
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -162,8 +167,10 @@ export function TeamMemberDetailView() {
 
     const yearStart = `${year}-01-01`
     const yearEnd = `${year}-12-31`
-    const yearCapacity = workingDays(yearStart, yearEnd) * member.hours_per_day
-    const yearHours = allocations.reduce((s, a) => s + a.hours, 0)
+    const yearVacation = (member.vacation_days_year ?? 0) * member.hours_per_day
+    const yearCapacity = Math.max(0, workingDays(yearStart, yearEnd) * member.hours_per_day - yearVacation)
+    const yearOverhead = ((member.overhead_meetings_month ?? 0) + (member.overhead_sales_month ?? 0)) * 12
+    const yearHours = allocations.reduce((s, a) => s + a.hours, 0) + yearOverhead
     const remaining = Math.max(0, yearCapacity - yearHours)
 
     const byCategory: Record<string, number> = {}
@@ -188,11 +195,13 @@ export function TeamMemberDetailView() {
       const monthStart = `${monthStr}-01`
       const lastDay = new Date(year, i + 1, 0).getDate()
       const monthEnd = `${monthStr}-${String(lastDay).padStart(2, '0')}`
-      const capacity = workingDays(monthStart, monthEnd) * member.hours_per_day
+      const monthOverhead = (member.overhead_meetings_month ?? 0) + (member.overhead_sales_month ?? 0)
+      const monthVacation = ((member.vacation_days_year ?? 0) / 12) * member.hours_per_day
+      const capacity = Math.max(0, workingDays(monthStart, monthEnd) * member.hours_per_day - monthVacation)
 
       const allocatedHours = allocations
         .filter(a => a.date >= monthStart && a.date <= monthEnd && a.category !== 'leave')
-        .reduce((s, a) => s + a.hours, 0)
+        .reduce((s, a) => s + a.hours, 0) + monthOverhead
 
       const timeOffHours = timeOff
         .filter(t => t.start_date <= monthEnd && t.end_date >= monthStart)
@@ -300,7 +309,7 @@ export function TeamMemberDetailView() {
 
   if (!member) {
     return (
-      <div className="page-content" style={{ padding: 60, textAlign: 'center', color: 'var(--c3)' }}>
+      <div className="flex-1 overflow-auto p-[60px] text-center text-muted-foreground">
         {members.length === 0 ? 'Loading...' : 'Member not found'}
       </div>
     )
@@ -326,41 +335,40 @@ export function TeamMemberDetailView() {
 
   return (
     <>
-      <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <Link to="/settings?tab=team" className="btn btn-ghost btn-sm">&larr;</Link>
+      <div className="flex items-center justify-between px-6 py-4 bg-background border-b border-border">
+        <div className="flex items-center gap-3.5">
+          <Link to="/settings?tab=team"><Button variant="ghost" size="sm">&larr;</Button></Link>
           <div>
-            <h1 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h1 className="flex items-center gap-2.5">
               {member.name}
               {member.team && (
-                <span className="badge" style={{ background: member.team.color + '22', color: member.team.color, fontWeight: 600 }}>
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold" style={{ background: member.team.color + '22', color: member.team.color }}>
                   {member.team.name}
                 </span>
               )}
             </h1>
-            <p style={{ color: 'var(--c3)', marginTop: 2 }}>
+            <p className="text-muted-foreground mt-0.5">
               {member.role || 'No role'} &middot; {member.hours_per_day}h/day
             </p>
           </div>
         </div>
       </div>
 
-      <div className="page-content">
+      <div className="flex-1 overflow-auto p-6">
         {/* ── Tabs ─────────────────────────────────────────────────────────── */}
-        <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid var(--c6)', marginBottom: 28 }}>
+        <div className="flex gap-0 border-b border-border mb-7">
           {([
             { key: 'overview', label: 'Overview', Icon: OverviewIcon },
             { key: 'projects', label: 'Projects', Icon: ProjectsIcon },
             { key: 'timeoff', label: 'Time Off', Icon: TimeOffIcon },
-          ] as { key: MemberTab; label: string; Icon: () => JSX.Element }[]).map(({ key, label, Icon }) => (
+          ] as { key: MemberTab; label: string; Icon: () => ReactNode }[]).map(({ key, label, Icon }) => (
             <button key={key} onClick={() => setActiveTab(key)}
-              style={{
-                background: 'transparent', border: 'none',
-                borderBottom: activeTab === key ? '2px solid var(--navy)' : '2px solid transparent',
-                cursor: 'pointer', padding: '10px 18px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13,
-                color: activeTab === key ? 'var(--navy)' : 'var(--c3)', transition: 'color .12s',
-                whiteSpace: 'nowrap', marginBottom: -2, display: 'flex', alignItems: 'center', gap: 6,
-              }}>
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-[13px] font-semibold whitespace-nowrap cursor-pointer bg-transparent border-none border-b-2 -mb-px transition-colors ${
+                activeTab === key
+                  ? 'border-b-2 border-primary text-primary'
+                  : 'border-transparent text-muted-foreground'
+              }`}
+              style={{ fontFamily: 'inherit' }}>
               <Icon />
               {label}
             </button>
@@ -371,111 +379,107 @@ export function TeamMemberDetailView() {
         {activeTab === 'overview' && (
           <>
             {stats && !allocLoading && (
-              <div className="stats-strip" style={{ marginBottom: 28 }}>
-                <div className="stat-card">
-                  <div className="stat-card-label">This Month</div>
-                  <div className="stat-card-value">{fmt(stats.monthHours)}h</div>
-                  <div className="stat-card-sub">of {fmt(stats.monthCapacity)}h capacity</div>
+              <div className="grid grid-cols-4 gap-4 mb-7">
+                <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+                  <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">This Month</div>
+                  <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{fmt(stats.monthHours)}h</div>
+                  <div className="text-xs text-muted-foreground mt-1">of {fmt(stats.monthCapacity)}h capacity</div>
                 </div>
-                <div className="stat-card">
-                  <div className="stat-card-label">Available / Year</div>
-                  <div className="stat-card-value">{fmt(stats.yearCapacity)}h</div>
-                  <div className="stat-card-sub">{new Date().getFullYear()} capacity</div>
+                <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+                  <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Available / Year</div>
+                  <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{fmt(stats.yearCapacity)}h</div>
+                  <div className="text-xs text-muted-foreground mt-1">{new Date().getFullYear()} capacity</div>
                 </div>
-                <div className="stat-card">
-                  <div className="stat-card-label">Remaining / Year</div>
-                  <div className="stat-card-value" style={{ color: stats.remaining < stats.yearCapacity * 0.2 ? 'var(--red)' : 'var(--green)' }}>
+                <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+                  <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Remaining / Year</div>
+                  <div className={`text-[28px] font-extrabold tracking-[-0.5px] mb-2 ${stats.remaining < stats.yearCapacity * 0.2 ? 'text-[#dc2626]' : 'text-[#16a34a]'}`}>
                     {fmt(stats.remaining)}h
                   </div>
-                  <div className="stat-card-sub">unallocated hours</div>
+                  <div className="text-xs text-muted-foreground mt-1">unallocated hours</div>
                 </div>
-                <div className="stat-card">
-                  <div className="stat-card-label">Time Off</div>
-                  <div className="stat-card-value">{stats.totalTimeOffDays}d</div>
-                  <div className="stat-card-sub">upcoming</div>
+                <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+                  <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Time Off</div>
+                  <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{stats.totalTimeOffDays}d</div>
+                  <div className="text-xs text-muted-foreground mt-1">upcoming</div>
                 </div>
               </div>
             )}
 
             {/* Skills */}
             {member.skills && (
-              <div className="card" style={{ marginBottom: 20 }}>
-                <div className="card-body" style={{ padding: '16px 20px' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>Skills</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              <Card className="mb-5">
+                <CardContent className="p-4 pt-4">
+                  <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide mb-2.5">Skills</div>
+                  <div className="flex flex-wrap gap-1.5">
                     {member.skills.split(',').map(s => s.trim()).filter(Boolean).map(skill => (
-                      <span key={skill} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6, background: 'var(--navy)1a', color: 'var(--navy)', fontWeight: 600, border: '1px solid var(--navy)33' }}>
+                      <span key={skill} className="text-xs px-2.5 py-1 rounded font-semibold" style={{ background: 'var(--navy)1a', color: 'var(--navy)', border: '1px solid var(--navy)33' }}>
                         {skill}
                       </span>
                     ))}
                   </div>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             )}
 
             {/* Monthly stacked chart */}
             {!allocLoading && (
-              <div className="card" style={{ marginBottom: 28 }}>
-                <div className="card-body">
-                  <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--c0)', marginBottom: 4 }}>Monthly Allocation — {new Date().getFullYear()}</div>
-                  <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+              <Card className="mb-7">
+                <CardContent>
+                  <div className="font-bold text-[13px] text-foreground mb-1">Monthly Allocation — {new Date().getFullYear()}</div>
+                  <div className="flex gap-4 mb-4">
                     {[
                       { color: 'var(--navy)', label: 'Available Hours' },
                       { color: '#f59e0b', label: 'Time Off' },
                       { color: '#10b981', label: 'Holidays' },
                     ].map(l => (
-                      <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: 2, background: l.color, flexShrink: 0 }} />
-                        <span style={{ fontSize: 11, color: 'var(--c3)', fontWeight: 500 }}>{l.label}</span>
+                      <div key={l.label} className="flex items-center gap-1.5">
+                        <div className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: l.color }} />
+                        <span className="text-[11px] text-muted-foreground font-medium">{l.label}</span>
                       </div>
                     ))}
                   </div>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end', height: barH + 20 }}>
+                  <div className="flex gap-1.5 items-end" style={{ height: barH + 20 }}>
                     {monthlyData.map((m, i) => {
                       const cap = m.capacity
-                      // Available = capacity minus time off and holidays (ignoring allocation — same as screenshot)
                       const availableHours = Math.max(0, cap - m.timeOffHours - m.holidayHours)
                       const availH = cap > 0 ? (availableHours / maxCap) * barH : 0
                       const toH = cap > 0 ? (Math.min(m.timeOffHours, cap) / maxCap) * barH : 0
                       const holH = cap > 0 ? (Math.min(m.holidayHours, cap) / maxCap) * barH : 0
                       return (
-                        <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                          <div style={{ width: '100%', height: barH, borderRadius: 4, overflow: 'hidden', display: 'flex', flexDirection: 'column-reverse' }}>
-                            {/* Bottom: Available (navy/purple) */}
+                        <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                          <div className="w-full rounded overflow-hidden flex flex-col-reverse" style={{ height: barH }}>
                             <div style={{ height: availH, background: 'var(--navy)', flexShrink: 0 }} />
-                            {/* Middle: Time Off (orange) */}
                             <div style={{ height: toH, background: '#f59e0b', flexShrink: 0 }} />
-                            {/* Top: Holidays (green) */}
                             <div style={{ height: holH, background: '#10b981', flexShrink: 0 }} />
                           </div>
-                          <div style={{ fontSize: 10, color: 'var(--c4)', textAlign: 'center' }}>{m.label}</div>
+                          <div className="text-[10px] text-muted-foreground text-center">{m.label}</div>
                         </div>
                       )
                     })}
                   </div>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             )}
 
             {/* Hours by Category */}
-            <div className="section-bar" style={{ marginBottom: 14 }}>
+            <div className="flex items-center justify-between mb-3.5">
               <h2>Hours by Category</h2>
             </div>
-            <div className="card">
-              <div className="card-body">
+            <Card>
+              <CardContent>
                 {allocLoading ? (
-                  <p style={{ color: 'var(--c4)' }}>Loading...</p>
+                  <p className="text-muted-foreground">Loading...</p>
                 ) : Object.keys(stats?.byCategory ?? {}).length === 0 ? (
-                  <p style={{ color: 'var(--c4)' }}>No allocations this year</p>
+                  <p className="text-muted-foreground">No allocations this year</p>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div className="flex flex-col gap-3.5">
                     {Object.entries(stats!.byCategory).sort((a, b) => b[1] - a[1]).map(([cat, hours]) => (
                       <div key={cat}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                          <span style={{ textTransform: 'capitalize', fontWeight: 600, fontSize: 14 }}>{cat}</span>
-                          <span className="text-mono" style={{ fontWeight: 700, fontSize: 14 }}>{fmt(hours)}h</span>
+                        <div className="flex justify-between mb-1.5">
+                          <span className="capitalize font-semibold text-sm">{cat}</span>
+                          <span className="font-bold text-sm">{fmt(hours)}h</span>
                         </div>
-                        <div style={{ height: 8, borderRadius: 4, background: 'var(--c6)' }}>
+                        <div className="h-2 rounded bg-gray-100">
                           <div style={{
                             height: 8, borderRadius: 4,
                             background: CAT_COLORS[cat as AllocationCategory] ?? 'var(--c4)',
@@ -487,24 +491,24 @@ export function TeamMemberDetailView() {
                     ))}
                   </div>
                 )}
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           </>
         )}
 
         {/* ── Projects tab ─────────────────────────────────────────────────── */}
         {activeTab === 'projects' && (
           <>
-            <div className="section-bar" style={{ marginBottom: 16 }}>
+            <div className="flex items-center justify-between mb-4">
               <h2>Projects</h2>
-              <button className="btn btn-secondary btn-sm" onClick={() => setShowAddProject(true)}>+ Assign Project</button>
+              <Button variant="outline" size="sm" onClick={() => setShowAddProject(true)}>+ Assign Project</Button>
             </div>
 
             {showAddProject && (
-              <div className="card" style={{ marginBottom: 16 }}>
-                <div className="card-body" style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}>
-                  <div className="form-group" style={{ margin: 0, flex: 2 }}>
-                    <label className="form-label">Project</label>
+              <Card className="mb-4">
+                <CardContent className="flex gap-3 items-end">
+                  <div className="mb-4 flex-[2]" style={{ margin: 0 }}>
+                    <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Project</label>
                     <select value={addProjectId} onChange={e => setAddProjectId(e.target.value)}>
                       <option value="">Select project...</option>
                       {availableProjects.map(p => (
@@ -512,59 +516,59 @@ export function TeamMemberDetailView() {
                       ))}
                     </select>
                   </div>
-                  <div className="form-group" style={{ margin: 0, flex: 1 }}>
-                    <label className="form-label">Role <span style={{ fontWeight: 400, color: 'var(--c4)' }}>optional</span></label>
+                  <div className="mb-4 flex-1" style={{ margin: 0 }}>
+                    <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Role <span className="text-xs text-muted-foreground normal-case tracking-normal font-normal">optional</span></label>
                     <input value={addProjectRole} onChange={e => setAddProjectRole(e.target.value)} placeholder="e.g. Lead developer" />
                   </div>
-                  <div style={{ display: 'flex', gap: 8, paddingBottom: 1 }}>
-                    <button className="btn btn-ghost btn-sm" onClick={() => { setShowAddProject(false); setAddProjectId(''); setAddProjectRole('') }}>Cancel</button>
-                    <button className="btn btn-primary btn-sm" onClick={handleAddProject} disabled={!addProjectId}>Save</button>
+                  <div className="flex gap-2 pb-px">
+                    <Button variant="ghost" size="sm" onClick={() => { setShowAddProject(false); setAddProjectId(''); setAddProjectRole('') }}>Cancel</Button>
+                    <Button size="sm" onClick={handleAddProject} disabled={!addProjectId}>Save</Button>
                   </div>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             )}
 
             {memberProjects.length === 0 && !showAddProject ? (
-              <div className="card">
-                <div className="card-body" style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--c4)' }}>
+              <Card>
+                <CardContent className="text-center py-10 text-muted-foreground">
                   No projects assigned yet
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 16 }}>
+              <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))' }}>
                 {memberProjects.map(mp => {
                   const status = mp.project?.status ?? 'active'
                   const borderColor = STATUS_BORDER[status] ?? 'var(--c5)'
                   return (
-                    <div key={mp.id} className="card" style={{ borderLeft: `4px solid ${borderColor}`, position: 'relative' }}>
-                      <div className="card-body" style={{ padding: '20px 20px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                          <Link to={`/projects/${mp.project_id}`} style={{ fontWeight: 700, fontSize: 16, color: 'var(--c0)', textDecoration: 'none', lineHeight: 1.3 }}>
+                    <Card key={mp.id} style={{ borderLeft: `4px solid ${borderColor}` }}>
+                      <CardContent className="p-5">
+                        <div className="flex justify-between items-start mb-3">
+                          <Link to={`/projects/${mp.project_id}`} className="font-bold text-base text-foreground no-underline leading-snug">
                             {mp.project?.name ?? 'Unknown'}
                           </Link>
-                          <button className="btn btn-ghost btn-xs" onClick={() => handleRemoveProject(mp)} style={{ color: 'var(--c4)', marginTop: -2 }}>&times;</button>
+                          <Button variant="ghost" size="xs" onClick={() => handleRemoveProject(mp)} className="text-muted-foreground -mt-0.5">&times;</Button>
                         </div>
-                        <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
-                          <span className="badge badge-gray">{mp.project?.pn}</span>
-                          {mp.project?.type && <span className={`badge ${TYPE_BADGE[mp.project.type] ?? 'badge-gray'}`}>{mp.project.type.toUpperCase()}</span>}
-                          {mp.project?.status && <span className={`badge ${STATUS_BADGE[mp.project.status] ?? 'badge-gray'}`}>{mp.project.status.toUpperCase()}</span>}
+                        <div className="flex gap-1.5 mb-3 flex-wrap">
+                          <Badge variant="gray">{mp.project?.pn}</Badge>
+                          {mp.project?.type && <Badge variant={TYPE_BADGE[mp.project.type] ?? 'gray'}>{mp.project.type.toUpperCase()}</Badge>}
+                          {mp.project?.status && <Badge variant={STATUS_BADGE[mp.project.status] ?? 'gray'}>{mp.project.status.toUpperCase()}</Badge>}
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <div className="flex flex-col gap-1">
                           {mp.project?.client && (
-                            <div style={{ fontSize: 13, color: 'var(--c3)' }}>
-                              <span style={{ color: 'var(--c4)', marginRight: 4 }}>Client</span>
-                              <Link to={`/clients/${mp.project.client.id}`} className="table-link" style={{ fontWeight: 600 }}>{mp.project.client.name}</Link>
+                            <div className="text-[13px] text-muted-foreground">
+                              <span className="text-muted-foreground mr-1">Client</span>
+                              <Link to={`/clients/${mp.project.client.id}`} className="font-medium text-primary hover:underline cursor-pointer font-semibold">{mp.project.client.name}</Link>
                             </div>
                           )}
                           {mp.role && (
-                            <div style={{ fontSize: 13, color: 'var(--c3)' }}>
-                              <span style={{ color: 'var(--c4)', marginRight: 4 }}>Role</span>
-                              <strong style={{ color: 'var(--c1)' }}>{mp.role}</strong>
+                            <div className="text-[13px] text-muted-foreground">
+                              <span className="text-muted-foreground mr-1">Role</span>
+                              <strong className="text-[#374151]">{mp.role}</strong>
                             </div>
                           )}
                         </div>
-                      </div>
-                    </div>
+                      </CardContent>
+                    </Card>
                   )
                 })}
               </div>
@@ -575,66 +579,66 @@ export function TeamMemberDetailView() {
         {/* ── Time Off tab ─────────────────────────────────────────────────── */}
         {activeTab === 'timeoff' && (
           <>
-            <div className="section-bar" style={{ marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <h2 style={{ margin: 0 }}>Time Off</h2>
-                <button className="btn btn-ghost btn-sm" onClick={() => setTimeOffYear(y => y - 1)}>‹</button>
-                <span style={{ fontWeight: 700, fontSize: 14 }}>{timeOffYear}</span>
-                <button className="btn btn-ghost btn-sm" onClick={() => setTimeOffYear(y => y + 1)}>›</button>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <h2 className="m-0">Time Off</h2>
+                <Button variant="ghost" size="sm" onClick={() => setTimeOffYear(y => y - 1)}>‹</Button>
+                <span className="font-bold text-sm">{timeOffYear}</span>
+                <Button variant="ghost" size="sm" onClick={() => setTimeOffYear(y => y + 1)}>›</Button>
               </div>
               {!showTimeOffForm && (
-                <button className="btn btn-secondary btn-sm" onClick={() => setShowTimeOffForm(true)}>+ Add Time Off</button>
+                <Button variant="outline" size="sm" onClick={() => setShowTimeOffForm(true)}>+ Add Time Off</Button>
               )}
             </div>
 
             {showTimeOffForm && (
-              <div className="card" style={{ marginBottom: 16 }}>
-                <div className="card-body">
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label className="form-label">Start date</label>
+              <Card className="mb-4">
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div className="mb-4" style={{ margin: 0 }}>
+                      <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Start date</label>
                       <input type="date" lang="en-GB" value={toStart} onChange={e => { setToStart(e.target.value); if (!toEnd) setToEnd(e.target.value) }} />
                     </div>
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label className="form-label">End date</label>
+                    <div className="mb-4" style={{ margin: 0 }}>
+                      <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">End date</label>
                       <input type="date" lang="en-GB" value={toEnd} onChange={e => setToEnd(e.target.value)} />
                     </div>
                   </div>
-                  <div className="form-group" style={{ margin: '0 0 12px' }}>
-                    <label className="form-label">Reason <span style={{ fontWeight: 400, color: 'var(--c4)' }}>optional</span></label>
+                  <div className="mb-3">
+                    <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Reason <span className="text-xs text-muted-foreground normal-case tracking-normal font-normal">optional</span></label>
                     <input value={toReason} onChange={e => setToReason(e.target.value)} placeholder="e.g. Vacation, sick leave..." />
                   </div>
-                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                    <button className="btn btn-ghost btn-sm" onClick={() => setShowTimeOffForm(false)}>Cancel</button>
-                    <button className="btn btn-primary btn-sm" onClick={saveTimeOff}>Save</button>
+                  <div className="flex gap-2 justify-end">
+                    <Button variant="ghost" size="sm" onClick={() => setShowTimeOffForm(false)}>Cancel</Button>
+                    <Button size="sm" onClick={saveTimeOff}>Save</Button>
                   </div>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             )}
 
             {/* Calendar */}
-            <div className="card" style={{ marginBottom: 20, overflow: 'hidden' }}>
-              <div className="card-body" style={{ padding: 0 }}>
+            <Card className="mb-5 overflow-hidden">
+              <CardContent className="p-0">
                 {/* Header */}
-                <div style={{ display: 'flex', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid var(--c6)' }}>
-                  <button className="btn btn-ghost btn-sm" onClick={prevCalMonth}>‹</button>
-                  <span style={{ fontWeight: 700, fontSize: 15, minWidth: 180, textAlign: 'center' }}>
+                <div className="flex items-center px-5 py-4 border-b border-border">
+                  <Button variant="ghost" size="sm" onClick={prevCalMonth}>‹</Button>
+                  <span className="font-bold text-[15px] min-w-[180px] text-center">
                     {MONTH_FULL[calMonth]} {calYear}
                   </span>
-                  <button className="btn btn-ghost btn-sm" onClick={nextCalMonth}>›</button>
-                  <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 14 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <div style={{ width: 10, height: 10, borderRadius: 2, background: '#fca5a5' }} />
-                      <span style={{ fontSize: 11, color: 'var(--c3)', fontWeight: 500 }}>Time off</span>
+                  <Button variant="ghost" size="sm" onClick={nextCalMonth}>›</Button>
+                  <div className="ml-auto flex items-center gap-3.5">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2.5 h-2.5 rounded-sm" style={{ background: '#fca5a5' }} />
+                      <span className="text-[11px] text-muted-foreground font-medium">Time off</span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <div style={{ width: 10, height: 10, borderRadius: 2, background: '#bfdbfe' }} />
-                      <span style={{ fontSize: 11, color: 'var(--c3)', fontWeight: 500 }}>Holiday</span>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2.5 h-2.5 rounded-sm" style={{ background: '#bfdbfe' }} />
+                      <span className="text-[11px] text-muted-foreground font-medium">Holiday</span>
                     </div>
                   </div>
                 </div>
                 {/* Day headers */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid var(--c6)' }}>
+                <div className="grid grid-cols-7 border-b border-border">
                   {calDayLabels.map((d, i) => (
                     <div key={d} style={{
                       textAlign: 'center', padding: '10px 0', fontSize: 11, fontWeight: 700,
@@ -646,7 +650,7 @@ export function TeamMemberDetailView() {
                   ))}
                 </div>
                 {/* Days */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
+                <div className="grid grid-cols-7">
                   {calCells.map((day, idx) => {
                     const dow = idx % 7
                     const isWeekend = dow >= 5
@@ -679,55 +683,55 @@ export function TeamMemberDetailView() {
                           {day}
                         </span>
                         {holidayName && !isOff && (
-                          <div style={{ fontSize: 10, color: '#1d4ed8', marginTop: 3, lineHeight: 1.2, fontWeight: 500 }}>{holidayName}</div>
+                          <div className="text-[10px] mt-0.5 leading-tight font-medium" style={{ color: '#1d4ed8' }}>{holidayName}</div>
                         )}
                         {isOff && (
-                          <div style={{ fontSize: 10, color: '#b91c1c', marginTop: 3, lineHeight: 1.2, fontWeight: 500 }}>Time off</div>
+                          <div className="text-[10px] mt-0.5 leading-tight font-medium" style={{ color: '#b91c1c' }}>Time off</div>
                         )}
                       </div>
                     )
                   })}
                 </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
 
             {/* Days off by month */}
-            <div className="card" style={{ marginBottom: 20 }}>
-              <div className="card-body">
-                <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--c0)', marginBottom: 14 }}>Days Off by Month — {timeOffYear}</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8 }}>
+            <Card className="mb-5">
+              <CardContent>
+                <div className="font-bold text-[13px] text-foreground mb-3.5">Days Off by Month — {timeOffYear}</div>
+                <div className="grid grid-cols-6 gap-2">
                   {timeOffMonthlySummary.map((m, i) => {
                     const bg = m.days === 0 ? 'var(--c7)' : m.days <= 2 ? '#fffde7' : '#ffebee'
                     const color = m.days === 0 ? 'var(--c4)' : m.days <= 2 ? 'var(--amber)' : 'var(--red)'
                     return (
-                      <div key={i} style={{ background: bg, borderRadius: 8, padding: '12px 8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--c3)', marginBottom: 4 }}>{m.label}</div>
-                        <div style={{ fontSize: 18, fontWeight: 800, color, fontFamily: 'Manrope, sans-serif' }}>{m.days}</div>
-                        <div style={{ fontSize: 10, color: 'var(--c4)' }}>days</div>
+                      <div key={i} className="rounded-lg text-center" style={{ background: bg, padding: '12px 8px' }}>
+                        <div className="text-[11px] font-semibold text-muted-foreground mb-1">{m.label}</div>
+                        <div className="text-lg font-extrabold" style={{ color, fontFamily: 'Manrope, sans-serif' }}>{m.days}</div>
+                        <div className="text-[10px] text-muted-foreground">days</div>
                       </div>
                     )
                   })}
                 </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
 
             {/* Upcoming */}
             {upcomingTimeOff.length > 0 && (
               <>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>Upcoming</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
+                <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide mb-2.5">Upcoming</div>
+                <div className="flex flex-col gap-2 mb-6">
                   {upcomingTimeOff.map(t => (
-                    <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: '#fff', border: '1px solid var(--c6)', borderRadius: 10, borderLeft: '3px solid var(--navy)' }}>
+                    <div key={t.id} className="flex justify-between items-center px-4 py-3 bg-white border border-border rounded-[10px]" style={{ borderLeft: '3px solid var(--navy)' }}>
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: 14 }}>
+                        <div className="font-semibold text-sm">
                           {fmtDate(t.start_date)}{t.start_date !== t.end_date ? ` – ${fmtDate(t.end_date)}` : ''}
                         </div>
-                        <div style={{ fontSize: 13, color: 'var(--c3)', marginTop: 2 }}>
+                        <div className="text-[13px] text-muted-foreground mt-0.5">
                           {workingDays(t.start_date, t.end_date)} working day{workingDays(t.start_date, t.end_date) !== 1 ? 's' : ''}
                           {t.reason && <> &middot; {t.reason}</>}
                         </div>
                       </div>
-                      <button className="btn btn-ghost btn-xs" onClick={() => deleteTimeOff(t)} style={{ color: 'var(--red)' }}>&times;</button>
+                      <Button variant="ghost" size="xs" onClick={() => deleteTimeOff(t)} className="text-[#dc2626]">&times;</Button>
                     </div>
                   ))}
                 </div>
@@ -737,20 +741,20 @@ export function TeamMemberDetailView() {
             {/* Past (for selected year) */}
             {pastTimeOff.length > 0 && (
               <>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>Past ({timeOffYear})</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide mb-2.5">Past ({timeOffYear})</div>
+                <div className="flex flex-col gap-1.5">
                   {pastTimeOff.map(t => (
-                    <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 16px', borderRadius: 8, opacity: 0.5 }}>
+                    <div key={t.id} className="flex justify-between items-center px-4 py-2 rounded-lg opacity-50">
                       <div>
-                        <span style={{ fontSize: 14 }}>
+                        <span className="text-sm">
                           {fmtDate(t.start_date)}{t.start_date !== t.end_date ? ` – ${fmtDate(t.end_date)}` : ''}
                         </span>
-                        <span style={{ fontSize: 13, color: 'var(--c4)', marginLeft: 8 }}>
+                        <span className="text-[13px] text-muted-foreground ml-2">
                           {workingDays(t.start_date, t.end_date)}d
                           {t.reason && <> &middot; {t.reason}</>}
                         </span>
                       </div>
-                      <button className="btn btn-ghost btn-xs" onClick={() => deleteTimeOff(t)} style={{ color: 'var(--red)' }}>&times;</button>
+                      <Button variant="ghost" size="xs" onClick={() => deleteTimeOff(t)} className="text-[#dc2626]">&times;</Button>
                     </div>
                   ))}
                 </div>
@@ -758,7 +762,7 @@ export function TeamMemberDetailView() {
             )}
 
             {upcomingTimeOff.length === 0 && pastTimeOff.length === 0 && (
-              <div style={{ textAlign: 'center', padding: '20px', color: 'var(--c4)' }}>
+              <div className="text-center py-5 text-muted-foreground">
                 No time off scheduled for {timeOffYear}
               </div>
             )}

@@ -2,6 +2,10 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useCurrentUser } from '../lib/useCurrentUser'
 import { toast } from '../lib/toast'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
+import { Label } from '@/components/ui/label'
 
 export function ProfileView() {
   const user = useCurrentUser()
@@ -53,85 +57,84 @@ export function ProfileView() {
 
   return (
     <>
-      <div className="page-header">
+      <div className="flex items-center justify-between px-6 py-4 bg-background border-b border-border">
         <div>
           <h1>My Profile</h1>
           <p>Manage your account and preferences.</p>
         </div>
       </div>
 
-      <div className="page-content" style={{ maxWidth: 640 }}>
+      <div className="flex-1 overflow-auto p-6" style={{ maxWidth: 640 }}>
 
       {/* Avatar + basic info */}
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card-body">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 24 }}>
-            <div style={{
-              width: 64, height: 64, borderRadius: '50%', background: 'var(--navy)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 24, fontWeight: 800, color: '#fff', fontFamily: 'Manrope, sans-serif', flexShrink: 0,
-            }}>
+      <Card className="mb-4">
+        <CardContent>
+          <div className="flex items-center gap-5 mb-6">
+            <div
+              className="w-16 h-16 rounded-full bg-primary flex items-center justify-center text-2xl font-extrabold text-white shrink-0"
+              style={{ fontFamily: 'Manrope, sans-serif' }}
+            >
               {user.initial}
             </div>
             <div>
-              <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--c0)', fontFamily: 'Manrope, sans-serif' }}>{user.name}</div>
-              <div style={{ fontSize: 13, color: 'var(--c3)', marginTop: 2 }}>{user.email}</div>
-              <span className="badge badge-navy" style={{ marginTop: 6 }}>{user.role}</span>
+              <div className="text-[18px] font-extrabold text-foreground" style={{ fontFamily: 'Manrope, sans-serif' }}>{user.name}</div>
+              <div className="text-sm text-muted-foreground mt-0.5">{user.email}</div>
+              <Badge variant="navy" className="mt-1.5">{user.role}</Badge>
             </div>
           </div>
 
-          <div style={{ borderTop: '1px solid var(--c6)', paddingTop: 20 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--c0)', marginBottom: 14, fontFamily: 'Manrope, sans-serif' }}>Display Name</div>
-            <div style={{ display: 'flex', gap: 8 }}>
+          <div className="border-t border-border pt-5">
+            <div className="text-sm font-bold text-foreground mb-3.5" style={{ fontFamily: 'Manrope, sans-serif' }}>Display Name</div>
+            <div className="flex gap-2">
               <input
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="Your name"
-                style={{ flex: 1 }}
+                className="flex-1"
                 onKeyDown={e => e.key === 'Enter' && saveName()}
               />
-              <button className="btn btn-primary btn-sm" onClick={saveName} disabled={savingName || name === user.name}>
+              <Button size="sm" onClick={saveName} disabled={savingName || name === user.name}>
                 {savingName ? 'Saving…' : 'Save'}
-              </button>
+              </Button>
             </div>
-            <div className="form-hint" style={{ marginTop: 6 }}>This name appears in the sidebar and topbar.</div>
+            <div className="text-xs text-muted-foreground mt-1.5">This name appears in the sidebar and topbar.</div>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Change password */}
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card-body">
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--c0)', marginBottom: 16, fontFamily: 'Manrope, sans-serif' }}>Change Password</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div className="form-group">
-              <label className="form-label">New password</label>
-              <input type="password" value={newPw} onChange={e => { setNewPw(e.target.value); setPwError('') }} placeholder="Min. 6 characters" />
+      <Card className="mb-4">
+        <CardContent>
+          <div className="text-sm font-bold text-foreground mb-4" style={{ fontFamily: 'Manrope, sans-serif' }}>Change Password</div>
+          <div className="flex flex-col gap-3">
+            <div className="mb-4">
+              <Label>New password</Label>
+              <input type="password" value={newPw} onChange={e => { setNewPw(e.target.value); setPwError('') }} placeholder="Min. 6 characters" className="w-full mt-1" />
             </div>
-            <div className="form-group">
-              <label className="form-label">Confirm new password</label>
-              <input type="password" value={confirmPw} onChange={e => { setConfirmPw(e.target.value); setPwError('') }} placeholder="Repeat password" />
+            <div className="mb-4">
+              <Label>Confirm new password</Label>
+              <input type="password" value={confirmPw} onChange={e => { setConfirmPw(e.target.value); setPwError('') }} placeholder="Repeat password" className="w-full mt-1" />
             </div>
-            {pwError && <div className="alert alert-red">{pwError}</div>}
-            <button className="btn btn-primary btn-sm" onClick={savePassword} disabled={savingPw} style={{ alignSelf: 'flex-start' }}>
+            {pwError && <div className="rounded-lg border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-sm text-[#be123c]">{pwError}</div>}
+            <Button size="sm" onClick={savePassword} disabled={savingPw} className="self-start">
               {savingPw ? 'Updating…' : 'Update Password'}
-            </button>
+            </Button>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Sign out */}
-      <div className="card">
-        <div className="card-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <Card>
+        <CardContent className="flex items-center justify-between">
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--c0)', fontFamily: 'Manrope, sans-serif' }}>Sign out</div>
-            <div style={{ fontSize: 12, color: 'var(--c3)', marginTop: 2 }}>You'll be redirected to the login screen.</div>
+            <div className="text-sm font-bold text-foreground" style={{ fontFamily: 'Manrope, sans-serif' }}>Sign out</div>
+            <div className="text-xs text-muted-foreground mt-0.5">You'll be redirected to the login screen.</div>
           </div>
-          <button className="btn btn-danger btn-sm" onClick={signOut} disabled={signingOut}>
+          <Button variant="destructive" size="sm" onClick={signOut} disabled={signingOut}>
             {signingOut ? 'Signing out…' : 'Sign out'}
-          </button>
-        </div>
-      </div>
+          </Button>
+        </CardContent>
+      </Card>
       </div>
     </>
   )

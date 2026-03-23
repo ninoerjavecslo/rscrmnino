@@ -6,12 +6,14 @@ interface SettingsState {
   agencyLogo: string
   projectManagers: string[]
   internalHourlyRate: number
+  cmsOptions: string[]
   loading: boolean
   fetch: () => Promise<void>
   setAgencyName: (name: string) => Promise<void>
   setAgencyLogo: (url: string) => Promise<void>
   setProjectManagers: (managers: string[]) => Promise<void>
   setInternalHourlyRate: (rate: number) => Promise<void>
+  setCmsOptions: (options: string[]) => Promise<void>
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
@@ -19,6 +21,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   agencyLogo: '',
   projectManagers: ['Nino'],
   internalHourlyRate: 0,
+  cmsOptions: ['WordPress', 'Webflow', 'Custom', 'Shopify', 'Drupal', 'Other'],
   loading: false,
 
   fetch: async () => {
@@ -31,7 +34,10 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       const pms = map['project_managers']
         ? JSON.parse(map['project_managers']) as string[]
         : ['Nino']
-      set({ agencyName: map['agency_name'] ?? '', agencyLogo: map['agency_logo'] ?? '', projectManagers: pms, internalHourlyRate: parseFloat(map['internal_hourly_rate'] ?? '0') || 0 })
+      const cms = map['cms_options']
+        ? JSON.parse(map['cms_options']) as string[]
+        : ['WordPress', 'Webflow', 'Custom', 'Shopify', 'Drupal', 'Other']
+      set({ agencyName: map['agency_name'] ?? '', agencyLogo: map['agency_logo'] ?? '', projectManagers: pms, internalHourlyRate: parseFloat(map['internal_hourly_rate'] ?? '0') || 0, cmsOptions: cms })
     } finally {
       set({ loading: false })
     }
@@ -55,5 +61,10 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setInternalHourlyRate: async (rate: number) => {
     await supabase.from('app_settings').upsert({ key: 'internal_hourly_rate', value: String(rate) })
     set({ internalHourlyRate: rate })
+  },
+
+  setCmsOptions: async (options: string[]) => {
+    await supabase.from('app_settings').upsert({ key: 'cms_options', value: JSON.stringify(options) })
+    set({ cmsOptions: options })
   },
 }))

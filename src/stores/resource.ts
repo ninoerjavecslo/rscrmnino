@@ -52,7 +52,7 @@ interface ResourceState {
   deliverables: ProjectDeliverable[]
   fetchDeliverables: (projectId?: string) => Promise<void>
   addDeliverable: (data: Omit<ProjectDeliverable, 'id' | 'created_at' | 'project'>) => Promise<void>
-  updateDeliverable: (id: string, data: Partial<Pick<ProjectDeliverable, 'title' | 'due_date' | 'start_date' | 'estimated_hours' | 'team' | 'team_hours' | 'status' | 'notes'>>) => Promise<void>
+  updateDeliverable: (id: string, data: Partial<Pick<ProjectDeliverable, 'title' | 'due_date' | 'start_date' | 'estimated_hours' | 'team' | 'team_hours' | 'member_percentages' | 'status' | 'notes'>>) => Promise<void>
   removeDeliverable: (id: string) => Promise<void>
 
   // Unplanned work

@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Link } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { workDaysInRange } from '../../lib/capacityUtils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { ReportHeader } from '../../components/ReportHeader'
+import { StatCard } from '../../components/StatCard'
 
 interface DelayedDeliverable {
   id: string
@@ -31,8 +32,7 @@ interface DisplacedAlloc {
   project: { id: string; pn: string; name: string } | null
 }
 
-function daysOverdue(dueDate: string): number {
-  const today = new Date().toISOString().slice(0, 10)
+function daysOverdue(dueDate: string, today: string): number {
   if (dueDate >= today) return 0
   return workDaysInRange(dueDate, today).length
 }
@@ -46,7 +46,7 @@ export function DelayImpactView() {
   const [confirmDelays, setConfirmDelays] = useState<ConfirmDelay[]>([])
   const [displaced, setDisplaced] = useState<DisplacedAlloc[]>([])
   const [loading, setLoading] = useState(true)
-  const today = new Date().toISOString().slice(0, 10)
+  const [today] = useState(() => new Date().toISOString().slice(0, 10))
 
   useEffect(() => {
     setLoading(true)
@@ -84,35 +84,18 @@ export function DelayImpactView() {
 
   const totalHoursDisplaced = deliverables.reduce((s, d) => s + (d.estimated_hours ?? 0), 0)
   const avgDaysOverdue = deliverables.length > 0
-    ? Math.round(deliverables.reduce((s, d) => s + daysOverdue(d.due_date), 0) / deliverables.length)
+    ? Math.round(deliverables.reduce((s, d) => s + daysOverdue(d.due_date, today), 0) / deliverables.length)
     : 0
 
   return (
     <div className="flex-1 overflow-auto">
-      <div className="flex items-center gap-3 px-6 py-5 bg-white border-b border-border">
-        <Link to="/reports" className="text-xs text-muted-foreground font-semibold flex items-center gap-1 no-underline">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-          Reports
-        </Link>
-        <span className="text-muted-foreground text-xs">/</span>
-        <h1 className="text-[18px] font-extrabold tracking-[-0.2px] m-0">Delay Impact</h1>
-      </div>
+      <ReportHeader title="Delay Impact" />
       <div className="p-6">
         <div className="grid grid-cols-4 gap-4 mb-6">
-          {[
-            { label: 'DELAYED ITEMS', value: deliverables.length, sub: 'project deliverables' },
-            { label: 'AFFECTED MEMBERS', value: affectedMembers, sub: 'unique team members' },
-            { label: 'HOURS DISPLACED', value: `${totalHoursDisplaced}h`, sub: 'estimated hours' },
-            { label: 'AVG DAYS OVERDUE', value: avgDaysOverdue, sub: 'working days' },
-          ].map(s => (
-            <Card key={s.label}>
-              <CardContent className="p-4">
-                <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.08em] mb-2">{s.label}</div>
-                <div className="text-[24px] font-extrabold tracking-[-0.5px] leading-none mb-1">{String(s.value)}</div>
-                <div className="text-xs text-muted-foreground">{s.sub}</div>
-              </CardContent>
-            </Card>
-          ))}
+          <StatCard label="DELAYED ITEMS" value={deliverables.length} sub="project deliverables" />
+          <StatCard label="AFFECTED MEMBERS" value={affectedMembers} sub="unique team members" />
+          <StatCard label="HOURS DISPLACED" value={`${totalHoursDisplaced}h`} sub="estimated hours" />
+          <StatCard label="AVG DAYS OVERDUE" value={avgDaysOverdue} sub="working days" />
         </div>
 
         <Card className="mb-5">
@@ -133,7 +116,7 @@ export function DelayImpactView() {
                 </thead>
                 <tbody>
                   {deliverables.map(d => {
-                    const overdue = daysOverdue(d.due_date)
+                    const overdue = daysOverdue(d.due_date, today)
                     return (
                       <tr key={d.id} className="border-b border-border last:border-0 hover:bg-[#f9f9f9]">
                         <td className="px-4 py-3">

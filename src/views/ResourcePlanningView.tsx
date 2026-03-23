@@ -7,6 +7,10 @@ import { holidayWorkDays } from '../lib/capacityUtils'
 import { supabase } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import { CapacityCheckWizard } from '../components/CapacityCheckWizard'
+import { Modal } from '../components/Modal'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
 import type { AllocationCategory, CompanyHoliday, Maintenance, Project, TeamMember, TimeOff } from '../lib/types'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -224,216 +228,212 @@ function AssignModal({
       : `Assign ${form.hours}h`
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 720 }}>
-        <div className="modal-header">
-          <div style={{ flex: 1 }}>
-            <h3 style={{ marginBottom: 10 }}>Assign to {member.name}</h3>
-            <div style={{ display: 'flex', gap: 20 }}>
-              {[
-                { label: 'Already planned', value: `${alreadyPlanned}h`, color: alreadyPlanned > weekCapacity ? 'var(--red)' : 'var(--c0)' },
-                { label: 'Capacity', value: `${weekCapacity}h`, color: 'var(--c0)' },
-                { label: 'Remaining', value: `${remaining}h`, color: remaining < 0 ? 'var(--red)' : 'var(--green)' },
-              ].map(s => (
-                <div key={s.label}>
-                  <div style={{ fontSize: 10, color: 'var(--c4)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>{s.label}</div>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.value}</div>
-                </div>
-              ))}
-            </div>
-            {isOver && (
-              <div style={{ marginTop: 10, padding: '7px 12px', background: '#fce4ec', borderRadius: 6, fontSize: 12, color: '#c62828', fontWeight: 600 }}>
-                ⚠ Over capacity by {Math.abs(remaining)}h — consider reducing hours or moving work to another week.
-              </div>
-            )}
+    <Modal title={`Assign to ${member.name}`} onClose={onClose} maxWidth={720} footer={
+      <div className="flex items-center gap-2">
+        <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+        <Button variant="outline" size="sm" disabled={isSaveDisabled} onClick={() => doSave(true)}>
+          {saving ? 'Saving…' : `${saveLabel} + Add more`}
+        </Button>
+        <Button size="sm" disabled={isSaveDisabled} onClick={() => doSave(false)}>
+          {saving ? 'Saving…' : saveLabel}
+        </Button>
+      </div>
+    }>
+      {/* Stats row */}
+      <div className="flex gap-5 mb-3">
+        {[
+          { label: 'Already planned', value: `${alreadyPlanned}h`, color: alreadyPlanned > weekCapacity ? 'var(--red)' : 'var(--c0)' },
+          { label: 'Capacity', value: `${weekCapacity}h`, color: 'var(--c0)' },
+          { label: 'Remaining', value: `${remaining}h`, color: remaining < 0 ? 'var(--red)' : 'var(--green)' },
+        ].map(s => (
+          <div key={s.label}>
+            <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-[0.06em] mb-0.5">{s.label}</div>
+            <div className="text-[20px] font-extrabold" style={{ color: s.color }}>{s.value}</div>
           </div>
-          <button className="modal-close" onClick={onClose}>&times;</button>
+        ))}
+      </div>
+      {isOver && (
+        <div className="mt-2.5 px-3 py-1.5 bg-[#fce4ec] rounded text-xs text-[#c62828] font-semibold mb-4">
+          ⚠ Over capacity by {Math.abs(remaining)}h — consider reducing hours or moving work to another week.
         </div>
-        <div className="modal-body">
+      )}
 
-          {/* Category tabs */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 18 }}>
-            {CAT_OPTIONS.map(opt => (
-              <button key={opt.value} type="button"
-                onClick={() => setForm(f => ({
-                  ...f, category: opt.value, projectId: '', maintenanceId: '', customLabel: '',
-                  leaveDays: [], leaveHoursPerDay: member.hours_per_day,
-                  isBillable: opt.defaultBillable,
-                }))}
-                style={{
-                  padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                  border: form.category === opt.value ? '2px solid var(--navy)' : '2px solid var(--c5)',
-                  background: form.category === opt.value ? 'var(--navy)' : '#fff',
-                  color: form.category === opt.value ? '#fff' : 'var(--c2)',
-                }}
-              >{opt.label}</button>
+      {/* Category tabs */}
+      <div className="flex flex-wrap gap-1.5 mb-4">
+        {CAT_OPTIONS.map(opt => (
+          <button key={opt.value} type="button"
+            onClick={() => setForm(f => ({
+              ...f, category: opt.value, projectId: '', maintenanceId: '', customLabel: '',
+              leaveDays: [], leaveHoursPerDay: member.hours_per_day,
+              isBillable: opt.defaultBillable,
+            }))}
+            className="cursor-pointer"
+            style={{
+              padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+              border: form.category === opt.value ? '2px solid var(--navy)' : '2px solid var(--c5)',
+              background: form.category === opt.value ? 'var(--navy)' : '#fff',
+              color: form.category === opt.value ? '#fff' : 'var(--c2)',
+            }}
+          >{opt.label}</button>
+        ))}
+      </div>
+
+      {/* Priority buttons (not for leave) */}
+      {!isLeave && (
+        <div className="mb-4">
+          <div className="text-xs uppercase tracking-wide text-muted-foreground font-medium mb-1.5">Priority</div>
+          <div className="flex gap-1.5">
+            {(['none', 'high', 'urgent'] as const).map(p => {
+              const colors = { none: { bg: '#fff', border: 'var(--c5)', text: 'var(--c2)' }, high: { bg: '#fff8e1', border: '#ffcc02', text: '#e65100' }, urgent: { bg: '#fce4ec', border: '#ef9a9a', text: '#c62828' } }
+              const c = colors[p]
+              const active = form.priority === p
+              return (
+                <button key={p} type="button"
+                  onClick={() => setForm(f => ({ ...f, priority: p }))}
+                  className="cursor-pointer"
+                  style={{
+                    padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 700,
+                    border: `2px solid ${active ? c.border : 'var(--c5)'}`,
+                    background: active ? c.bg : '#fff',
+                    color: active ? c.text : 'var(--c3)',
+                    boxShadow: active ? `0 0 0 1px ${c.border}` : 'none',
+                  }}
+                >{p === 'none' ? 'No priority' : p.charAt(0).toUpperCase() + p.slice(1)}</button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Project select */}
+      {form.category === 'project' && (
+        <div className="mb-4">
+          <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Project</label>
+          <input placeholder="Search projects..." value={projSearch} onChange={e => setProjSearch(e.target.value)} className="mb-2" />
+          <div style={{ maxHeight: 150, overflowY: 'auto', border: '1px solid var(--c6)', borderRadius: 6 }}>
+            {filteredProjects.length === 0 && <div className="px-3 py-2.5 text-muted-foreground text-[13px]">No projects found</div>}
+            {filteredProjects.map(p => (
+              <div key={p.id} onClick={() => setForm(f => ({ ...f, projectId: p.id }))}
+                className="cursor-pointer flex justify-between items-center"
+                style={{ padding: '8px 12px', borderBottom: '1px solid var(--c7)', background: form.projectId === p.id ? 'var(--navy-light)' : '#fff' }}>
+                <div>
+                  <span className="text-xs text-[var(--c3)] mr-2">{p.pn}</span>
+                  <span className="text-[13px] font-semibold">{p.name}</span>
+                </div>
+                {p.client && <span className="text-[11px] text-muted-foreground">{p.client.name}</span>}
+              </div>
             ))}
           </div>
-
-          {/* Priority buttons (not for leave) */}
-          {!isLeave && (
-            <div style={{ marginBottom: 16 }}>
-              <div className="form-label" style={{ marginBottom: 6 }}>Priority</div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                {(['none', 'high', 'urgent'] as const).map(p => {
-                  const colors = { none: { bg: '#fff', border: 'var(--c5)', text: 'var(--c2)' }, high: { bg: '#fff8e1', border: '#ffcc02', text: '#e65100' }, urgent: { bg: '#fce4ec', border: '#ef9a9a', text: '#c62828' } }
-                  const c = colors[p]
-                  const active = form.priority === p
-                  return (
-                    <button key={p} type="button"
-                      onClick={() => setForm(f => ({ ...f, priority: p }))}
-                      style={{
-                        padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                        border: `2px solid ${active ? c.border : 'var(--c5)'}`,
-                        background: active ? c.bg : '#fff',
-                        color: active ? c.text : 'var(--c3)',
-                        boxShadow: active ? `0 0 0 1px ${c.border}` : 'none',
-                      }}
-                    >{p === 'none' ? 'No priority' : p.charAt(0).toUpperCase() + p.slice(1)}</button>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Project select */}
-          {form.category === 'project' && (
-            <div className="form-group" style={{ marginBottom: 16 }}>
-              <label className="form-label">Project</label>
-              <input placeholder="Search projects..." value={projSearch} onChange={e => setProjSearch(e.target.value)} style={{ marginBottom: 8 }} />
-              <div style={{ maxHeight: 150, overflowY: 'auto', border: '1px solid var(--c6)', borderRadius: 6 }}>
-                {filteredProjects.length === 0 && <div style={{ padding: '10px 12px', color: 'var(--c4)', fontSize: 13 }}>No projects found</div>}
-                {filteredProjects.map(p => (
-                  <div key={p.id} onClick={() => setForm(f => ({ ...f, projectId: p.id }))}
-                    style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--c7)', background: form.projectId === p.id ? 'var(--navy-light)' : '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <span style={{ fontSize: 12, color: 'var(--c3)', marginRight: 8 }}>{p.pn}</span>
-                      <span style={{ fontSize: 13, fontWeight: 600 }}>{p.name}</span>
-                    </div>
-                    {p.client && <span style={{ fontSize: 11, color: 'var(--c4)' }}>{p.client.name}</span>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Maintenance select */}
-          {form.category === 'maintenance' && (
-            <div className="form-group" style={{ marginBottom: 16 }}>
-              <label className="form-label">Maintenance Contract</label>
-              <input placeholder="Search maintenances..." value={maintSearch} onChange={e => setMaintSearch(e.target.value)} style={{ marginBottom: 8 }} />
-              <div style={{ maxHeight: 150, overflowY: 'auto', border: '1px solid var(--c6)', borderRadius: 6 }}>
-                {filteredMaintenances.length === 0 && <div style={{ padding: '10px 12px', color: 'var(--c4)', fontSize: 13 }}>No active maintenances found</div>}
-                {filteredMaintenances.map(m => (
-                  <div key={m.id} onClick={() => setForm(f => ({ ...f, maintenanceId: m.id }))}
-                    style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--c7)', background: form.maintenanceId === m.id ? 'var(--navy-light)' : '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <span style={{ fontSize: 13, fontWeight: 600 }}>{m.name}</span>
-                      {m.client && <span style={{ fontSize: 11, color: 'var(--c4)', marginLeft: 8 }}>{m.client.name}</span>}
-                    </div>
-                    <span style={{ fontSize: 11, color: 'var(--c4)' }}>{m.hours_included}h/mo</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Custom label */}
-          {(form.category === 'internal' || form.category === 'meeting' || form.category === 'admin' || form.category === 'sales') && (
-            <div className="form-group" style={{ marginBottom: 16 }}>
-              <label className="form-label">Label</label>
-              <input placeholder="e.g. Team workshop, Sales call…" value={form.customLabel} onChange={e => setForm(f => ({ ...f, customLabel: e.target.value }))} />
-            </div>
-          )}
-
-          {/* Day picker (leave + meeting) */}
-          {usesDayPicker && (
-            <div style={{ marginBottom: 20 }}>
-              <div className="form-label" style={{ marginBottom: 8 }}>
-                {isLeave ? 'Select days off' : 'Select meeting days'}
-              </div>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-                {days.map(d => {
-                  const wd = new Date(d + 'T00:00:00')
-                  const selected = form.leaveDays.includes(d)
-                  return (
-                    <button key={d} type="button" onClick={() => toggleLeaveDay(d)}
-                      style={{
-                        flex: 1, padding: '10px 4px', borderRadius: 8, cursor: 'pointer',
-                        border: selected ? '2px solid var(--navy)' : '2px solid var(--c5)',
-                        background: selected ? 'var(--navy)' : '#fff',
-                        color: selected ? '#fff' : 'var(--c3)',
-                        fontSize: 12, fontWeight: 700, textAlign: 'center',
-                      }}
-                    >
-                      <div>{wd.toLocaleDateString('en-US', { weekday: 'short' })}</div>
-                      <div style={{ fontSize: 10, fontWeight: 400, marginTop: 2, opacity: 0.8 }}>{wd.getDate()}/{wd.getMonth() + 1}</div>
-                    </button>
-                  )
-                })}
-              </div>
-              <div className="form-group">
-                <label className="form-label">Hours per day</label>
-                <input type="number" min={0.5} max={member.hours_per_day} step={0.5}
-                  value={form.leaveHoursPerDay}
-                  onChange={e => setForm(f => ({ ...f, leaveHoursPerDay: Number(e.target.value) }))}
-                  style={{ maxWidth: 120 }} />
-                {form.leaveDays.length > 0 && (
-                  <div className="form-hint">{form.leaveDays.length} day{form.leaveDays.length > 1 ? 's' : ''} · {pickedTotal}h total</div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Hours + Deadline + Billable (not for day-picker categories) */}
-          {!usesDayPicker && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 16 }}>
-              <div className="form-group">
-                <label className="form-label">Total Hours (week)</label>
-                <input type="number" min={0.5} step={0.5} value={form.hours}
-                  onChange={e => setForm(f => ({ ...f, hours: Number(e.target.value) }))} />
-                <div className="form-hint">{(form.hours / days.length).toFixed(1)}h / day</div>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Deadline (optional)</label>
-                <input type="date" value={form.deadline} onChange={e => setForm(f => ({ ...f, deadline: e.target.value }))} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Billable</label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={form.isBillable}
-                    onChange={e => setForm(f => ({ ...f, isBillable: e.target.checked }))}
-                    style={{ width: 16, height: 16, accentColor: 'var(--green)' }} />
-                  <span style={{ fontSize: 13, color: form.isBillable ? 'var(--green)' : 'var(--c3)', fontWeight: 600 }}>
-                    {form.isBillable ? 'Billable' : 'Non-billable'}
-                  </span>
-                </label>
-              </div>
-            </div>
-          )}
-
-          {/* Note */}
-          {!isLeave && (
-            <div className="form-group">
-              <label className="form-label">Note for member dashboard</label>
-              <textarea rows={2} placeholder="e.g. Focus on checkout flow, coordinate with design team…"
-                value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
-                style={{ resize: 'vertical' }} />
-            </div>
-          )}
         </div>
+      )}
 
-        <div className="modal-footer">
-          <button className="btn btn-secondary btn-sm" onClick={onClose}>Cancel</button>
-          <button className="btn btn-secondary btn-sm" disabled={isSaveDisabled} onClick={() => doSave(true)}>
-            {saving ? 'Saving…' : `${saveLabel} + Add more`}
-          </button>
-          <button className="btn btn-primary btn-sm" disabled={isSaveDisabled} onClick={() => doSave(false)}>
-            {saving ? 'Saving…' : saveLabel}
-          </button>
+      {/* Maintenance select */}
+      {form.category === 'maintenance' && (
+        <div className="mb-4">
+          <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Maintenance Contract</label>
+          <input placeholder="Search maintenances..." value={maintSearch} onChange={e => setMaintSearch(e.target.value)} className="mb-2" />
+          <div style={{ maxHeight: 150, overflowY: 'auto', border: '1px solid var(--c6)', borderRadius: 6 }}>
+            {filteredMaintenances.length === 0 && <div className="px-3 py-2.5 text-muted-foreground text-[13px]">No active maintenances found</div>}
+            {filteredMaintenances.map(m => (
+              <div key={m.id} onClick={() => setForm(f => ({ ...f, maintenanceId: m.id }))}
+                className="cursor-pointer flex justify-between items-center"
+                style={{ padding: '8px 12px', borderBottom: '1px solid var(--c7)', background: form.maintenanceId === m.id ? 'var(--navy-light)' : '#fff' }}>
+                <div>
+                  <span className="text-[13px] font-semibold">{m.name}</span>
+                  {m.client && <span className="text-[11px] text-muted-foreground ml-2">{m.client.name}</span>}
+                </div>
+                <span className="text-[11px] text-muted-foreground">{m.hours_included}h/mo</span>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
-    </div>
+      )}
+
+      {/* Custom label */}
+      {(form.category === 'internal' || form.category === 'meeting' || form.category === 'admin' || form.category === 'sales') && (
+        <div className="mb-4">
+          <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Label</label>
+          <input placeholder="e.g. Team workshop, Sales call…" value={form.customLabel} onChange={e => setForm(f => ({ ...f, customLabel: e.target.value }))} />
+        </div>
+      )}
+
+      {/* Day picker (leave + meeting) */}
+      {usesDayPicker && (
+        <div className="mb-5">
+          <div className="text-xs uppercase tracking-wide text-muted-foreground font-medium mb-2">
+            {isLeave ? 'Select days off' : 'Select meeting days'}
+          </div>
+          <div className="flex gap-2 mb-4">
+            {days.map(d => {
+              const wd = new Date(d + 'T00:00:00')
+              const selected = form.leaveDays.includes(d)
+              return (
+                <button key={d} type="button" onClick={() => toggleLeaveDay(d)}
+                  className="flex-1 cursor-pointer text-center"
+                  style={{
+                    padding: '10px 4px', borderRadius: 8,
+                    border: selected ? '2px solid var(--navy)' : '2px solid var(--c5)',
+                    background: selected ? 'var(--navy)' : '#fff',
+                    color: selected ? '#fff' : 'var(--c3)',
+                    fontSize: 12, fontWeight: 700,
+                  }}
+                >
+                  <div>{wd.toLocaleDateString('en-US', { weekday: 'short' })}</div>
+                  <div className="text-[10px] font-normal mt-0.5 opacity-80">{wd.getDate()}/{wd.getMonth() + 1}</div>
+                </button>
+              )
+            })}
+          </div>
+          <div className="mb-4">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Hours per day</label>
+            <input type="number" min={0.5} max={member.hours_per_day} step={0.5}
+              value={form.leaveHoursPerDay}
+              onChange={e => setForm(f => ({ ...f, leaveHoursPerDay: Number(e.target.value) }))}
+              style={{ maxWidth: 120 }} />
+            {form.leaveDays.length > 0 && (
+              <div className="text-xs text-muted-foreground mt-1">{form.leaveDays.length} day{form.leaveDays.length > 1 ? 's' : ''} · {pickedTotal}h total</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Hours + Deadline + Billable (not for day-picker categories) */}
+      {!usesDayPicker && (
+        <div className="grid grid-cols-3 gap-3.5 mb-4">
+          <div className="mb-4">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Total Hours (week)</label>
+            <input type="number" min={0.5} step={0.5} value={form.hours}
+              onChange={e => setForm(f => ({ ...f, hours: Number(e.target.value) }))} />
+            <div className="text-xs text-muted-foreground mt-1">{(form.hours / days.length).toFixed(1)}h / day</div>
+          </div>
+          <div className="mb-4">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Deadline (optional)</label>
+            <input type="date" value={form.deadline} onChange={e => setForm(f => ({ ...f, deadline: e.target.value }))} />
+          </div>
+          <div className="mb-4">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Billable</label>
+            <label className="flex items-center gap-2 mt-2 cursor-pointer">
+              <input type="checkbox" checked={form.isBillable}
+                onChange={e => setForm(f => ({ ...f, isBillable: e.target.checked }))}
+                style={{ width: 16, height: 16, accentColor: 'var(--green)' }} />
+              <span className="text-[13px] font-semibold" style={{ color: form.isBillable ? 'var(--green)' : 'var(--c3)' }}>
+                {form.isBillable ? 'Billable' : 'Non-billable'}
+              </span>
+            </label>
+          </div>
+        </div>
+      )}
+
+      {/* Note */}
+      {!isLeave && (
+        <div className="mb-4">
+          <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Note for member dashboard</label>
+          <textarea rows={2} placeholder="e.g. Focus on checkout flow, coordinate with design team…"
+            value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
+            style={{ resize: 'vertical' }} />
+        </div>
+      )}
+    </Modal>
   )
 }
 
@@ -445,34 +445,31 @@ function ProjectPoolPanel({ projects, onClose }: { projects: Project[]; onClose:
     p.status === 'active' &&
     (search === '' || `${p.pn} ${p.name}`.toLowerCase().includes(search.toLowerCase()))
   )
+  const TYPE_VARIANT: Record<Project['type'], 'blue' | 'amber' | 'green' | 'gray'> = {
+    fixed: 'blue', maintenance: 'amber', variable: 'green', internal: 'gray',
+  }
   return (
-    <div style={{
-      position: 'fixed', top: 0, right: 0, bottom: 0, width: 320, zIndex: 200,
-      background: '#fff', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)',
-      display: 'flex', flexDirection: 'column',
-    }}>
-      <div style={{ padding: '20px 20px 12px', borderBottom: '1px solid var(--c6)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div className="fixed top-0 right-0 bottom-0 w-80 z-[200] bg-white flex flex-col" style={{ boxShadow: '-4px 0 24px rgba(0,0,0,0.12)' }}>
+      <div className="px-5 pt-5 pb-3 border-b border-[var(--c6)] flex justify-between items-center">
         <div>
-          <div style={{ fontSize: 15, fontWeight: 800 }}>Project Pool</div>
-          <div style={{ fontSize: 12, color: 'var(--c4)' }}>{active.length} active projects</div>
+          <div className="text-[15px] font-extrabold">Project Pool</div>
+          <div className="text-xs text-muted-foreground">{active.length} active projects</div>
         </div>
-        <button className="btn btn-ghost btn-sm" onClick={onClose}>&times;</button>
+        <Button variant="ghost" size="sm" onClick={onClose}>&times;</Button>
       </div>
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--c6)' }}>
-        <input placeholder="Search projects..." value={search} onChange={e => setSearch(e.target.value)} style={{ width: '100%' }} />
+      <div className="px-4 py-3 border-b border-[var(--c6)]">
+        <input placeholder="Search projects..." value={search} onChange={e => setSearch(e.target.value)} className="w-full" />
       </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+      <div className="flex-1 overflow-y-auto py-2">
         {active.map(p => (
-          <div key={p.id} style={{ padding: '10px 16px', borderBottom: '1px solid var(--c7)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div key={p.id} className="px-4 py-2.5 border-b border-[var(--c7)]">
+            <div className="flex justify-between items-start">
               <div>
-                <div style={{ fontSize: 11, color: 'var(--c4)', marginBottom: 2 }}>{p.pn}</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--c0)' }}>{p.name}</div>
-                {p.client && <div style={{ fontSize: 11, color: 'var(--c4)', marginTop: 2 }}>{p.client.name}</div>}
+                <div className="text-[11px] text-muted-foreground mb-0.5">{p.pn}</div>
+                <div className="text-[13px] font-bold text-[var(--c0)]">{p.name}</div>
+                {p.client && <div className="text-[11px] text-muted-foreground mt-0.5">{p.client.name}</div>}
               </div>
-              <span className={`badge ${p.type === 'fixed' ? 'badge-blue' : p.type === 'maintenance' ? 'badge-amber' : 'badge-green'}`}>
-                {p.type}
-              </span>
+              <Badge variant={TYPE_VARIANT[p.type]}>{p.type}</Badge>
             </div>
           </div>
         ))}
@@ -501,83 +498,72 @@ function SummaryModal({
   const weekLabel = `${new Date(weekStart + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${fri.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
-        <div className="modal-header">
-          <div>
-            <h3 style={{ marginBottom: 2 }}>Weekly Planning Summary</h3>
-            <div style={{ fontSize: 12, color: 'var(--c4)' }}>Week of {weekLabel} · Complete capacity review</div>
-          </div>
-          <button className="modal-close" onClick={onClose}>&times;</button>
-        </div>
-        <div className="modal-body">
+    <Modal title="Weekly Planning Summary" onClose={onClose} maxWidth={700} footer={
+      <Button size="sm" onClick={onClose}>Done</Button>
+    }>
+      <div className="text-xs text-muted-foreground mb-6">Week of {weekLabel} · Complete capacity review</div>
 
-          {/* stat cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
-            {[
-              { label: 'Total Capacity', value: `${totalCapacity}h`, sub: null, color: 'var(--navy)' },
-              { label: 'Allocated', value: `${totalAllocated}h`, sub: `${Math.round((totalAllocated / (totalCapacity || 1)) * 100)}% utilized`, color: 'var(--green)' },
-              { label: 'Buffer Remaining', value: `${Math.max(0, buffer)}h`, sub: buffer < totalCapacity * 0.1 ? 'Low buffer' : 'Healthy', color: buffer < 0 ? 'var(--red)' : 'var(--amber)' },
-              { label: 'Over-allocated', value: String(overAllocated.length), sub: overAllocated.length > 0 ? 'Team member' + (overAllocated.length > 1 ? 's' : '') : 'None', color: overAllocated.length > 0 ? 'var(--red)' : 'var(--green)' },
-            ].map(s => (
-              <div key={s.label} style={{ background: 'var(--c7)', borderRadius: 10, padding: '14px 16px' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>{s.label}</div>
-                <div style={{ fontSize: 24, fontWeight: 800, color: s.color }}>{s.value}</div>
-                {s.sub && <div style={{ fontSize: 11, color: 'var(--c4)', marginTop: 3 }}>{s.sub}</div>}
-              </div>
-            ))}
+      {/* stat cards */}
+      <div className="grid grid-cols-4 gap-3 mb-6">
+        {[
+          { label: 'Total Capacity', value: `${totalCapacity}h`, sub: null, color: 'var(--navy)' },
+          { label: 'Allocated', value: `${totalAllocated}h`, sub: `${Math.round((totalAllocated / (totalCapacity || 1)) * 100)}% utilized`, color: 'var(--green)' },
+          { label: 'Buffer Remaining', value: `${Math.max(0, buffer)}h`, sub: buffer < totalCapacity * 0.1 ? 'Low buffer' : 'Healthy', color: buffer < 0 ? 'var(--red)' : 'var(--amber)' },
+          { label: 'Over-allocated', value: String(overAllocated.length), sub: overAllocated.length > 0 ? 'Team member' + (overAllocated.length > 1 ? 's' : '') : 'None', color: overAllocated.length > 0 ? 'var(--red)' : 'var(--green)' },
+        ].map(s => (
+          <div key={s.label} className="bg-[var(--c7)] rounded-lg px-4 py-3.5">
+            <div className="text-[11px] font-bold text-[var(--c3)] uppercase tracking-[0.05em] mb-1.5">{s.label}</div>
+            <div className="text-2xl font-extrabold" style={{ color: s.color }}>{s.value}</div>
+            {s.sub && <div className="text-[11px] text-muted-foreground mt-0.5">{s.sub}</div>}
           </div>
+        ))}
+      </div>
 
-          {/* capacity by member */}
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--c1)', marginBottom: 12 }}>Capacity by Team Member</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {memberStats.map(ms => {
-                const pct = ms.capacity > 0 ? Math.min(1, ms.allocated / ms.capacity) : 0
-                const barColor = ms.utilization > 100 ? 'var(--red)' : ms.utilization >= 70 ? 'var(--green)' : ms.utilization >= 50 ? 'var(--amber)' : 'var(--c5)'
-                return (
-                  <div key={ms.member.id} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{ width: 140, fontSize: 13, fontWeight: 600, color: 'var(--c1)', flexShrink: 0 }}>
-                      {ms.member.name}
-                      {ms.member.role && <div style={{ fontSize: 11, color: 'var(--c4)', fontWeight: 400 }}>{ms.member.role}</div>}
-                    </div>
-                    <div style={{ flex: 1, height: 8, background: 'var(--c6)', borderRadius: 4, overflow: 'hidden' }}>
-                      <div style={{ width: `${pct * 100}%`, height: '100%', background: barColor, borderRadius: 4 }} />
-                    </div>
-                    <div style={{ width: 80, textAlign: 'right', fontSize: 13, fontWeight: 700, color: barColor }}>
-                      {ms.allocated}h / {ms.capacity}h
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* over-allocated */}
-          {overAllocated.length > 0 && (
-            <div style={{ background: '#fce4ec', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--red)', marginBottom: 8 }}>⚠ Over-allocated Members</div>
-              {overAllocated.map(ms => (
-                <div key={ms.member.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
-                  <span style={{ fontWeight: 600 }}>{ms.member.name}</span>
-                  <span style={{ color: 'var(--red)', fontWeight: 700 }}>+{ms.allocated - ms.capacity}h over</span>
+      {/* capacity by member */}
+      <div className="mb-6">
+        <div className="text-[13px] font-bold text-[var(--c1)] mb-3">Capacity by Team Member</div>
+        <div className="flex flex-col gap-2">
+          {memberStats.map(ms => {
+            const pct = ms.capacity > 0 ? Math.min(1, ms.allocated / ms.capacity) : 0
+            const barColor = ms.utilization > 100 ? 'var(--red)' : ms.utilization >= 70 ? 'var(--green)' : ms.utilization >= 50 ? 'var(--amber)' : 'var(--c5)'
+            return (
+              <div key={ms.member.id} className="flex items-center gap-3">
+                <div className="text-[13px] font-semibold text-[var(--c1)] shrink-0" style={{ width: 140 }}>
+                  {ms.member.name}
+                  {ms.member.role && <div className="text-[11px] text-muted-foreground font-normal">{ms.member.role}</div>}
                 </div>
-              ))}
-            </div>
-          )}
-
-          {/* maintenance buffer note */}
-          {memberStats.some(ms => ms.hasMaintenance) && (
-            <div style={{ background: '#fff8e1', borderRadius: 10, padding: '12px 16px', fontSize: 13, color: '#e65100' }}>
-              <strong>Maintenance buffer:</strong> Some members have maintenance allocations. Variable maintenance demand may consume additional capacity — keep buffer available.
-            </div>
-          )}
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-primary btn-sm" onClick={onClose}>Done</button>
+                <div className="flex-1 h-2 bg-[var(--c6)] rounded overflow-hidden">
+                  <div style={{ width: `${pct * 100}%`, height: '100%', background: barColor, borderRadius: 4 }} />
+                </div>
+                <div className="w-20 text-right text-[13px] font-bold" style={{ color: barColor }}>
+                  {ms.allocated}h / {ms.capacity}h
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
-    </div>
+
+      {/* over-allocated */}
+      {overAllocated.length > 0 && (
+        <div className="bg-[#fce4ec] rounded-lg px-4 py-3.5 mb-4">
+          <div className="text-[13px] font-bold text-[var(--red)] mb-2">⚠ Over-allocated Members</div>
+          {overAllocated.map(ms => (
+            <div key={ms.member.id} className="flex justify-between text-[13px] mb-1">
+              <span className="font-semibold">{ms.member.name}</span>
+              <span className="font-bold text-[var(--red)]">+{ms.allocated - ms.capacity}h over</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* maintenance buffer note */}
+      {memberStats.some(ms => ms.hasMaintenance) && (
+        <div className="bg-[#fff8e1] rounded-lg px-4 py-3 text-[13px] text-[#e65100]">
+          <strong>Maintenance buffer:</strong> Some members have maintenance allocations. Variable maintenance demand may consume additional capacity — keep buffer available.
+        </div>
+      )}
+    </Modal>
   )
 }
 
@@ -590,28 +576,24 @@ function MemberRow({ stats, onAssign, onEdit, onShareLink }: { stats: MemberStat
   const teamColor = member.team?.color ?? '#64748b'
 
   return (
-    <tr style={{ borderBottom: '1px solid var(--c7)' }}>
+    <tr className="border-b border-[var(--c7)]">
       {/* Member */}
-      <td style={{ padding: '14px 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{
-            width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
-            background: teamColor + '22', color: teamColor,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 13, fontWeight: 800,
-          }}>
+      <td className="p-4">
+        <div className="flex items-center gap-2.5">
+          <div className="w-[34px] h-[34px] rounded-full shrink-0 flex items-center justify-center text-[13px] font-extrabold"
+            style={{ background: teamColor + '22', color: teamColor }}>
             {member.name.charAt(0)}
           </div>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--c0)' }}>{member.name}</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[13px] font-bold text-[var(--c0)]">{member.name}</span>
               <button
                 onClick={onShareLink}
                 title="Copy member dashboard link"
-                style={{ background: 'none', border: 'none', padding: '1px 3px', cursor: 'pointer', fontSize: 12, color: 'var(--c4)', lineHeight: 1 }}
+                className="bg-transparent border-none p-0.5 cursor-pointer text-xs text-muted-foreground leading-none"
               >🔗</button>
             </div>
-            <div style={{ fontSize: 11, color: teamColor, fontWeight: 600 }}>
+            <div className="text-[11px] font-semibold" style={{ color: teamColor }}>
               {member.team?.name ?? '—'}{member.role ? ` · ${member.role}` : ''}
             </div>
           </div>
@@ -619,74 +601,73 @@ function MemberRow({ stats, onAssign, onEdit, onShareLink }: { stats: MemberStat
       </td>
 
       {/* Availability */}
-      <td style={{ padding: '14px 12px', verticalAlign: 'middle', width: 110 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--c1)' }}>
+      <td className="p-3 align-middle" style={{ width: 110 }}>
+        <div className="text-[13px] font-semibold text-[var(--c1)]">
           {capacity}h
-          {offDays > 0 && <span style={{ fontSize: 11, color: 'var(--amber)', marginLeft: 6 }}>−{offDays}d off</span>}
-          {leaveHours > 0 && <span style={{ fontSize: 11, color: '#c62828', marginLeft: 6 }}>−{leaveHours}h leave</span>}
+          {offDays > 0 && <span className="text-[11px] text-[var(--amber)] ml-1.5">−{offDays}d off</span>}
+          {leaveHours > 0 && <span className="text-[11px] text-[#c62828] ml-1.5">−{leaveHours}h leave</span>}
         </div>
-        <div style={{ fontSize: 11, color: 'var(--c4)' }}>{member.hours_per_day}h/day</div>
+        <div className="text-[11px] text-muted-foreground">{member.hours_per_day}h/day</div>
       </td>
 
       {/* Current projects */}
-      <td style={{ padding: '14px 12px', verticalAlign: 'middle' }}>
+      <td className="p-3 align-middle">
         {projectChips.length === 0 ? (
-          <span style={{ fontSize: 12, color: 'var(--c5)' }}>No assignments</span>
+          <span className="text-xs text-[var(--c5)]">No assignments</span>
         ) : (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          <div className="flex flex-wrap gap-1">
             {projectChips.slice(0, 4).map((chip, i) => {
               const c = PRIORITY_CHIP[chip.priority]
               return (
-                <span key={i} style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: c.bg, color: c.color }}>
-                  {chip.label} <span style={{ opacity: 0.7 }}>({chip.hours}h)</span>
+                <span key={i} className="px-2 py-0.5 rounded-[10px] text-[11px] font-semibold" style={{ background: c.bg, color: c.color }}>
+                  {chip.label} <span className="opacity-70">({chip.hours}h)</span>
                 </span>
               )
             })}
             {projectChips.length > 4 && (
-              <span style={{ fontSize: 11, color: 'var(--c4)', alignSelf: 'center' }}>+{projectChips.length - 4}</span>
+              <span className="text-[11px] text-muted-foreground self-center">+{projectChips.length - 4}</span>
             )}
             {hasMaintenance && (
-              <span title="Has maintenance allocations — keep buffer available" style={{
-                padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700,
-                background: '#fff8e1', color: '#e65100', cursor: 'default',
-              }}>M buffer</span>
+              <span title="Has maintenance allocations — keep buffer available"
+                className="px-2 py-0.5 rounded-[10px] text-[11px] font-bold cursor-default"
+                style={{ background: '#fff8e1', color: '#e65100' }}>M buffer</span>
             )}
           </div>
         )}
       </td>
 
       {/* Allocated hours + bar */}
-      <td style={{ padding: '14px 12px', verticalAlign: 'middle', width: 180 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <div style={{ flex: 1, height: 6, background: 'var(--c6)', borderRadius: 3, overflow: 'hidden' }}>
+      <td className="p-3 align-middle" style={{ width: 180 }}>
+        <div className="flex items-center gap-2 mb-1">
+          <div className="flex-1 h-1.5 bg-[var(--c6)] rounded overflow-hidden">
             <div style={{ width: `${pct * 100}%`, height: '100%', background: barColor, borderRadius: 3 }} />
           </div>
-          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--c2)', flexShrink: 0 }}>
+          <span className="text-xs font-bold text-[var(--c2)] shrink-0">
             {allocated}h / {capacity}h
           </span>
         </div>
       </td>
 
       {/* Utilization */}
-      <td style={{ padding: '14px 12px', verticalAlign: 'middle' }}>
-        <span style={{ fontSize: 14, fontWeight: 800, color: utilizationColor(utilization) }}>
+      <td className="p-3 align-middle">
+        <span className="text-sm font-extrabold" style={{ color: utilizationColor(utilization) }}>
           {utilization}%
         </span>
-        {utilization > 100 && <div style={{ fontSize: 10, color: 'var(--red)', fontWeight: 700 }}>OVER</div>}
-        {utilization < 50 && utilization >= 0 && <div style={{ fontSize: 10, color: 'var(--c4)' }}>LOW</div>}
+        {utilization > 100 && <div className="text-[10px] text-[var(--red)] font-bold">OVER</div>}
+        {utilization < 50 && utilization >= 0 && <div className="text-[10px] text-muted-foreground">LOW</div>}
       </td>
 
       {/* Actions */}
-      <td style={{ padding: '14px 16px', verticalAlign: 'middle', textAlign: 'right' }}>
-        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+      <td className="p-4 align-middle text-right">
+        <div className="flex gap-1.5 justify-end">
           {stats.projectChips.length > 0 && (
-            <button className="btn btn-ghost btn-sm" onClick={onEdit} style={{ fontSize: 12 }}>
+            <Button variant="ghost" size="sm" onClick={onEdit} className="text-xs">
               Edit
-            </button>
+            </Button>
           )}
-          <button className="btn btn-primary btn-sm" onClick={onAssign} style={{ fontSize: 12 }}>
+          <Button size="sm" onClick={onAssign} className="text-xs">
             + Assign
-          </button>
+          </Button>
         </div>
       </td>
     </tr>
@@ -787,121 +768,114 @@ function EditAllocationsModal({
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 720 }}>
-        <div className="modal-header">
-          <div>
-            <h3>Edit allocations — {member.name}</h3>
-            <div style={{ fontSize: 12, color: 'var(--c4)', marginTop: 2 }}>{groups.length} assignment{groups.length !== 1 ? 's' : ''} this week</div>
-          </div>
-          <button className="modal-close" onClick={onClose}>&times;</button>
-        </div>
-        <div className="modal-body">
-          {groups.length === 0 ? (
-            <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--c4)', fontSize: 14 }}>No allocations this week</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {groups.map(g => {
-                const cat = CAT_BADGE[g.category]
-                const isSav = saving === g.key
-                const isDel = deleting === g.key
-                const isLeaveG = g.category === 'leave'
-                const usesDayPickerG = isLeaveG || g.category === 'meeting'
-                const sortedDates = [...g.dates].sort()
-                return (
-                  <div key={g.key} style={{ border: `1px solid ${g.dirty ? 'var(--amber)' : 'var(--c6)'}`, borderRadius: 10, padding: '16px 18px', background: g.dirty ? '#fffbf0' : '#fff' }}>
-                    {/* Header row */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-                      <span style={{ padding: '3px 10px', borderRadius: 10, fontSize: 11, fontWeight: 700, background: cat.bg, color: cat.color }}>{cat.label}</span>
-                      <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--c0)', flex: 1 }}>{g.label}</span>
-                      {/* Day chips */}
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        {sortedDates.map(d => (
-                          <span key={d} style={{ padding: '2px 7px', borderRadius: 6, fontSize: 11, fontWeight: 700, background: 'var(--navy-light)', color: 'var(--navy)' }}>
-                            {new Date(d + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' })}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
+    <Modal title={`Edit allocations — ${member.name}`} onClose={onClose} maxWidth={720} footer={
+      <Button size="sm" onClick={onClose}>Done</Button>
+    }>
+      <div className="text-xs text-muted-foreground mb-4">{groups.length} assignment{groups.length !== 1 ? 's' : ''} this week</div>
+      {groups.length === 0 ? (
+        <div className="py-6 text-center text-muted-foreground text-sm">No allocations this week</div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          {groups.map(g => {
+            const cat = CAT_BADGE[g.category]
+            const isSav = saving === g.key
+            const isDel = deleting === g.key
+            const isLeaveG = g.category === 'leave'
+            const usesDayPickerG = isLeaveG || g.category === 'meeting'
+            const sortedDates = [...g.dates].sort()
+            return (
+              <div key={g.key} className="rounded-lg px-4 py-4"
+                style={{ border: `1px solid ${g.dirty ? 'var(--amber)' : 'var(--c6)'}`, background: g.dirty ? '#fffbf0' : '#fff' }}>
+                {/* Header row */}
+                <div className="flex items-center gap-2.5 mb-3.5">
+                  <span className="px-2.5 py-0.5 rounded-[10px] text-[11px] font-bold" style={{ background: cat.bg, color: cat.color }}>{cat.label}</span>
+                  <span className="text-sm font-bold text-[var(--c0)] flex-1">{g.label}</span>
+                  {/* Day chips — deduplicated */}
+                  <div className="flex gap-1">
+                    {[...new Set(sortedDates)].map(d => (
+                      <span key={d} className="px-1.5 py-0.5 rounded text-[11px] font-bold bg-[var(--navy-light)] text-[var(--navy)]">
+                        {new Date(d + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' })}
+                      </span>
+                    ))}
+                  </div>
+                </div>
 
-                    {/* Priority (not for leave) */}
-                    {!isLeaveG && (
-                      <div style={{ marginBottom: 12 }}>
-                        <div className="form-label" style={{ marginBottom: 6 }}>Priority</div>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          {(['none', 'high', 'urgent'] as const).map(p => {
-                            const colors = { none: { bg: '#fff', border: 'var(--c5)', text: 'var(--c2)' }, high: { bg: '#fff8e1', border: '#ffcc02', text: '#e65100' }, urgent: { bg: '#fce4ec', border: '#ef9a9a', text: '#c62828' } }
-                            const c = colors[p]; const active = g.priority === p
-                            return (
-                              <button key={p} type="button" onClick={() => setGroup(g.key, { priority: p })}
-                                style={{ padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer', border: `2px solid ${active ? c.border : 'var(--c5)'}`, background: active ? c.bg : '#fff', color: active ? c.text : 'var(--c3)', boxShadow: active ? `0 0 0 1px ${c.border}` : 'none' }}
-                              >{p === 'none' ? 'No priority' : p.charAt(0).toUpperCase() + p.slice(1)}</button>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Hours + Billable */}
-                    <div style={{ display: 'grid', gridTemplateColumns: usesDayPickerG ? '1fr' : '160px 1fr 1fr', gap: 14, marginBottom: !isLeaveG ? 12 : 0 }}>
-                      <div className="form-group">
-                        <label className="form-label">{usesDayPickerG ? 'Hours per day' : 'Total hours (week)'}</label>
-                        <input type="number" min={0.5} step={0.5} value={g.totalHours}
-                          onChange={e => setGroup(g.key, { totalHours: Number(e.target.value) })}
-                          style={{ maxWidth: 120 }} />
-                        {!usesDayPickerG && g.ids.length > 0 && (
-                          <div className="form-hint">{(g.totalHours / g.ids.length).toFixed(1)}h / day · {g.ids.length} day{g.ids.length > 1 ? 's' : ''}</div>
-                        )}
-                        {usesDayPickerG && g.ids.length > 0 && (
-                          <div className="form-hint">{g.ids.length} day{g.ids.length > 1 ? 's' : ''} · {g.totalHours}h total</div>
-                        )}
-                      </div>
-                      {!usesDayPickerG && (
-                        <>
-                          <div className="form-group">
-                            <label className="form-label">Billable</label>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, cursor: 'pointer' }}>
-                              <input type="checkbox" checked={g.isBillable} onChange={e => setGroup(g.key, { isBillable: e.target.checked })} style={{ width: 16, height: 16, accentColor: 'var(--green)' }} />
-                              <span style={{ fontSize: 13, color: g.isBillable ? 'var(--green)' : 'var(--c3)', fontWeight: 600 }}>{g.isBillable ? 'Billable' : 'Non-billable'}</span>
-                            </label>
-                          </div>
-                          <div />
-                        </>
-                      )}
-                    </div>
-
-                    {/* Note (not for leave) */}
-                    {!isLeaveG && (
-                      <div className="form-group">
-                        <label className="form-label">Note</label>
-                        <textarea rows={2} value={g.notes} onChange={e => setGroup(g.key, { notes: e.target.value })}
-                          placeholder="Note for member dashboard…" style={{ resize: 'vertical' }} />
-                      </div>
-                    )}
-
-                    {/* Actions */}
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-                      <button className="btn btn-ghost btn-xs" disabled={isDel} onClick={() => deleteGroup(g.key)}
-                        style={{ color: 'var(--red)', fontSize: 12 }}>
-                        {isDel ? 'Removing…' : 'Remove'}
-                      </button>
-                      {g.dirty && (
-                        <button className="btn btn-primary btn-xs" disabled={isSav} onClick={() => saveGroup(g.key)}>
-                          {isSav ? 'Saving…' : 'Save changes'}
-                        </button>
-                      )}
+                {/* Priority (not for leave) */}
+                {!isLeaveG && (
+                  <div className="mb-3">
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground font-medium mb-1.5">Priority</div>
+                    <div className="flex gap-1.5">
+                      {(['none', 'high', 'urgent'] as const).map(p => {
+                        const colors = { none: { bg: '#fff', border: 'var(--c5)', text: 'var(--c2)' }, high: { bg: '#fff8e1', border: '#ffcc02', text: '#e65100' }, urgent: { bg: '#fce4ec', border: '#ef9a9a', text: '#c62828' } }
+                        const c = colors[p]; const active = g.priority === p
+                        return (
+                          <button key={p} type="button" onClick={() => setGroup(g.key, { priority: p })}
+                            className="cursor-pointer"
+                            style={{ padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, border: `2px solid ${active ? c.border : 'var(--c5)'}`, background: active ? c.bg : '#fff', color: active ? c.text : 'var(--c3)', boxShadow: active ? `0 0 0 1px ${c.border}` : 'none' }}
+                          >{p === 'none' ? 'No priority' : p.charAt(0).toUpperCase() + p.slice(1)}</button>
+                        )
+                      })}
                     </div>
                   </div>
-                )
-              })}
-            </div>
-          )}
+                )}
+
+                {/* Hours + Billable */}
+                <div style={{ display: 'grid', gridTemplateColumns: usesDayPickerG ? '1fr' : '160px 1fr 1fr', gap: 14, marginBottom: !isLeaveG ? 12 : 0 }}>
+                  <div className="mb-4">
+                    <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">{usesDayPickerG ? 'Hours per day' : 'Total hours (week)'}</label>
+                    <input type="number" min={0.5} step={0.5} value={g.totalHours}
+                      onChange={e => setGroup(g.key, { totalHours: Number(e.target.value) })}
+                      style={{ maxWidth: 120 }} />
+                    {!usesDayPickerG && g.ids.length > 0 && (() => {
+                      const uniqueDays = new Set(g.dates).size
+                      return <div className="text-xs text-muted-foreground mt-1">{(g.totalHours / uniqueDays).toFixed(1)}h / day · {uniqueDays} day{uniqueDays > 1 ? 's' : ''}</div>
+                    })()}
+                    {usesDayPickerG && g.ids.length > 0 && (() => {
+                      const uniqueDays = new Set(g.dates).size
+                      return <div className="text-xs text-muted-foreground mt-1">{uniqueDays} day{uniqueDays > 1 ? 's' : ''} · {g.totalHours}h total</div>
+                    })()}
+                  </div>
+                  {!usesDayPickerG && (
+                    <>
+                      <div className="mb-4">
+                        <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Billable</label>
+                        <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                          <input type="checkbox" checked={g.isBillable} onChange={e => setGroup(g.key, { isBillable: e.target.checked })} style={{ width: 16, height: 16, accentColor: 'var(--green)' }} />
+                          <span className="text-[13px] font-semibold" style={{ color: g.isBillable ? 'var(--green)' : 'var(--c3)' }}>{g.isBillable ? 'Billable' : 'Non-billable'}</span>
+                        </label>
+                      </div>
+                      <div />
+                    </>
+                  )}
+                </div>
+
+                {/* Note (not for leave) */}
+                {!isLeaveG && (
+                  <div className="mb-4">
+                    <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Note</label>
+                    <textarea rows={2} value={g.notes} onChange={e => setGroup(g.key, { notes: e.target.value })}
+                      placeholder="Note for member dashboard…" style={{ resize: 'vertical' }} />
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex justify-end gap-2 mt-3">
+                  <Button variant="ghost" size="xs" disabled={isDel} onClick={() => deleteGroup(g.key)}
+                    className="text-[var(--red)] text-xs">
+                    {isDel ? 'Removing…' : 'Remove'}
+                  </Button>
+                  {g.dirty && (
+                    <Button size="xs" disabled={isSav} onClick={() => saveGroup(g.key)}>
+                      {isSav ? 'Saving…' : 'Save changes'}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
         </div>
-        <div className="modal-footer">
-          <button className="btn btn-primary btn-sm" onClick={onClose}>Done</button>
-        </div>
-      </div>
-    </div>
+      )}
+    </Modal>
   )
 }
 
@@ -955,41 +929,43 @@ function WeeklySummary({
   if (teams.length === 0) return null
 
   return (
-    <div style={{ marginTop: 20 }}>
-      <div style={{ background: '#fff', border: '1px solid var(--c6)', borderRadius: 12, padding: '16px 20px' }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--c1)', marginBottom: 16 }}>Weekly Allocation by Team</div>
+    <div className="mt-5">
+      <div className="bg-white border border-[var(--c6)] rounded-xl px-5 py-4">
+        <div className="text-[13px] font-bold text-[var(--c1)] mb-4">Weekly Allocation by Team</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
           {teams.map(team => (
-            <div key={team.teamName} style={{ border: '1px solid var(--c6)', borderRadius: 8, overflow: 'hidden' }}>
+            <div key={team.teamName} className="border border-[var(--c6)] rounded-lg overflow-hidden">
               {/* Team header */}
-              <div style={{ padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: team.teamColor + '18', borderBottom: '1px solid var(--c6)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <div className="px-3.5 py-2 flex items-center justify-between border-b border-[var(--c6)]"
+                style={{ background: team.teamColor + '18' }}>
+                <div className="flex items-center gap-1.5">
                   <div style={{ width: 8, height: 8, borderRadius: '50%', background: team.teamColor, flexShrink: 0 }} />
-                  <span style={{ fontSize: 12, fontWeight: 800, color: team.teamColor, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{team.teamName}</span>
+                  <span className="text-xs font-extrabold uppercase tracking-[0.05em]" style={{ color: team.teamColor }}>{team.teamName}</span>
                 </div>
-                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--c2)' }}>{team.totalHours}h</span>
+                <span className="text-xs font-bold text-[var(--c2)]">{team.totalHours}h</span>
               </div>
               {/* Projects */}
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div className="flex flex-col">
                 {team.projects.map((proj, i) => {
                   const pc = PRIORITY_CHIP[proj.priority]
                   const catBadge = CAT_BADGE[proj.category]
                   return (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderBottom: i < team.projects.length - 1 ? '1px solid var(--c7)' : 'none' }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
+                    <div key={i} className="flex items-center gap-2 px-3.5 py-2"
+                      style={{ borderBottom: i < team.projects.length - 1 ? '1px solid var(--c7)' : 'none' }}>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1 mb-0.5">
                           {proj.priority !== 'none' && (
-                            <span style={{ padding: '1px 5px', borderRadius: 6, fontSize: 9, fontWeight: 800, background: pc.bg, color: pc.color, textTransform: 'uppercase', flexShrink: 0 }}>
+                            <span className="px-1 py-px rounded text-[9px] font-extrabold uppercase shrink-0" style={{ background: pc.bg, color: pc.color }}>
                               {proj.priority}
                             </span>
                           )}
-                          <span style={{ padding: '1px 5px', borderRadius: 6, fontSize: 9, fontWeight: 700, background: catBadge.bg, color: catBadge.color, flexShrink: 0 }}>
+                          <span className="px-1 py-px rounded text-[9px] font-bold shrink-0" style={{ background: catBadge.bg, color: catBadge.color }}>
                             {catBadge.label}
                           </span>
                         </div>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--c0)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{proj.label}</div>
+                        <div className="text-xs font-semibold text-[var(--c0)] truncate">{proj.label}</div>
                       </div>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--c2)', flexShrink: 0 }}>{proj.hours}h</span>
+                      <span className="text-[13px] font-bold text-[var(--c2)] shrink-0">{proj.hours}h</span>
                     </div>
                   )
                 })}
@@ -1094,183 +1070,182 @@ function BulkAssignModal({
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 780 }}>
-        <div className="modal-header">
-          <div>
-            <h3>Bulk Assign</h3>
-            <div style={{ fontSize: 12, color: 'var(--c4)', marginTop: 2 }}>Assign the same allocation to multiple team members at once</div>
+    <Modal title="Bulk Assign" onClose={onClose} maxWidth={780} footer={
+      <div className="flex items-center gap-2">
+        <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+        <Button size="sm" disabled={saving || selected.size === 0} onClick={handleSave}>
+          {saving ? 'Saving…' : `Assign to ${selected.size} member${selected.size !== 1 ? 's' : ''}`}
+        </Button>
+      </div>
+    }>
+      <div className="text-xs text-muted-foreground mb-4">Assign the same allocation to multiple team members at once</div>
+      <div className="grid grid-cols-[220px_1fr] gap-5">
+        {/* Member list */}
+        <div>
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Team Members</span>
+            <Button variant="ghost" size="xs" onClick={toggleAll} className="text-[11px]">
+              {selected.size === members.length ? 'Deselect all' : 'Select all'}
+            </Button>
           </div>
-          <button className="modal-close" onClick={onClose}>&times;</button>
+          <input placeholder="Search members…" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} className="mb-2 text-xs" />
+          <div className="flex flex-col gap-1 max-h-80 overflow-y-auto">
+            {members.filter(m => memberSearch === '' || m.name.toLowerCase().includes(memberSearch.toLowerCase())).map(m => (
+              <label key={m.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-[7px] cursor-pointer"
+                style={{ background: selected.has(m.id) ? 'var(--navy-light)' : 'var(--c7)' }}>
+                <input type="checkbox" checked={selected.has(m.id)} onChange={() => toggleMember(m.id)} style={{ accentColor: 'var(--navy)' }} />
+                <div>
+                  <div className="text-[13px] font-semibold text-[var(--c0)]">{m.name}</div>
+                  {m.role && <div className="text-[11px] text-muted-foreground">{m.role}</div>}
+                </div>
+              </label>
+            ))}
+          </div>
+          {selected.size > 0 && (
+            <div className="mt-2 text-xs text-[var(--navy)] font-bold">{selected.size} member{selected.size > 1 ? 's' : ''} selected</div>
+          )}
         </div>
-        <div className="modal-body" style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 20 }}>
-          {/* Member list */}
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <span className="form-label" style={{ margin: 0 }}>Team Members</span>
-              <button className="btn btn-ghost btn-xs" onClick={toggleAll} style={{ fontSize: 11 }}>
-                {selected.size === members.length ? 'Deselect all' : 'Select all'}
-              </button>
-            </div>
-            <input placeholder="Search members…" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} style={{ marginBottom: 8, fontSize: 12 }} />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 320, overflowY: 'auto' }}>
-              {members.filter(m => memberSearch === '' || m.name.toLowerCase().includes(memberSearch.toLowerCase())).map(m => (
-                <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 7, cursor: 'pointer', background: selected.has(m.id) ? 'var(--navy-light)' : 'var(--c7)' }}>
-                  <input type="checkbox" checked={selected.has(m.id)} onChange={() => toggleMember(m.id)} style={{ accentColor: 'var(--navy)' }} />
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--c0)' }}>{m.name}</div>
-                    {m.role && <div style={{ fontSize: 11, color: 'var(--c4)' }}>{m.role}</div>}
-                  </div>
-                </label>
-              ))}
-            </div>
-            {selected.size > 0 && (
-              <div style={{ marginTop: 8, fontSize: 12, color: 'var(--navy)', fontWeight: 700 }}>{selected.size} member{selected.size > 1 ? 's' : ''} selected</div>
-            )}
+
+        {/* Assignment form */}
+        <div>
+          {/* Category */}
+          <div className="flex flex-wrap gap-1.5 mb-3.5">
+            {CAT_OPTIONS.map(opt => (
+              <button key={opt.value} type="button"
+                onClick={() => setForm(f => ({ ...f, category: opt.value, projectId: '', maintenanceId: '', customLabel: '', leaveDays: [], leaveHoursPerDay: 8, isBillable: opt.defaultBillable }))}
+                className="cursor-pointer"
+                style={{
+                  padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+                  border: form.category === opt.value ? '2px solid var(--navy)' : '2px solid var(--c5)',
+                  background: form.category === opt.value ? 'var(--navy)' : '#fff',
+                  color: form.category === opt.value ? '#fff' : 'var(--c2)',
+                }}
+              >{opt.label}</button>
+            ))}
           </div>
 
-          {/* Assignment form */}
-          <div>
-            {/* Category */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 14 }}>
-              {CAT_OPTIONS.map(opt => (
-                <button key={opt.value} type="button"
-                  onClick={() => setForm(f => ({ ...f, category: opt.value, projectId: '', maintenanceId: '', customLabel: '', leaveDays: [], leaveHoursPerDay: 8, isBillable: opt.defaultBillable }))}
-                  style={{
-                    padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                    border: form.category === opt.value ? '2px solid var(--navy)' : '2px solid var(--c5)',
-                    background: form.category === opt.value ? 'var(--navy)' : '#fff',
-                    color: form.category === opt.value ? '#fff' : 'var(--c2)',
-                  }}
-                >{opt.label}</button>
-              ))}
+          {/* Priority (not for leave) */}
+          {!isLeave && (
+            <div className="flex gap-1.5 mb-3.5">
+              {(['none', 'high', 'urgent'] as const).map(p => {
+                const colors = { none: { bg: '#fff', border: 'var(--c5)', text: 'var(--c2)' }, high: { bg: '#fff8e1', border: '#ffcc02', text: '#e65100' }, urgent: { bg: '#fce4ec', border: '#ef9a9a', text: '#c62828' } }
+                const c = colors[p]; const active = form.priority === p
+                return (
+                  <button key={p} type="button" onClick={() => setForm(f => ({ ...f, priority: p }))}
+                    className="cursor-pointer"
+                    style={{ padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, border: `2px solid ${active ? c.border : 'var(--c5)'}`, background: active ? c.bg : '#fff', color: active ? c.text : 'var(--c3)' }}
+                  >{p === 'none' ? 'No priority' : p.charAt(0).toUpperCase() + p.slice(1)}</button>
+                )
+              })}
             </div>
+          )}
 
-            {/* Priority (not for leave) */}
-            {!isLeave && (
-              <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-                {(['none', 'high', 'urgent'] as const).map(p => {
-                  const colors = { none: { bg: '#fff', border: 'var(--c5)', text: 'var(--c2)' }, high: { bg: '#fff8e1', border: '#ffcc02', text: '#e65100' }, urgent: { bg: '#fce4ec', border: '#ef9a9a', text: '#c62828' } }
-                  const c = colors[p]; const active = form.priority === p
+          {form.category === 'project' && (
+            <div className="mb-3">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Project</label>
+              <input placeholder="Search…" value={projSearch} onChange={e => setProjSearch(e.target.value)} className="mb-1.5" />
+              <div style={{ maxHeight: 130, overflowY: 'auto', border: '1px solid var(--c6)', borderRadius: 6 }}>
+                {filteredProjects.map(p => (
+                  <div key={p.id} onClick={() => setForm(f => ({ ...f, projectId: p.id }))}
+                    className="cursor-pointer text-[13px] font-semibold"
+                    style={{ padding: '7px 12px', background: form.projectId === p.id ? 'var(--navy-light)' : '#fff', borderBottom: '1px solid var(--c7)' }}>
+                    <span className="text-[11px] text-muted-foreground mr-1.5">{p.pn}</span>{p.name}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {form.category === 'maintenance' && (
+            <div className="mb-3">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Maintenance</label>
+              <input placeholder="Search…" value={maintSearch} onChange={e => setMaintSearch(e.target.value)} className="mb-1.5" />
+              <div style={{ maxHeight: 130, overflowY: 'auto', border: '1px solid var(--c6)', borderRadius: 6 }}>
+                {filteredMaintenances.map(m => (
+                  <div key={m.id} onClick={() => setForm(f => ({ ...f, maintenanceId: m.id }))}
+                    className="cursor-pointer text-[13px] font-semibold"
+                    style={{ padding: '7px 12px', background: form.maintenanceId === m.id ? 'var(--navy-light)' : '#fff', borderBottom: '1px solid var(--c7)' }}>
+                    {m.name}{m.client && <span className="text-[11px] text-muted-foreground ml-1.5">{m.client.name}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {(form.category === 'internal' || form.category === 'meeting' || form.category === 'admin' || form.category === 'sales') && (
+            <div className="mb-3">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Label</label>
+              <input placeholder="e.g. Weekly standup" value={form.customLabel} onChange={e => setForm(f => ({ ...f, customLabel: e.target.value }))} />
+            </div>
+          )}
+
+          {/* Day picker (leave + meeting) */}
+          {usesDayPicker && (
+            <div className="mb-4">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground font-medium mb-2">
+                {isLeave ? 'Select days off' : 'Select meeting days'}
+              </div>
+              <div className="flex gap-1.5 mb-3">
+                {days.map(d => {
+                  const wd = new Date(d + 'T00:00:00')
+                  const sel = form.leaveDays.includes(d)
                   return (
-                    <button key={p} type="button" onClick={() => setForm(f => ({ ...f, priority: p }))}
-                      style={{ padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer', border: `2px solid ${active ? c.border : 'var(--c5)'}`, background: active ? c.bg : '#fff', color: active ? c.text : 'var(--c3)' }}
-                    >{p === 'none' ? 'No priority' : p.charAt(0).toUpperCase() + p.slice(1)}</button>
+                    <button key={d} type="button" onClick={() => toggleDay(d)}
+                      className="flex-1 cursor-pointer text-center"
+                      style={{
+                        padding: '8px 4px', borderRadius: 8,
+                        border: sel ? '2px solid var(--navy)' : '2px solid var(--c5)',
+                        background: sel ? 'var(--navy)' : '#fff',
+                        color: sel ? '#fff' : 'var(--c3)',
+                        fontSize: 12, fontWeight: 700,
+                      }}
+                    >
+                      <div>{wd.toLocaleDateString('en-US', { weekday: 'short' })}</div>
+                      <div className="text-[10px] font-normal mt-0.5 opacity-80">{wd.getDate()}/{wd.getMonth() + 1}</div>
+                    </button>
                   )
                 })}
               </div>
-            )}
+              <div className="mb-4">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Hours per day</label>
+                <input type="number" min={0.5} step={0.5} value={form.leaveHoursPerDay}
+                  onChange={e => setForm(f => ({ ...f, leaveHoursPerDay: Number(e.target.value) }))}
+                  style={{ maxWidth: 120 }} />
+                {form.leaveDays.length > 0 && (
+                  <div className="text-xs text-muted-foreground mt-1">{form.leaveDays.length} day{form.leaveDays.length > 1 ? 's' : ''} · {pickedTotal}h total per member</div>
+                )}
+              </div>
+            </div>
+          )}
 
-            {form.category === 'project' && (
-              <div className="form-group" style={{ marginBottom: 12 }}>
-                <label className="form-label">Project</label>
-                <input placeholder="Search…" value={projSearch} onChange={e => setProjSearch(e.target.value)} style={{ marginBottom: 6 }} />
-                <div style={{ maxHeight: 130, overflowY: 'auto', border: '1px solid var(--c6)', borderRadius: 6 }}>
-                  {filteredProjects.map(p => (
-                    <div key={p.id} onClick={() => setForm(f => ({ ...f, projectId: p.id }))}
-                      style={{ padding: '7px 12px', cursor: 'pointer', background: form.projectId === p.id ? 'var(--navy-light)' : '#fff', borderBottom: '1px solid var(--c7)', fontSize: 13, fontWeight: 600 }}>
-                      <span style={{ fontSize: 11, color: 'var(--c4)', marginRight: 6 }}>{p.pn}</span>{p.name}
-                    </div>
-                  ))}
-                </div>
+          {/* Hours + Deadline + Billable (not for day-picker categories) */}
+          {!usesDayPicker && (
+            <div className="grid grid-cols-3 gap-3 mb-3">
+              <div className="mb-4">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Hours (week)</label>
+                <input type="number" min={0.5} step={0.5} value={form.hours} onChange={e => setForm(f => ({ ...f, hours: Number(e.target.value) }))} />
+                <div className="text-xs text-muted-foreground mt-1">{(form.hours / days.length).toFixed(1)}h/day</div>
               </div>
-            )}
-            {form.category === 'maintenance' && (
-              <div className="form-group" style={{ marginBottom: 12 }}>
-                <label className="form-label">Maintenance</label>
-                <input placeholder="Search…" value={maintSearch} onChange={e => setMaintSearch(e.target.value)} style={{ marginBottom: 6 }} />
-                <div style={{ maxHeight: 130, overflowY: 'auto', border: '1px solid var(--c6)', borderRadius: 6 }}>
-                  {filteredMaintenances.map(m => (
-                    <div key={m.id} onClick={() => setForm(f => ({ ...f, maintenanceId: m.id }))}
-                      style={{ padding: '7px 12px', cursor: 'pointer', background: form.maintenanceId === m.id ? 'var(--navy-light)' : '#fff', borderBottom: '1px solid var(--c7)', fontSize: 13, fontWeight: 600 }}>
-                      {m.name}{m.client && <span style={{ fontSize: 11, color: 'var(--c4)', marginLeft: 6 }}>{m.client.name}</span>}
-                    </div>
-                  ))}
-                </div>
+              <div className="mb-4">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Deadline</label>
+                <input type="date" value={form.deadline} onChange={e => setForm(f => ({ ...f, deadline: e.target.value }))} />
               </div>
-            )}
-            {(form.category === 'internal' || form.category === 'meeting' || form.category === 'admin' || form.category === 'sales') && (
-              <div className="form-group" style={{ marginBottom: 12 }}>
-                <label className="form-label">Label</label>
-                <input placeholder="e.g. Weekly standup" value={form.customLabel} onChange={e => setForm(f => ({ ...f, customLabel: e.target.value }))} />
+              <div className="mb-4">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Billable</label>
+                <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                  <input type="checkbox" checked={form.isBillable} onChange={e => setForm(f => ({ ...f, isBillable: e.target.checked }))} style={{ accentColor: 'var(--green)' }} />
+                  <span className="text-[13px] font-semibold" style={{ color: form.isBillable ? 'var(--green)' : 'var(--c3)' }}>{form.isBillable ? 'Billable' : 'Non-billable'}</span>
+                </label>
               </div>
-            )}
-
-            {/* Day picker (leave + meeting) */}
-            {usesDayPicker && (
-              <div style={{ marginBottom: 16 }}>
-                <div className="form-label" style={{ marginBottom: 8 }}>
-                  {isLeave ? 'Select days off' : 'Select meeting days'}
-                </div>
-                <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-                  {days.map(d => {
-                    const wd = new Date(d + 'T00:00:00')
-                    const sel = form.leaveDays.includes(d)
-                    return (
-                      <button key={d} type="button" onClick={() => toggleDay(d)}
-                        style={{
-                          flex: 1, padding: '8px 4px', borderRadius: 8, cursor: 'pointer',
-                          border: sel ? '2px solid var(--navy)' : '2px solid var(--c5)',
-                          background: sel ? 'var(--navy)' : '#fff',
-                          color: sel ? '#fff' : 'var(--c3)',
-                          fontSize: 12, fontWeight: 700, textAlign: 'center',
-                        }}
-                      >
-                        <div>{wd.toLocaleDateString('en-US', { weekday: 'short' })}</div>
-                        <div style={{ fontSize: 10, fontWeight: 400, marginTop: 2, opacity: 0.8 }}>{wd.getDate()}/{wd.getMonth() + 1}</div>
-                      </button>
-                    )
-                  })}
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Hours per day</label>
-                  <input type="number" min={0.5} step={0.5} value={form.leaveHoursPerDay}
-                    onChange={e => setForm(f => ({ ...f, leaveHoursPerDay: Number(e.target.value) }))}
-                    style={{ maxWidth: 120 }} />
-                  {form.leaveDays.length > 0 && (
-                    <div className="form-hint">{form.leaveDays.length} day{form.leaveDays.length > 1 ? 's' : ''} · {pickedTotal}h total per member</div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Hours + Deadline + Billable (not for day-picker categories) */}
-            {!usesDayPicker && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
-                <div className="form-group">
-                  <label className="form-label">Hours (week)</label>
-                  <input type="number" min={0.5} step={0.5} value={form.hours} onChange={e => setForm(f => ({ ...f, hours: Number(e.target.value) }))} />
-                  <div className="form-hint">{(form.hours / days.length).toFixed(1)}h/day</div>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Deadline</label>
-                  <input type="date" value={form.deadline} onChange={e => setForm(f => ({ ...f, deadline: e.target.value }))} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Billable</label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={form.isBillable} onChange={e => setForm(f => ({ ...f, isBillable: e.target.checked }))} style={{ accentColor: 'var(--green)' }} />
-                    <span style={{ fontSize: 13, color: form.isBillable ? 'var(--green)' : 'var(--c3)', fontWeight: 600 }}>{form.isBillable ? 'Billable' : 'Non-billable'}</span>
-                  </label>
-                </div>
-              </div>
-            )}
-            {!isLeave && (
-              <div className="form-group">
-                <label className="form-label">Note</label>
-                <textarea rows={2} placeholder="Note visible on member dashboard…" value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} style={{ resize: 'vertical' }} />
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-secondary btn-sm" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary btn-sm" disabled={saving || selected.size === 0} onClick={handleSave}>
-            {saving ? 'Saving…' : `Assign to ${selected.size} member${selected.size !== 1 ? 's' : ''}`}
-          </button>
+            </div>
+          )}
+          {!isLeave && (
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Note</label>
+              <textarea rows={2} placeholder="Note visible on member dashboard…" value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} style={{ resize: 'vertical' }} />
+            </div>
+          )}
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -1293,6 +1268,23 @@ export function ResourcePlanningView() {
   const { members, allocations, teams, fetchMembers, fetchTeams, fetchAllocations, addAllocationsBatch, updateAllocation, removeAllocation } = useResourceStore()
   const { projects, fetchAll: fetchProjects } = useProjectsStore()
   const { maintenances, fetchAll: fetchMaintenances } = useMaintenancesStore()
+
+  const combinedMaintenances = useMemo((): Maintenance[] => [
+    ...maintenances,
+    ...projects
+      .filter(p => p.is_maintenance && p.status === 'active')
+      .map(p => ({
+        id: p.id,
+        name: `${p.pn ? p.pn + ' · ' : ''}${p.name}`,
+        status: 'active' as const,
+        client_id: p.client_id ?? '',
+        monthly_retainer: 0,
+        help_requests_included: 0,
+        hours_included: 0,
+        contract_start: p.start_date ?? '',
+        created_at: '',
+      })),
+  ], [maintenances, projects])
 
   const days = useMemo(() => weekDays(weekStart), [weekStart])
   const weekEnd = days[4]
@@ -1378,33 +1370,34 @@ export function ResourcePlanningView() {
 
   return (
     <div className="page">
-      <div className="page-header">
+      <div className="flex items-center justify-between px-6 py-4 bg-background border-b border-border">
         <div>
           <h1>Resource Planning</h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-            <button className="btn btn-ghost btn-sm" style={{ fontSize: 12 }} onClick={() => setWeekStart(shiftWeek(weekStart, -1))}>← Prev</button>
-            <button className="btn btn-ghost btn-sm" style={{ fontSize: 12 }} onClick={() => setWeekStart(getMonday(new Date()))}>Today</button>
-            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--c1)' }}>{fmtWeekLabel(weekStart)}</span>
-            <button className="btn btn-ghost btn-sm" style={{ fontSize: 12 }} onClick={() => setWeekStart(shiftWeek(weekStart, 1))}>Next →</button>
+          <div className="flex items-center gap-2 mt-1">
+            <Button variant="ghost" size="sm" className="text-xs" onClick={() => setWeekStart(shiftWeek(weekStart, -1))}>← Prev</Button>
+            <Button variant="ghost" size="sm" className="text-xs" onClick={() => setWeekStart(getMonday(new Date()))}>Today</Button>
+            <span className="text-sm font-bold text-[var(--c1)]">{fmtWeekLabel(weekStart)}</span>
+            <Button variant="ghost" size="sm" className="text-xs" onClick={() => setWeekStart(shiftWeek(weekStart, 1))}>Next →</Button>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button className="btn btn-ghost btn-sm" onClick={() => setShowCapacityWizard(true)}>Capacity Check</button>
-          <button className="btn btn-ghost btn-sm" onClick={() => setShowBulk(true)}>Bulk Assign</button>
-          <button
-            className="btn btn-secondary btn-sm"
+        <div className="flex gap-2 items-center">
+          <Button variant="ghost" size="sm" onClick={() => setShowCapacityWizard(true)}>Capacity Check</Button>
+          <Button variant="ghost" size="sm" onClick={() => setShowBulk(true)}>Bulk Assign</Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => setShowPool(!showPool)}
             style={{ background: showPool ? 'var(--navy-light)' : undefined }}
           >
             Project Pool {showPool ? '→' : '←'}
-          </button>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowSummary(true)}>
+          </Button>
+          <Button size="sm" onClick={() => setShowSummary(true)}>
             Save Week
-          </button>
+          </Button>
         </div>
       </div>
 
-      <div className="page-content">
+      <div className="flex-1 overflow-auto p-6">
 
         {/* Stats strip */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10, marginBottom: 20 }}>
@@ -1416,16 +1409,16 @@ export function ResourcePlanningView() {
             { label: 'Billable', value: `${billableHours}h`, color: 'var(--green)' },
             { label: 'Billable %', value: `${billablePct}%`, color: billablePct >= 70 ? 'var(--green)' : billablePct >= 50 ? 'var(--amber)' : 'var(--c4)' },
           ].map(s => (
-            <div key={s.label} style={{ background: '#fff', border: '1px solid var(--c6)', borderRadius: 10, padding: '12px 14px' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{s.label}</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.value}</div>
+            <div key={s.label} className="bg-white border border-[var(--c6)] rounded-lg px-3.5 py-3">
+              <div className="text-[10px] font-bold text-[var(--c4)] uppercase tracking-[0.06em] mb-1">{s.label}</div>
+              <div className="text-xl font-extrabold" style={{ color: s.color }}>{s.value}</div>
             </div>
           ))}
         </div>
 
         {/* Filters + summary chips */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <div style={{ display: 'flex', gap: 8 }}>
+        <div className="flex justify-between items-center mb-4">
+          <div className="flex gap-2">
             <input
               placeholder="Search by name..."
               value={search}
@@ -1437,28 +1430,26 @@ export function ResourcePlanningView() {
               {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div className="flex gap-2 items-center">
             {underCount > 0 && (
-              <span style={{
-                padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700,
-                background: '#fff8e1', color: '#e65100', border: '1px solid #ffcc02',
-              }}>{underCount} under 50%</span>
+              <span className="px-2.5 py-1 rounded-[20px] text-xs font-bold bg-[#fff8e1] text-[#e65100] border border-[#ffcc02]">
+                {underCount} under 50%
+              </span>
             )}
             {overCount > 0 && (
-              <span style={{
-                padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700,
-                background: '#fce4ec', color: 'var(--red)', border: '1px solid #ef9a9a',
-              }}>{overCount} over-allocated</span>
+              <span className="px-2.5 py-1 rounded-[20px] text-xs font-bold bg-[#fce4ec] text-[var(--red)] border border-[#ef9a9a]">
+                {overCount} over-allocated
+              </span>
             )}
-            <span style={{ fontSize: 13, color: 'var(--c3)' }}>{filtered.length} people</span>
+            <span className="text-[13px] text-[var(--c3)]">{filtered.length} people</span>
           </div>
         </div>
 
         {/* Table */}
-        <div className="card" style={{ overflow: 'hidden', padding: 0 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <Card className="overflow-hidden p-0">
+          <table className="w-full" style={{ borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ background: 'var(--c7)', borderBottom: '2px solid var(--c6)' }}>
+              <tr className="bg-[var(--c7)] border-b-2 border-[var(--c6)]">
                 {([
                   { label: 'Team Member' },
                   { label: 'Availability', width: 110 },
@@ -1479,7 +1470,7 @@ export function ResourcePlanningView() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 14 }}>
+                  <td colSpan={6} className="py-10 px-5 text-center text-muted-foreground text-sm">
                     No team members found
                   </td>
                 </tr>
@@ -1499,7 +1490,7 @@ export function ResourcePlanningView() {
               )}
             </tbody>
           </table>
-        </div>
+        </Card>
 
         {/* Weekly summary */}
         <WeeklySummary allocations={allocations} members={members} />
@@ -1514,7 +1505,7 @@ export function ResourcePlanningView() {
           members={members}
           days={days}
           projects={projects}
-          maintenances={maintenances}
+          maintenances={combinedMaintenances}
           onClose={() => setShowBulk(false)}
           onSave={async rows => {
             await addAllocationsBatch(rows)
@@ -1532,7 +1523,7 @@ export function ResourcePlanningView() {
             member={assignTarget}
             days={days}
             projects={projects}
-            maintenances={maintenances}
+            maintenances={combinedMaintenances}
             alreadyPlanned={ms?.allocated ?? 0}
             weekCapacity={ms?.capacity ?? assignTarget.hours_per_day * 5}
             onClose={() => setAssignTarget(null)}

@@ -2,11 +2,16 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useMaintenancesStore } from '../stores/maintenances'
 import { useChangeRequestsStore } from '../stores/changeRequests'
+import { useResourceStore } from '../stores/resource'
 import { supabase } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import type { RevenuePlanner, Maintenance, HostingClient, ChangeRequest } from '../lib/types'
 import { Select } from '../components/Select'
 import { Modal } from '../components/Modal'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
 
 function safeUrl(url: string | null | undefined): string | undefined {
   if (!url) return undefined
@@ -27,18 +32,18 @@ function fmtMonth(iso: string) {
   return new Date(iso + 'T00:00:00').toLocaleString('en', { month: 'short', year: 'numeric' })
 }
 
-const STATUS_BADGE: Record<string, string> = {
-  planned:  'badge-amber',
-  issued:   'badge-blue',
-  paid:     'badge-green',
-  retainer: 'badge-gray',
-  cost:     'badge-red',
+const STATUS_BADGE_VARIANT: Record<string, 'amber' | 'blue' | 'green' | 'gray' | 'red'> = {
+  planned:  'amber',
+  issued:   'blue',
+  paid:     'green',
+  retainer: 'gray',
+  cost:     'red',
 }
 
-const MAINT_STATUS_BADGE: Record<string, string> = {
-  active:    'badge-green',
-  paused:    'badge-amber',
-  cancelled: 'badge-red',
+const MAINT_STATUS_BADGE_VARIANT: Record<string, 'green' | 'amber' | 'red'> = {
+  active:    'green',
+  paused:    'amber',
+  cancelled: 'red',
 }
 
 // ── Edit form type ────────────────────────────────────────────────────────────
@@ -46,6 +51,8 @@ const MAINT_STATUS_BADGE: Record<string, string> = {
 interface EditForm {
   name: string
   monthly_retainer: string
+  billing_cycle: 'monthly' | 'annual'
+  billing_month: string
   hours_included: string
   help_requests_included: string
   contract_start: string
@@ -77,47 +84,44 @@ function CRModalFields({ form, setForm, autoFocus }: {
 }) {
   return (
     <>
-      <div className="form-group" style={{ marginBottom: 14 }}>
-        <label className="form-label">Title</label>
+      <div className="mb-4">
+        <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Title</label>
         <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Add CRM integration" autoFocus={autoFocus} />
       </div>
-      <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-        <div className="form-group">
-          <label className="form-label">Status</label>
-          <div style={{ display: 'flex', gap: 2, background: 'var(--c7)', borderRadius: 8, padding: 3 }}>
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="mb-4">
+          <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Status</label>
+          <div className="flex gap-0.5 bg-gray-100 rounded-lg p-0.5">
             {(['pending', 'approved'] as const).map(s => (
               <button key={s} type="button" onClick={() => setForm(f => ({ ...f, status: s }))}
-                style={{
-                  flex: 1, padding: '6px 0', borderRadius: 6, border: 'none', fontFamily: 'inherit',
-                  background: form.status === s ? '#fff' : 'transparent',
-                  color: form.status === s ? (s === 'approved' ? 'var(--green)' : 'var(--amber)') : 'var(--c4)',
-                  fontWeight: form.status === s ? 700 : 500, fontSize: 13,
-                  cursor: 'pointer',
-                  boxShadow: form.status === s ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                }}>
+                className={`flex-1 py-1.5 rounded text-[13px] border-none cursor-pointer font-inherit transition-all ${
+                  form.status === s
+                    ? `bg-white shadow-sm font-bold ${s === 'approved' ? 'text-[#16a34a]' : 'text-[#d97706]'}`
+                    : 'bg-transparent font-medium text-muted-foreground'
+                }`}>
                 {s === 'pending' ? 'Pending' : 'Approved'}
               </button>
             ))}
           </div>
         </div>
-        <div className="form-group">
-          <label className="form-label">Probability</label>
+        <div className="mb-4">
+          <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Probability</label>
           <Select value={form.probability} onChange={v => setForm(f => ({ ...f, probability: v }))} options={CR_PROB_OPTS} />
         </div>
       </div>
-      <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-        <div className="form-group">
-          <label className="form-label">Amount (€) <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="mb-4">
+          <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Amount (€) <span className="text-xs text-muted-foreground ml-1">optional</span></label>
           <input type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} placeholder="0" />
         </div>
-        <div className="form-group">
-          <label className="form-label">Expected month</label>
+        <div className="mb-4">
+          <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Expected month</label>
           <input type="month" value={form.expected_month} onChange={e => setForm(f => ({ ...f, expected_month: e.target.value }))} />
         </div>
       </div>
-      <div className="form-group" style={{ marginBottom: 20 }}>
-        <label className="form-label">Description <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
-        <textarea rows={2} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="What does this change involve?" style={{ width: '100%', resize: 'vertical' }} />
+      <div className="mb-5">
+        <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Description <span className="text-xs text-muted-foreground ml-1">optional</span></label>
+        <textarea rows={2} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="What does this change involve?" className="w-full resize-y" />
       </div>
     </>
   )
@@ -141,6 +145,7 @@ export function MaintenanceDetailView() {
   const navigate = useNavigate()
   const store = useMaintenancesStore()
   const crStore = useChangeRequestsStore()
+  const { teams, fetchTeams } = useResourceStore()
 
   const [rpRows, setRpRows] = useState<RevenuePlanner[]>([])
   const [hosting, setHosting] = useState<HostingClient | null>(null)
@@ -150,6 +155,7 @@ export function MaintenanceDetailView() {
   // Edit maintenance modal
   const [showEdit, setShowEdit] = useState(false)
   const [editForm, setEditForm] = useState<EditForm | null>(null)
+  const [editTeamHours, setEditTeamHours] = useState<Record<string, number>>({})
 
   // Inline status edit
   const [editingStatus, setEditingStatus] = useState(false)
@@ -196,7 +202,8 @@ export function MaintenanceDetailView() {
 
   useEffect(() => {
     if (!store.maintenances.length) store.fetchAll()
-  }, [])
+    fetchTeams()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (id) {
@@ -268,6 +275,8 @@ export function MaintenanceDetailView() {
     setEditForm({
       name:                   maint.name,
       monthly_retainer:       String(maint.monthly_retainer),
+      billing_cycle:          maint.billing_cycle ?? 'monthly',
+      billing_month:          String(maint.billing_month ?? 1),
       hours_included:         String(maint.hours_included),
       help_requests_included: String(maint.help_requests_included),
       contract_start:         maint.contract_start?.slice(0, 7) ?? '',
@@ -276,6 +285,7 @@ export function MaintenanceDetailView() {
       notes:                  maint.notes ?? '',
       status:                 maint.status,
     })
+    setEditTeamHours(maint.team_hours ?? {})
     setShowEdit(true)
   }
 
@@ -286,10 +296,16 @@ export function MaintenanceDetailView() {
       const start = editForm.contract_start ? editForm.contract_start + '-01' : maint.contract_start
       const durationMonths = parseInt(editForm.contract_duration_months) || 12
       const end = start ? computeContractEnd(start, durationMonths) : null
+      // Only include team_hours entries with value > 0
+      const filteredTeamHours = Object.fromEntries(
+        Object.entries(editTeamHours).filter(([, v]) => v > 0)
+      )
       await store.update(maint.id, {
         name:                   editForm.name,
         client_id:              maint.client_id,
         monthly_retainer:       parseFloat(editForm.monthly_retainer) || 0,
+        billing_cycle:          editForm.billing_cycle,
+        billing_month:          editForm.billing_cycle === 'annual' ? Number(editForm.billing_month) || 1 : null,
         hours_included:         parseInt(editForm.hours_included) || 0,
         help_requests_included: parseInt(editForm.help_requests_included) || 0,
         contract_start:         start ?? maint.contract_start,
@@ -297,6 +313,7 @@ export function MaintenanceDetailView() {
         contract_url:           editForm.contract_url || null,
         notes:                  editForm.notes || null,
         status:                 editForm.status as Maintenance['status'],
+        team_hours:             Object.keys(filteredTeamHours).length > 0 ? filteredTeamHours : null,
       })
       await fetchRows()
       setShowEdit(false)
@@ -661,13 +678,13 @@ export function MaintenanceDetailView() {
 
   if (!store.loading && !maint) {
     return (
-      <div style={{ padding: 40, textAlign: 'center', color: 'var(--c3)' }}>
-        Contract not found. <button className="btn btn-ghost btn-sm" onClick={() => navigate('/maintenances')}>Back to Maintenances</button>
+      <div className="p-10 text-center text-muted-foreground">
+        Contract not found. <Button variant="ghost" size="sm" onClick={() => navigate('/maintenances')}>Back to Maintenances</Button>
       </div>
     )
   }
 
-  if (!maint) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--c4)' }}>Loading…</div>
+  if (!maint) return <div className="p-10 text-center text-muted-foreground">Loading…</div>
 
   const daysUntilEnd = maint.contract_end
     ? Math.ceil((new Date(maint.contract_end).getTime() - Date.now()) / 86_400_000)
@@ -679,10 +696,10 @@ export function MaintenanceDetailView() {
   return (
     <div>
       {/* ── Page header ───────────────────────────────────────────────────────── */}
-      <div className="page-header" style={{ alignItems: 'flex-start', marginBottom: 20 }}>
+      <div className="flex items-start justify-between px-6 py-4 bg-background border-b border-border mb-5">
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-            <h1 style={{ margin: 0 }}>{maint.name}</h1>
+          <div className="flex items-center gap-2.5 mb-1.5">
+            <h1 className="m-0 text-[30px] font-extrabold tracking-[-0.4px]">{maint.name}</h1>
             {editingStatus ? (
               <Select
                 value={maint.status}
@@ -694,28 +711,28 @@ export function MaintenanceDetailView() {
                 ]}
               />
             ) : (
-              <span
-                className={`badge ${MAINT_STATUS_BADGE[maint.status] ?? 'badge-gray'}`}
-                style={{ cursor: 'pointer', fontSize: 11 }}
+              <Badge
+                variant={MAINT_STATUS_BADGE_VARIANT[maint.status] ?? 'gray'}
+                className="cursor-pointer text-[11px]"
                 onClick={() => setEditingStatus(true)}
                 title="Click to change status"
               >
                 {maint.status.toUpperCase()}
-              </span>
+              </Badge>
             )}
             {expiringSoon && (
-              <span style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 700, color: 'var(--red)' }}>
-                ⚠ Expires in {daysUntilEnd}d
+              <span className="bg-red-100 border border-red-300 rounded px-2 py-0.5 text-[11px] font-bold text-[#dc2626]">
+                Expires in {daysUntilEnd}d
               </span>
             )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--c3)' }}>
+          <div className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
             Contract Period: {fmtDate(maint.contract_start)} — {maint.contract_end ? fmtDate(maint.contract_end) : 'Open-ended'}
             {maint.contract_url && (
               <>
-                <span style={{ color: 'var(--c5)' }}>·</span>
-                <a href={safeUrl(maint.contract_url)} target="_blank" rel="noreferrer" style={{ color: 'var(--navy)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                <span className="text-border">·</span>
+                <a href={safeUrl(maint.contract_url)} target="_blank" rel="noreferrer" className="text-primary inline-flex items-center gap-1">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                   View contract
                 </a>
@@ -723,177 +740,183 @@ export function MaintenanceDetailView() {
             )}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-secondary btn-sm" onClick={openEdit}>Edit Contract</button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={openEdit}>Edit Contract</Button>
         </div>
       </div>
 
       {/* ── KPI cards + terms section (padded to match page-header/page-content) */}
-      <div style={{ padding: '0 28px 20px' }}>
+      <div className="px-7 pb-5">
 
       {/* ── KPI cards ─────────────────────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, marginBottom: 20 }}>
+      <div className="grid grid-cols-4 gap-3 mb-5">
         {/* Total Invoiced */}
-        <div className="card">
-          <div className="card-body" style={{ padding: '18px 20px' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--c3)' }}>Total Invoiced</span>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--c5)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between mb-3">
+              <span className="text-xs font-semibold text-muted-foreground">Total Invoiced</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-border" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
             </div>
-            <div style={{ fontSize: 26, fontWeight: 800, fontFamily: 'Manrope, sans-serif', color: totalInvoiced > 0 ? 'var(--green)' : 'var(--c1)', marginBottom: 4 }}>{fmtEuro(totalInvoiced)}</div>
-            <div style={{ fontSize: 11, color: 'var(--c4)' }}>{totalInvoiced > 0 ? 'issued + paid' : 'No invoices issued yet'}</div>
-          </div>
-        </div>
+            <div className={`text-[26px] font-extrabold mb-1 ${totalInvoiced > 0 ? 'text-[#16a34a]' : 'text-foreground'}`}>{fmtEuro(totalInvoiced)}</div>
+            <div className="text-[11px] text-muted-foreground">{totalInvoiced > 0 ? 'issued + paid' : 'No invoices issued yet'}</div>
+          </CardContent>
+        </Card>
 
         {/* Total / Mo */}
-        <div className="card">
-          <div className="card-body" style={{ padding: '18px 20px' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--c3)' }}>{hosting ? 'Total / Mo (Incl. Hosting)' : 'Monthly Retainer'}</span>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--c5)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between mb-3">
+              <span className="text-xs font-semibold text-muted-foreground">{hosting ? 'Total / Mo (Incl. Hosting)' : 'Monthly Retainer'}</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-border" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
             </div>
-            <div style={{ fontSize: 26, fontWeight: 800, fontFamily: 'Manrope, sans-serif', color: 'var(--c1)', marginBottom: 4 }}>
-              {fmtEuro(maint.monthly_retainer + (hosting?.cycle === 'monthly' ? hosting.amount : 0))}
-              <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--c4)', marginLeft: 2 }}>/mo</span>
+            <div className="text-[26px] font-extrabold text-foreground mb-1">
+              {maint.billing_cycle === 'annual'
+                ? fmtEuro(Math.round(maint.monthly_retainer / 12) + (hosting?.cycle === 'monthly' ? hosting.amount : 0))
+                : fmtEuro(maint.monthly_retainer + (hosting?.cycle === 'monthly' ? hosting.amount : 0))
+              }
+              <span className="text-sm font-medium text-muted-foreground ml-0.5">/mo</span>
             </div>
-            <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 600 }}>→ {hosting ? 'Incl. Hosting' : 'Fixed Monthly'}</div>
-          </div>
-        </div>
+            <div className="text-[11px] text-[#6366f1] font-semibold">
+              {maint.billing_cycle === 'annual' ? `→ Billed yearly (${fmtEuro(maint.monthly_retainer)}/yr)` : `→ ${hosting ? 'Incl. Hosting' : 'Fixed Monthly'}`}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Extra Billed */}
-        <div className="card">
-          <div className="card-body" style={{ padding: '18px 20px' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--c3)' }}>Extra Billed</span>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--c5)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between mb-3">
+              <span className="text-xs font-semibold text-muted-foreground">Extra Billed</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-border" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
             </div>
-            <div style={{ fontSize: 26, fontWeight: 800, fontFamily: 'Manrope, sans-serif', color: extraBilled > 0 ? 'var(--blue)' : 'var(--c1)', marginBottom: 4 }}>{fmtEuro(extraBilled)}</div>
-            <div style={{ fontSize: 11, color: 'var(--c4)' }}>{extraBilled > 0 ? 'above retainer' : 'No extra items added'}</div>
-          </div>
-        </div>
+            <div className={`text-[26px] font-extrabold mb-1 ${extraBilled > 0 ? 'text-[#2563eb]' : 'text-foreground'}`}>{fmtEuro(extraBilled)}</div>
+            <div className="text-[11px] text-muted-foreground">{extraBilled > 0 ? 'above retainer' : 'No extra items added'}</div>
+          </CardContent>
+        </Card>
 
         {/* Total Costs */}
-        <div className="card">
-          <div className="card-body" style={{ padding: '18px 20px' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--c3)' }}>Total Costs</span>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--c5)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between mb-3">
+              <span className="text-xs font-semibold text-muted-foreground">Total Costs</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-border" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
             </div>
-            <div style={{ fontSize: 26, fontWeight: 800, fontFamily: 'Manrope, sans-serif', color: totalCosts > 0 ? 'var(--red)' : 'var(--c1)', marginBottom: 4 }}>{fmtEuro(totalCosts)}</div>
-            <div style={{ fontSize: 11, color: 'var(--c4)' }}>{totalCosts > 0 ? 'project expenses' : 'Tracking cumulative spend'}</div>
-          </div>
-        </div>
+            <div className={`text-[26px] font-extrabold mb-1 ${totalCosts > 0 ? 'text-[#dc2626]' : 'text-foreground'}`}>{fmtEuro(totalCosts)}</div>
+            <div className="text-[11px] text-muted-foreground">{totalCosts > 0 ? 'project expenses' : 'Tracking cumulative spend'}</div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* ── Maintenance Terms + Hosting (two-column) ──────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: hosting ? '1fr 280px' : '1fr', gap: 16, marginBottom: 20, minWidth: 0 }}>
+      <div className={`grid gap-4 mb-5 min-w-0 ${hosting ? 'grid-cols-[1fr_280px]' : 'grid-cols-1'}`}>
         {/* Maintenance Terms card */}
-        <div className="card">
-          <div className="card-body">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Maintenance Terms</h2>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--c4)" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <Card>
+          <CardContent>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="m-0 text-[15px] font-bold">Maintenance Terms</h2>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-muted-foreground" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             </div>
             {/* Metric chips */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 }}>
-              <div style={{ background: 'var(--c7)', borderRadius: 10, padding: '14px 16px', textAlign: 'center' }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--c2)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 8 }}><circle cx="12" cy="12" r="10"/><path d="M14.31 8a4 4 0 0 0-4.62 0C8.01 9.06 8 11 8 12s.01 2.94 1.69 4a4 4 0 0 0 4.62 0"/><line x1="12" y1="6" x2="12" y2="7"/><line x1="12" y1="17" x2="12" y2="18"/></svg>
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--c3)', marginBottom: 4 }}>Monthly Total</div>
-                <div style={{ fontSize: 20, fontWeight: 800, fontFamily: 'Manrope, sans-serif', color: 'var(--c0)' }}>
+            <div className="grid grid-cols-3 gap-2.5 mb-5">
+              <div className="bg-gray-50 rounded-xl p-3.5 text-center">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-[#374151] mb-2 mx-auto" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M14.31 8a4 4 0 0 0-4.62 0C8.01 9.06 8 11 8 12s.01 2.94 1.69 4a4 4 0 0 0 4.62 0"/><line x1="12" y1="6" x2="12" y2="7"/><line x1="12" y1="17" x2="12" y2="18"/></svg>
+                <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-1">
+                  {maint.billing_cycle === 'annual' ? 'Annual Total' : 'Monthly Total'}
+                </div>
+                <div className="text-[20px] font-extrabold text-foreground">
                   {fmtEuro(maint.monthly_retainer)}
                 </div>
+                {maint.billing_cycle === 'annual' && (
+                  <div className="text-[10px] text-muted-foreground mt-0.5">{fmtEuro(Math.round(maint.monthly_retainer / 12))}/mo</div>
+                )}
               </div>
-              <div style={{ background: 'var(--c7)', borderRadius: 10, padding: '14px 16px', textAlign: 'center' }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--c2)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 8 }}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--c3)', marginBottom: 4 }}>Hours / Mo</div>
-                <div style={{ fontSize: 20, fontWeight: 800, fontFamily: 'Manrope, sans-serif', color: 'var(--c0)' }}>{maint.hours_included}h</div>
+              <div className="bg-gray-50 rounded-xl p-3.5 text-center">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-[#374151] mb-2 mx-auto" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-1">Hours / Mo</div>
+                <div className="text-[20px] font-extrabold text-foreground">{maint.hours_included}h</div>
               </div>
-              <div style={{ background: 'var(--c7)', borderRadius: 10, padding: '14px 16px', textAlign: 'center' }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--c2)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 8 }}><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--c3)', marginBottom: 4 }}>Requests / Mo</div>
-                <div style={{ fontSize: 20, fontWeight: 800, fontFamily: 'Manrope, sans-serif', color: 'var(--c0)' }}>{maint.help_requests_included}</div>
+              <div className="bg-gray-50 rounded-xl p-3.5 text-center">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-[#374151] mb-2 mx-auto" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-1">Requests / Mo</div>
+                <div className="text-[20px] font-extrabold text-foreground">{maint.help_requests_included}</div>
               </div>
             </div>
 
             {/* Contract Details */}
-            <div style={{ borderTop: '1px solid var(--c6)', paddingTop: 14 }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--c1)', marginBottom: 10 }}>Contract Details</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                  <span style={{ color: 'var(--c3)' }}>Client Name</span>
+            <div className="border-t border-border pt-3.5">
+              <div className="font-bold text-[13px] text-foreground mb-2.5">Contract Details</div>
+              <div className="flex flex-col gap-2">
+                <div className="flex justify-between text-[13px]">
+                  <span className="text-muted-foreground">Client Name</span>
                   <span
-                    style={{ fontWeight: 700, color: 'var(--navy)', cursor: 'pointer' }}
+                    className="font-bold text-primary cursor-pointer"
                     onClick={() => maint.client?.id && navigate(`/clients/${maint.client.id}`)}
                   >{maint.client?.name ?? '—'}</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                  <span style={{ color: 'var(--c3)' }}>Contract Start</span>
-                  <span style={{ fontWeight: 700 }}>{fmtDate(maint.contract_start)}</span>
+                <div className="flex justify-between text-[13px]">
+                  <span className="text-muted-foreground">Contract Start</span>
+                  <span className="font-bold">{fmtDate(maint.contract_start)}</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                  <span style={{ color: 'var(--c3)' }}>Contract End</span>
-                  <span style={{ fontWeight: 700, color: expiringSoon ? 'var(--red)' : undefined }}>
+                <div className="flex justify-between text-[13px]">
+                  <span className="text-muted-foreground">Contract End</span>
+                  <span className={`font-bold ${expiringSoon ? 'text-[#dc2626]' : ''}`}>
                     {maint.contract_end ? fmtDate(maint.contract_end) : 'Open-ended'}
                   </span>
                 </div>
                 {maint.notes && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, alignItems: 'flex-start', gap: 16 }}>
-                    <span style={{ color: 'var(--c3)', flexShrink: 0 }}>Notes</span>
-                    <span style={{ fontWeight: 500, color: 'var(--c2)', textAlign: 'right' }}>{maint.notes}</span>
+                  <div className="flex justify-between text-[13px] items-start gap-4">
+                    <span className="text-muted-foreground shrink-0">Notes</span>
+                    <span className="font-medium text-[#374151] text-right">{maint.notes}</span>
                   </div>
                 )}
               </div>
             </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
         {/* Hosting Attachment card */}
         {hosting && (
-          <div style={{ background: 'linear-gradient(145deg, #4f46e5 0%, #3b82f6 100%)', borderRadius: 12, padding: '20px 22px', color: '#fff', display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontWeight: 700, fontSize: 15 }}>Hosting Attachment</span>
+          <div className="rounded-xl px-[22px] py-5 text-white flex flex-col gap-4" style={{ background: 'linear-gradient(145deg, #4f46e5 0%, #3b82f6 100%)' }}>
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-[15px]">Hosting Attachment</span>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
             </div>
 
-            <div style={{ background: 'rgba(255,255,255,0.12)', borderRadius: 8, padding: '12px 14px' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.55)', marginBottom: 6 }}>Active Project</div>
-              <div style={{ fontSize: 18, fontWeight: 800, fontFamily: 'Manrope, sans-serif', marginBottom: 4 }}>
+            <div className="rounded-lg px-[14px] py-3" style={{ background: 'rgba(255,255,255,0.12)' }}>
+              <div className="text-[10px] font-bold uppercase tracking-[0.08em] mb-1.5" style={{ color: 'rgba(255,255,255,0.55)' }}>Active Project</div>
+              <div className="text-[18px] font-extrabold mb-1">
                 {hosting.description || (hosting.project_pn ? `Project #${hosting.project_pn}` : '—')}
               </div>
               {hosting.project_pn && (
-                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', fontFamily: 'monospace' }}>PN #{hosting.project_pn}</div>
+                <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.55)' }}>PN #{hosting.project_pn}</div>
               )}
             </div>
 
             <div>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.45)', marginBottom: 6 }}>Service Amount</div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ fontSize: 22, fontWeight: 800, fontFamily: 'Manrope, sans-serif' }}>
+              <div className="text-[10px] font-bold uppercase tracking-[0.08em] mb-1.5" style={{ color: 'rgba(255,255,255,0.45)' }}>Service Amount</div>
+              <div className="flex items-center justify-between">
+                <div className="text-[22px] font-extrabold">
                   {fmtEuro(hosting.amount)}
-                  <span style={{ fontSize: 13, fontWeight: 400, color: 'rgba(255,255,255,0.5)', marginLeft: 4 }}>/ {hosting.cycle}</span>
+                  <span className="text-[13px] font-normal ml-1" style={{ color: 'rgba(255,255,255,0.5)' }}>/ {hosting.cycle}</span>
                 </div>
-                <button
-                  className="btn btn-secondary btn-sm"
-                  style={{ fontSize: 12 }}
-                  onClick={() => navigate('/infrastructure')}
-                >
+                <Button variant="outline" size="sm" className="text-[12px]" onClick={() => navigate('/infrastructure')}>
                   Manage
-                </button>
+                </Button>
               </div>
             </div>
 
             {(hosting.billing_since || hosting.contract_id) && (
-              <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div className="flex flex-col gap-1.5 border-t pt-3" style={{ borderColor: 'rgba(255,255,255,0.1)' }}>
                 {hosting.billing_since && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                  <div className="flex justify-between text-xs">
                     <span style={{ color: 'rgba(255,255,255,0.45)' }}>Billing since</span>
-                    <span style={{ fontWeight: 600 }}>{fmtDate(hosting.billing_since)}</span>
+                    <span className="font-semibold">{fmtDate(hosting.billing_since)}</span>
                   </div>
                 )}
                 {hosting.contract_id && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                  <div className="flex justify-between text-xs">
                     <span style={{ color: 'rgba(255,255,255,0.45)' }}>Contract ID</span>
-                    <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{hosting.contract_id}</span>
+                    <span className="text-[11px]">{hosting.contract_id}</span>
                   </div>
                 )}
               </div>
@@ -904,19 +927,42 @@ export function MaintenanceDetailView() {
 
       </div>{/* end padded wrapper */}
 
-      <div className="page-content">
+      <div className="flex-1 overflow-auto p-6">
 
         {/* Not-billed alert */}
         {notBilledRows.length > 0 && (
-          <div className="alert alert-amber" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <div style={{ fontSize: 13 }}>
+          <div className="rounded-lg border border-[#fcd34d] bg-[#fef9ee] px-3 py-2 text-sm text-[#92400e] mb-4 flex items-center justify-between gap-3">
+            <div className="text-[13px]">
               <strong>{notBilledRows.length} month{notBilledRows.length > 1 ? 's' : ''} not billed:</strong>{' '}
               {notBilledRows.map(r => fmtMonth(r.month)).join(', ')}
-              <span style={{ color: 'var(--c3)', marginLeft: 8, fontSize: 12 }}>
+              <span className="text-muted-foreground ml-2 text-xs">
                 — {fmtEuro(notBilledRows.reduce((s, r) => s + (r.planned_amount ?? 0) + hostingMonthlyAmt, 0))} not collected
               </span>
             </div>
           </div>
+        )}
+
+        {/* Team Hours / Month */}
+        {maint.team_hours && Object.keys(maint.team_hours).length > 0 && teams.length > 0 && (
+          <Card className="mb-6">
+            <CardContent className="p-5">
+              <div className="font-bold text-[14px] text-foreground mb-3">Team Hours / Month</div>
+              <div className="flex flex-col gap-2">
+                {teams.filter(t => (maint.team_hours as Record<string, number>)[t.name] > 0).map(t => {
+                  const hrs = (maint.team_hours as Record<string, number>)[t.name]
+                  return (
+                    <div key={t.id} className="flex items-center justify-between text-[13px]">
+                      <div className="flex items-center gap-2">
+                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: t.color, flexShrink: 0 }} />
+                        <span className="font-medium text-foreground">{t.name}</span>
+                      </div>
+                      <span className="font-bold text-foreground">{hrs}h / mo</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* Invoice Plans */}
@@ -936,31 +982,32 @@ export function MaintenanceDetailView() {
 
           return (
             <>
-              <div className="section-bar" style={{ marginBottom: 10 }}>
-                <h2>
+              <div className="flex items-center justify-between mb-2.5">
+                <h2 className="flex items-center gap-2">
                   Invoice Plans
                   {yearNotBilled > 0 && (
-                    <span className="badge badge-amber" style={{ marginLeft: 8, fontSize: 11 }}>
+                    <Badge variant="amber" className="text-[11px]">
                       {yearNotBilled} not billed
-                    </span>
+                    </Badge>
                   )}
                 </h2>
-                <div style={{ display: 'flex', gap: 4 }}>
+                <div className="flex gap-1">
                   {availYears.map(y => (
-                    <button
+                    <Button
                       key={y}
-                      className={`btn btn-xs ${currentYear === y ? 'btn-primary' : 'btn-secondary'}`}
+                      size="xs"
+                      variant={currentYear === y ? 'default' : 'outline'}
                       onClick={() => { setPlanYear(y); setPlanPage(0) }}
-                    >{y}</button>
+                    >{y}</Button>
                   ))}
                 </div>
               </div>
 
-              <div className="card" style={{ marginBottom: 20 }}>
+              <Card className="mb-5">
                 {loading ? (
-                  <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>Loading…</div>
+                  <div className="p-7 text-center text-muted-foreground text-[13px]">Loading…</div>
                 ) : yearRows.length === 0 ? (
-                  <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>No invoice rows for {currentYear}.</div>
+                  <div className="p-7 text-center text-muted-foreground text-[13px]">No invoice rows for {currentYear}.</div>
                 ) : (
                   <>
                     <table>
@@ -968,12 +1015,12 @@ export function MaintenanceDetailView() {
                         <tr>
                           <th style={{ width: 120 }}>MONTH</th>
                           <th style={{ width: 120 }}>TYPE</th>
-                          <th className="th-right" style={{ width: 110 }}>AMOUNT</th>
-                          <th className="th-right" style={{ width: 110 }}>ACTUAL</th>
-                          <th className="th-right" style={{ width: 100 }}>EXTRA</th>
+                          <th className="text-right" style={{ width: 110 }}>AMOUNT</th>
+                          <th className="text-right" style={{ width: 110 }}>ACTUAL</th>
+                          <th className="text-right" style={{ width: 100 }}>EXTRA</th>
                           <th>NOTES</th>
                           <th style={{ width: 110 }}>STATUS</th>
-                          <th className="th-right" style={{ width: 200 }}>ACTIONS</th>
+                          <th className="text-right" style={{ width: 200 }}>ACTIONS</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -989,45 +1036,45 @@ export function MaintenanceDetailView() {
                               <td style={{ fontWeight: 600 }}>{fmtMonth(row.month)}</td>
                               <td>
                                 {isCR
-                                  ? <span className="badge badge-navy" style={{ fontSize: 10 }}>Change Request</span>
-                                  : <span style={{ fontSize: 12, color: 'var(--c4)' }}>Retainer</span>}
+                                  ? <Badge variant="navy" className="text-[10px]">Change Request</Badge>
+                                  : <span className="text-xs text-muted-foreground">Retainer</span>}
                               </td>
-                              <td className="td-right text-mono">
+                              <td className="text-right">
                                 {fmtEuro((row.planned_amount ?? 0) + (isCR ? 0 : (hosting?.cycle === 'monthly' ? hosting.amount : 0)))}
                                 {!isCR && hosting?.cycle === 'monthly' && (
-                                  <div style={{ fontSize: 10, color: 'var(--c4)', fontWeight: 400 }}>
+                                  <div className="text-[10px] text-muted-foreground font-normal">
                                     {fmtEuro(row.planned_amount ?? 0)} + {fmtEuro(hosting.amount)}
                                   </div>
                                 )}
                               </td>
-                              <td className="td-right text-mono" style={{ fontWeight: isSettled ? 700 : 400, color: isSettled ? 'var(--green)' : 'var(--c3)' }}>
+                              <td className={`text-right ${isSettled ? 'font-bold text-[#16a34a]' : 'text-muted-foreground'}`}>
                                 {isSettled ? fmtEuro(row.actual_amount ?? 0) : '—'}
                               </td>
-                              <td className="td-right text-mono" style={{ color: 'var(--blue)', fontWeight: extra > 0 ? 700 : 400 }}>
-                                {extra > 0 ? `+${fmtEuro(extra)}` : <span style={{ color: 'var(--c5)' }}>—</span>}
+                              <td className={`text-right text-[#2563eb] ${extra > 0 ? 'font-bold' : ''}`}>
+                                {extra > 0 ? `+${fmtEuro(extra)}` : <span className="text-border">—</span>}
                               </td>
-                              <td style={{ fontSize: 12, color: 'var(--c3)' }}>
+                              <td className="text-xs text-muted-foreground">
                                 {row.notes
-                                  ? <span style={{ color: isNotBilled ? 'var(--c4)' : extra > 0 ? 'var(--blue)' : 'var(--c3)' }}>{row.notes}</span>
-                                  : <span style={{ color: 'var(--c6)' }}>—</span>}
+                                  ? <span className={isNotBilled ? 'text-muted-foreground' : extra > 0 ? 'text-[#2563eb]' : 'text-muted-foreground'}>{row.notes}</span>
+                                  : <span className="text-border">—</span>}
                               </td>
                               <td>
-                                <span className={`badge ${STATUS_BADGE[row.status] ?? 'badge-gray'}`}>
+                                <Badge variant={STATUS_BADGE_VARIANT[row.status] ?? 'gray'}>
                                   {row.status === 'retainer' ? 'Not billed' : row.status.charAt(0).toUpperCase() + row.status.slice(1)}
-                                </span>
+                                </Badge>
                               </td>
-                              <td className="td-right">
-                                <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                              <td className="text-right">
+                                <div className="flex gap-1.5 justify-end">
                                   {isPending && (
                                     <>
-                                      <button className="btn btn-primary btn-xs" onClick={() => openConfirm(row)}>Confirm</button>
-                                      <button className="btn btn-secondary btn-xs" onClick={() => openNotBilled(row)}>Not billed</button>
+                                      <Button size="xs" onClick={() => openConfirm(row)}>Confirm</Button>
+                                      <Button size="xs" variant="outline" onClick={() => openNotBilled(row)}>Not billed</Button>
                                     </>
                                   )}
                                   {isNotBilled && (
                                     <>
-                                      <button className="btn btn-secondary btn-xs" onClick={() => setPlanAgainRow(row)} style={{ color: 'var(--navy)' }}>Plan again</button>
-                                      <button className="btn btn-ghost btn-xs" onClick={() => setDeleteNotBilledRow(row)} style={{ color: 'var(--red)' }}>Delete</button>
+                                      <Button size="xs" variant="outline" className="text-primary" onClick={() => setPlanAgainRow(row)}>Plan again</Button>
+                                      <Button size="xs" variant="ghost" className="text-[#dc2626]" onClick={() => setDeleteNotBilledRow(row)}>Delete</Button>
                                     </>
                                   )}
                                 </div>
@@ -1037,55 +1084,56 @@ export function MaintenanceDetailView() {
                         })}
                       </tbody>
                       <tfoot>
-                        <tr style={{ background: 'var(--c7)', borderTop: '2px solid var(--c6)' }}>
-                          <td colSpan={2} style={{ fontSize: 10, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{currentYear} total</td>
-                          <td className="td-right text-mono" style={{ fontWeight: 700 }}>
+                        <tr className="bg-gray-50 border-t-2 border-border">
+                          <td colSpan={2} className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.05em]">{currentYear} total</td>
+                          <td className="text-right font-bold">
                             {fmtEuro(yearPlanned + (hosting?.cycle === 'monthly' ? hosting.amount * yearRows.filter(r => !r.notes?.startsWith('CR:')).length : 0))}
                           </td>
-                          <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--green)' }}>{yearInvoiced > 0 ? fmtEuro(yearInvoiced) : '—'}</td>
-                          <td className="td-right text-mono" style={{ color: 'var(--blue)', fontWeight: 700 }}>{yearExtra > 0 ? `+${fmtEuro(yearExtra)}` : '—'}</td>
+                          <td className="text-right font-bold text-[#16a34a]">{yearInvoiced > 0 ? fmtEuro(yearInvoiced) : '—'}</td>
+                          <td className="text-right font-bold text-[#2563eb]">{yearExtra > 0 ? `+${fmtEuro(yearExtra)}` : '—'}</td>
                           <td colSpan={3}></td>
                         </tr>
                       </tfoot>
                     </table>
                     {totalPages > 1 && (
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 20px', borderTop: '1px solid var(--c6)', background: 'var(--c7)' }}>
-                        <span style={{ fontSize: 12, color: 'var(--c3)' }}>
+                      <div className="flex items-center justify-between px-5 py-2.5 border-t border-border bg-gray-50">
+                        <span className="text-xs text-muted-foreground">
                           Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, yearRows.length)} of {yearRows.length}
                         </span>
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          <button className="btn btn-secondary btn-xs" onClick={() => setPlanPage(p => Math.max(0, p - 1))} disabled={page === 0}>← Prev</button>
+                        <div className="flex gap-1">
+                          <Button size="xs" variant="outline" onClick={() => setPlanPage(p => Math.max(0, p - 1))} disabled={page === 0}>← Prev</Button>
                           {Array.from({ length: totalPages }, (_, i) => (
-                            <button key={i} className={`btn btn-xs ${page === i ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setPlanPage(i)}>{i + 1}</button>
+                            <Button key={i} size="xs" variant={page === i ? 'default' : 'outline'} onClick={() => setPlanPage(i)}>{i + 1}</Button>
                           ))}
-                          <button className="btn btn-secondary btn-xs" onClick={() => setPlanPage(p => Math.min(totalPages - 1, p + 1))} disabled={page === totalPages - 1}>Next →</button>
+                          <Button size="xs" variant="outline" onClick={() => setPlanPage(p => Math.min(totalPages - 1, p + 1))} disabled={page === totalPages - 1}>Next →</Button>
                         </div>
                       </div>
                     )}
                   </>
                 )}
-              </div>
+              </Card>
             </>
           )
         })()}
 
         {/* Change Requests */}
-        <div className="section-bar" style={{ marginBottom: 10 }}>
-          <h2>Change Requests
+        <div className="flex items-center justify-between mb-2.5">
+          <h2 className="flex items-center gap-2">
+            Change Requests
             {maintenanceCRs.length > 0 && (
-              <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--c4)', marginLeft: 8 }}>
+              <span className="text-xs font-normal text-muted-foreground">
                 {fmtEuro(maintenanceCRs.reduce((s, cr) => s + (cr.amount ?? 0), 0))} total
               </span>
             )}
           </h2>
-          <button className="btn btn-secondary btn-sm" onClick={() => { setCRForm(defaultCRForm()); setShowAddCR(true) }}>
+          <Button variant="outline" size="sm" onClick={() => { setCRForm(defaultCRForm()); setShowAddCR(true) }}>
             + Add change request
-          </button>
+          </Button>
         </div>
 
-        <div className="card" style={{ marginBottom: 20 }}>
+        <Card className="mb-5">
           {maintenanceCRs.length === 0 ? (
-            <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>
+            <div className="px-5 py-7 text-center text-muted-foreground text-[13px]">
               No change requests yet.
             </div>
           ) : (
@@ -1095,7 +1143,7 @@ export function MaintenanceDetailView() {
                   <th style={{ width: 160 }}>STATUS</th>
                   <th>TITLE</th>
                   <th>DESCRIPTION</th>
-                  <th className="th-right" style={{ width: 100 }}>AMOUNT</th>
+                  <th className="text-right" style={{ width: 100 }}>AMOUNT</th>
                   <th style={{ width: 70 }}>PROB.</th>
                   <th style={{ width: 100 }}>EXPECTED</th>
                   <th></th>
@@ -1109,32 +1157,32 @@ export function MaintenanceDetailView() {
                   const alreadyPlanned = invoiceRows.some(r => r.notes?.includes(`CR: ${cr.title}`) && r.status !== 'deferred')
                   const canPlan = !isAuto && isApproved && cr.amount != null && cr.amount > 0 && !alreadyPlanned
                   const crStatusBadge = cr.status === 'billed'
-                    ? <span className="badge badge-navy">Billed</span>
+                    ? <Badge variant="navy">Billed</Badge>
                     : isApproved
-                      ? <span className="badge badge-green">Approved</span>
-                      : <span className="badge badge-amber">Pending</span>
+                      ? <Badge variant="green">Approved</Badge>
+                      : <Badge variant="amber">Pending</Badge>
                   return (
                     <tr key={cr.id}>
                       <td>
                         {crStatusBadge}
-                        {isAuto && <span className="badge badge-gray" style={{ marginLeft: 4, fontSize: 10 }}>Auto</span>}
+                        {isAuto && <Badge variant="gray" className="ml-1 text-[10px]">Auto</Badge>}
                       </td>
-                      <td style={{ fontSize: 13, fontWeight: 600, color: 'var(--c0)' }}>{cr.title}</td>
-                      <td style={{ fontSize: 12, color: 'var(--c3)', maxWidth: 200 }}>{cr.description ?? <span style={{ color: 'var(--c5)' }}>—</span>}</td>
-                      <td className="td-right text-mono" style={{ fontSize: 13, color: 'var(--c2)' }}>
-                        {cr.amount != null ? fmtEuro(cr.amount) : <span style={{ color: 'var(--c5)' }}>—</span>}
+                      <td className="text-[13px] font-semibold">{cr.title}</td>
+                      <td className="text-xs text-muted-foreground max-w-[200px]">{cr.description ?? <span className="text-border">—</span>}</td>
+                      <td className="text-right text-[13px] text-[#374151]">
+                        {cr.amount != null ? fmtEuro(cr.amount) : <span className="text-border">—</span>}
                       </td>
-                      <td style={{ fontSize: 12, color: 'var(--c3)' }}>
+                      <td className="text-xs text-muted-foreground">
                         {cr.probability != null ? `${cr.probability}%` : '—'}
                       </td>
-                      <td style={{ fontSize: 12, color: 'var(--c3)' }}>
-                        {cr.expected_month ? fmtMonth(cr.expected_month) : <span style={{ color: 'var(--c5)' }}>—</span>}
+                      <td className="text-xs text-muted-foreground">
+                        {cr.expected_month ? fmtMonth(cr.expected_month) : <span className="text-border">—</span>}
                       </td>
                       <td>
-                        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                        <div className="flex gap-1.5 justify-end">
                           {isPending && !isAuto && (
-                            <button
-                              className="btn btn-primary btn-xs"
+                            <Button
+                              size="xs"
                               onClick={async () => {
                                 await crStore.update(cr.id, { status: 'approved' })
                                 if (maint?.client_id) {
@@ -1147,20 +1195,20 @@ export function MaintenanceDetailView() {
                               }}
                             >
                               Approve
-                            </button>
+                            </Button>
                           )}
                           {canPlan && (
-                            <button className="btn btn-secondary btn-xs" onClick={() => openPlanCR(cr)}>
+                            <Button variant="outline" size="xs" onClick={() => openPlanCR(cr)}>
                               + Plan Invoice
-                            </button>
+                            </Button>
                           )}
                           {isPending && !isAuto && (
-                            <button className="btn btn-secondary btn-xs" onClick={() => openEditCR(cr)}>Edit</button>
+                            <Button variant="outline" size="xs" onClick={() => openEditCR(cr)}>Edit</Button>
                           )}
                           {!isAuto && !alreadyPlanned && (
-                            <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red)' }} onClick={() => setDeleteCRTarget(cr)}>
+                            <Button variant="ghost" size="xs" className="text-[#dc2626]" onClick={() => setDeleteCRTarget(cr)}>
                               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                            </button>
+                            </Button>
                           )}
                         </div>
                       </td>
@@ -1169,9 +1217,9 @@ export function MaintenanceDetailView() {
                 })}
               </tbody>
               <tfoot>
-                <tr style={{ background: 'var(--c7)', borderTop: '2px solid var(--c6)' }}>
-                  <td colSpan={3} style={{ fontSize: 10, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total extra billed</td>
-                  <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--blue)' }}>
+                <tr className="bg-gray-50 border-t-2 border-border">
+                  <td colSpan={3} className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.05em]">Total extra billed</td>
+                  <td className="text-right font-bold text-[#2563eb]">
                     {fmtEuro(maintenanceCRs.reduce((s, cr) => s + (cr.amount ?? 0), 0))}
                   </td>
                   <td colSpan={3}></td>
@@ -1179,85 +1227,83 @@ export function MaintenanceDetailView() {
               </tfoot>
             </table>
           )}
-        </div>
+        </Card>
 
         {/* Costs */}
-        <div className="section-bar" style={{ marginBottom: 10 }}>
+        <div className="flex items-center justify-between mb-2.5">
           <h2>Costs</h2>
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowAddCost(true)}>+ Add cost</button>
+          <Button variant="outline" size="sm" onClick={() => setShowAddCost(true)}>+ Add cost</Button>
         </div>
 
-        <div className="card">
+        <Card className="mb-5">
           {costRows.length === 0 ? (
-            <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>No costs recorded.</div>
+            <div className="px-5 py-7 text-center text-muted-foreground text-[13px]">No costs recorded.</div>
           ) : (
             <table>
               <thead>
                 <tr>
                   <th>Month</th>
                   <th>Description</th>
-                  <th className="th-right">Amount</th>
+                  <th className="text-right">Amount</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {costRows.map(row => (
                   <tr key={row.id}>
-                    <td style={{ fontWeight: 600 }}>{fmtMonth(row.month)}</td>
-                    <td style={{ fontSize: 13, color: 'var(--c2)' }}>{row.notes ?? '—'}</td>
-                    <td className="td-right text-mono" style={{ color: 'var(--red)', fontWeight: 700 }}>{fmtEuro(row.actual_amount ?? 0)}</td>
+                    <td className="font-semibold">{fmtMonth(row.month)}</td>
+                    <td className="text-[13px] text-[#374151]">{row.notes ?? '—'}</td>
+                    <td className="text-right text-[#dc2626] font-bold">{fmtEuro(row.actual_amount ?? 0)}</td>
                     <td>
-                      <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red)' }} onClick={() => setDeleteCostRow(row)}>Remove</button>
+                      <Button variant="ghost" size="xs" className="text-[#dc2626]" onClick={() => setDeleteCostRow(row)}>Remove</Button>
                     </td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr>
-                  <td colSpan={2} style={{ fontSize: 10, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total costs</td>
-                  <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--red)' }}>{fmtEuro(totalCosts)}</td>
+                  <td colSpan={2} className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.05em]">Total costs</td>
+                  <td className="text-right font-bold text-[#dc2626]">{fmtEuro(totalCosts)}</td>
                   <td></td>
                 </tr>
               </tfoot>
             </table>
           )}
-        </div>
+        </Card>
       </div>
 
       {/* Create Invoice modal */}
       <Modal open={showCreateInvoice} title="Create Invoice" maxWidth={380} onClose={() => setShowCreateInvoice(false)}
         footer={<>
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowCreateInvoice(false)}>Cancel</button>
-          <button className="btn btn-primary btn-sm" onClick={handleCreateInvoice} disabled={saving || !createInvoiceMonth}>
-            {saving ? <span className="spinner" /> : null} Add to Plan
-          </button>
+          <Button variant="outline" size="sm" onClick={() => setShowCreateInvoice(false)}>Cancel</Button>
+          <Button size="sm" onClick={handleCreateInvoice} disabled={saving || !createInvoiceMonth}>Add to Plan</Button>
         </>}>
-        <div className="form-group" style={{ marginBottom: 14 }}>
-          <label className="form-label">Month</label>
+        <div className="mb-4">
+          <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Month</label>
           <input type="month" value={createInvoiceMonth} onChange={e => setCreateInvoiceMonth(e.target.value)} />
         </div>
-        <div className="form-group">
-          <label className="form-label">Amount (€)</label>
+        <div className="mb-4">
+          <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Amount (€)</label>
           <input type="number" value={createInvoiceAmount} onChange={e => setCreateInvoiceAmount(e.target.value)} placeholder={String(maint.monthly_retainer)} />
-          <div className="form-hint">Defaults to monthly retainer ({fmtEuro(maint.monthly_retainer)})</div>
+          <div className="text-xs text-muted-foreground mt-1">Defaults to monthly retainer ({fmtEuro(maint.monthly_retainer)})</div>
         </div>
       </Modal>
 
       {/* Edit Contract modal */}
       <Modal open={showEdit} title="Edit Contract" maxWidth={560} onClose={() => setShowEdit(false)}
         footer={<>
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowEdit(false)}>Cancel</button>
-          <button className="btn btn-primary btn-sm" onClick={handleSaveEdit} disabled={saving}>{saving ? <span className="spinner" /> : null} Save</button>
+          <Button variant="outline" size="sm" onClick={() => setShowEdit(false)}>Cancel</Button>
+          <Button size="sm" onClick={handleSaveEdit} disabled={saving}>Save</Button>
         </>}>
         {editForm && (
           <div>
-            <div className="form-row" style={{ marginBottom: 14 }}>
-              <div className="form-group">
-                <label className="form-label">Contract name</label>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="mb-4">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Contract name</label>
                 <input value={editForm.name} onChange={e => setEditForm(f => f ? { ...f, name: e.target.value } : f)} placeholder="e.g. Vzdrževanje spletne strani" />
               </div>
-              <div className="form-group">
-                <label className="form-label">Status</label>
+              <div className="mb-4">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Status</label>
                 <Select
                   value={editForm.status}
                   onChange={val => setEditForm(f => f ? { ...f, status: val } : f)}
@@ -1269,51 +1315,78 @@ export function MaintenanceDetailView() {
                 />
               </div>
             </div>
-            <div className="form-row" style={{ marginBottom: 14 }}>
-              <div className="form-group">
-                <label className="form-label">Monthly retainer (€)</label>
-                <div style={{ height: 42, display: 'flex', alignItems: 'center', padding: '0 12px', background: 'var(--c7)', border: '1px solid var(--c6)', borderRadius: 8, fontSize: 14, fontWeight: 600, color: 'var(--c1)' }}>
+            <div className="grid grid-cols-3 gap-4 mb-4">
+              <div className="mb-4">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Monthly retainer (€)</label>
+                <div className="h-[42px] flex items-center px-3 bg-gray-50 border border-border rounded-lg text-sm font-semibold">
                   {editForm.monthly_retainer} €
                 </div>
-                <div className="form-hint">Contact support to change retainer amount</div>
+                <div className="text-xs text-muted-foreground mt-1">Contact support to change retainer amount</div>
               </div>
-              <div className="form-group">
-                <label className="form-label">Hours / mo</label>
+              <div className="mb-4">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Hours / mo</label>
                 <input type="number" value={editForm.hours_included} onChange={e => setEditForm(f => f ? { ...f, hours_included: e.target.value } : f)} placeholder="10" />
               </div>
-              <div className="form-group">
-                <label className="form-label">Requests / mo</label>
+              <div className="mb-4">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Requests / mo</label>
                 <input type="number" value={editForm.help_requests_included} onChange={e => setEditForm(f => f ? { ...f, help_requests_included: e.target.value } : f)} placeholder="5" />
               </div>
             </div>
-            <div className="form-row" style={{ marginBottom: 14 }}>
-              <div className="form-group">
-                <label className="form-label">Contract start</label>
-                <div style={{ height: 42, display: 'flex', alignItems: 'center', padding: '0 12px', background: 'var(--c7)', border: '1px solid var(--c6)', borderRadius: 8, fontSize: 14, color: 'var(--c1)' }}>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="mb-4">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Contract start</label>
+                <div className="h-[42px] flex items-center px-3 bg-gray-50 border border-border rounded-lg text-sm">
                   {editForm.contract_start ? fmtMonth(editForm.contract_start + '-01') : '—'}
                 </div>
               </div>
-              <div className="form-group">
-                <label className="form-label">Duration (months)</label>
-                <div style={{ height: 42, display: 'flex', alignItems: 'center', padding: '0 12px', background: 'var(--c7)', border: '1px solid var(--c6)', borderRadius: 8, fontSize: 14, color: 'var(--c1)' }}>
+              <div className="mb-4">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Duration (months)</label>
+                <div className="h-[42px] flex items-center px-3 bg-gray-50 border border-border rounded-lg text-sm">
                   {editForm.contract_duration_months} months
                 </div>
                 {editForm.contract_start && editForm.contract_duration_months && (
-                  <div className="form-hint">
+                  <div className="text-xs text-muted-foreground mt-1">
                     Ends: {fmtMonth(computeContractEnd(editForm.contract_start + '-01', parseInt(editForm.contract_duration_months) || 12))}
                     {' · '}Total: {fmtEuro((parseInt(editForm.contract_duration_months) || 12) * (parseFloat(editForm.monthly_retainer) || 0))}
                   </div>
                 )}
               </div>
             </div>
-            <div className="form-group" style={{ marginBottom: 14 }}>
-              <label className="form-label">Contract URL <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Contract URL <span className="text-xs text-muted-foreground ml-1">optional</span></label>
               <input value={editForm.contract_url} onChange={e => setEditForm(f => f ? { ...f, contract_url: e.target.value } : f)} placeholder="https://..." />
             </div>
-            <div className="form-group">
-              <label className="form-label">Notes <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Notes <span className="text-xs text-muted-foreground ml-1">optional</span></label>
               <textarea value={editForm.notes} onChange={e => setEditForm(f => f ? { ...f, notes: e.target.value } : f)} rows={3} placeholder="Internal notes about this contract…" />
             </div>
+            {teams.length > 0 && (
+              <div className="mb-4">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">
+                  Team hours / month
+                  <span className="text-xs normal-case text-muted-foreground ml-1">for resource planning</span>
+                </label>
+                <div className="bg-[#f8f8fa] rounded-lg border border-border p-3 flex flex-col gap-2">
+                  {teams.map(t => (
+                    <div key={t.id} className="flex items-center gap-3">
+                      <div className="flex items-center gap-1.5 w-28 shrink-0">
+                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: t.color }} />
+                        <span className="text-[13px] font-medium text-[var(--c1)]">{t.name}</span>
+                      </div>
+                      <input
+                        type="number"
+                        min={0}
+                        value={editTeamHours[t.name] ?? ''}
+                        onChange={e => setEditTeamHours(prev => ({ ...prev, [t.name]: parseInt(e.target.value) || 0 }))}
+                        placeholder="0"
+                        style={{ width: 72, textAlign: 'right' }}
+                      />
+                      <span className="text-xs text-muted-foreground">h / mo</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </Modal>
@@ -1321,29 +1394,29 @@ export function MaintenanceDetailView() {
       {/* Confirm invoice modal */}
       <Modal open={!!confirmRow} title="Confirm Invoice" maxWidth={420} onClose={() => setConfirmRow(null)}
         footer={<>
-          <button className="btn btn-secondary btn-sm" onClick={() => setConfirmRow(null)}>Cancel</button>
-          <button className="btn btn-primary btn-sm" onClick={handleConfirm} disabled={saving}>{saving ? <span className="spinner" /> : null} Confirm</button>
+          <Button variant="outline" size="sm" onClick={() => setConfirmRow(null)}>Cancel</Button>
+          <Button size="sm" onClick={handleConfirm} disabled={saving}>Confirm</Button>
         </>}>
         {confirmRow && (
           <div>
-            <p style={{ margin: '0 0 16px', fontSize: 14, color: 'var(--c2)' }}>
+            <p className="text-sm text-[#374151] mb-4">
               <strong>{fmtMonth(confirmRow.month)}</strong> — retainer {fmtEuro(confirmRow.planned_amount ?? 0)}
               {hosting?.cycle === 'monthly' && (
-                <span style={{ color: 'var(--c4)', fontSize: 13 }}> + hosting {fmtEuro(hosting.amount)} = <strong>{fmtEuro((confirmRow.planned_amount ?? 0) + hosting.amount)}</strong></span>
+                <span className="text-muted-foreground text-[13px]"> + hosting {fmtEuro(hosting.amount)} = <strong>{fmtEuro((confirmRow.planned_amount ?? 0) + hosting.amount)}</strong></span>
               )}
             </p>
-            <div className="form-group" style={{ marginBottom: 12 }}>
-              <label className="form-label">Actual amount (€)</label>
+            <div className="mb-3">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Actual amount (€)</label>
               <input type="number" value={confirmActual} onChange={e => setConfirmActual(e.target.value)} autoFocus />
               {parseFloat(confirmActual) > (confirmRow.planned_amount ?? 0) + (hosting?.cycle === 'monthly' ? (hosting.amount ?? 0) : 0) && (
-                <div className="form-hint" style={{ color: 'var(--blue)' }}>
+                <div className="text-xs text-[#2563eb] mt-1">
                   Extra above retainer: +{fmtEuro(parseFloat(confirmActual) - (confirmRow.planned_amount ?? 0) - (hosting?.cycle === 'monthly' ? (hosting.amount ?? 0) : 0))}
-                  <span style={{ marginLeft: 6, color: 'var(--c4)' }}>→ auto-added as change request</span>
+                  <span className="ml-1.5 text-muted-foreground">→ auto-added as change request</span>
                 </div>
               )}
             </div>
-            <div className="form-group">
-              <label className="form-label">Note <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Note <span className="text-xs text-muted-foreground ml-1">optional</span></label>
               <input value={confirmNote} onChange={e => setConfirmNote(e.target.value)} placeholder="e.g. extra hours in March" />
             </div>
           </div>
@@ -1353,16 +1426,16 @@ export function MaintenanceDetailView() {
       {/* Not billed modal */}
       <Modal open={!!notBilledRow} title="Mark as Not Billed" maxWidth={400} onClose={() => setNotBilledRow(null)}
         footer={<>
-          <button className="btn btn-secondary btn-sm" onClick={() => setNotBilledRow(null)}>Cancel</button>
-          <button className="btn btn-primary btn-sm" onClick={handleNotBilled} disabled={saving}>Confirm</button>
+          <Button variant="outline" size="sm" onClick={() => setNotBilledRow(null)}>Cancel</Button>
+          <Button size="sm" onClick={handleNotBilled} disabled={saving}>Confirm</Button>
         </>}>
         {notBilledRow && (
           <div>
-            <p style={{ margin: '0 0 16px', fontSize: 14, color: 'var(--c2)' }}>
+            <p className="text-sm text-[#374151] mb-4">
               Mark <strong>{fmtMonth(notBilledRow.month)}</strong> as not billed. The row will remain in the plan with €0 actual.
             </p>
-            <div className="form-group">
-              <label className="form-label">Reason <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Reason <span className="text-xs text-muted-foreground ml-1">optional</span></label>
               <input
                 value={notBilledReason}
                 onChange={e => setNotBilledReason(e.target.value)}
@@ -1377,42 +1450,35 @@ export function MaintenanceDetailView() {
       {/* Plan again modal */}
       <Modal open={!!planAgainRow} title="Restore to Planned" maxWidth={380} onClose={() => setPlanAgainRow(null)}
         footer={<>
-          <button className="btn btn-secondary btn-sm" onClick={() => setPlanAgainRow(null)}>Cancel</button>
-          <button className="btn btn-primary btn-sm" onClick={handlePlanAgain} disabled={saving}>Plan again</button>
+          <Button variant="outline" size="sm" onClick={() => setPlanAgainRow(null)}>Cancel</Button>
+          <Button size="sm" onClick={handlePlanAgain} disabled={saving}>Plan again</Button>
         </>}>
         {planAgainRow && (
-          <p style={{ margin: 0, color: 'var(--c2)', fontSize: 14 }}>
+          <p className="text-sm text-[#374151]">
             Restore <strong>{fmtMonth(planAgainRow.month)}</strong> back to <em>planned</em> status so it can be confirmed or re-marked as not billed.
           </p>
         )}
       </Modal>
 
       {/* Delete not-billed row confirmation */}
-      <Modal open={!!deleteNotBilledRow} title="Delete Row" maxWidth={380} onClose={() => setDeleteNotBilledRow(null)}
-        footer={<>
-          <button className="btn btn-secondary btn-sm" onClick={() => setDeleteNotBilledRow(null)}>Cancel</button>
-          <button className="btn btn-sm" style={{ background: 'var(--red)', color: '#fff' }} onClick={handleDeleteNotBilled} disabled={saving}>Delete</button>
-        </>}>
-        {deleteNotBilledRow && (
-          <p style={{ margin: 0, color: 'var(--c2)', fontSize: 14 }}>
-            Permanently delete the not-billed row for <strong>{fmtMonth(deleteNotBilledRow.month)}</strong>?
-            <br /><br />
-            <span style={{ color: 'var(--c4)', fontSize: 13 }}>
-              This removes {fmtEuro((deleteNotBilledRow.planned_amount ?? 0) + hostingMonthlyAmt)} from the planned total for this contract.
-            </span>
-          </p>
-        )}
-      </Modal>
+      <ConfirmDialog
+        open={!!deleteNotBilledRow}
+        title="Delete Row"
+        message={deleteNotBilledRow ? `Permanently delete the not-billed row for ${fmtMonth(deleteNotBilledRow.month)}? This removes ${fmtEuro((deleteNotBilledRow.planned_amount ?? 0) + hostingMonthlyAmt)} from the planned total.` : ''}
+        confirmLabel="Delete"
+        onConfirm={handleDeleteNotBilled}
+        onCancel={() => setDeleteNotBilledRow(null)}
+      />
 
       {/* Add change request modal */}
       {showAddCR && (
         <Modal open={showAddCR} title="Add Change Request" maxWidth={480} onClose={() => setShowAddCR(false)}>
           <CRModalFields form={crForm} setForm={setCRForm} autoFocus />
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowAddCR(false)}>Cancel</button>
-            <button className="btn btn-primary btn-sm" onClick={saveAddCR} disabled={crSaving || !crForm.title.trim()}>
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" size="sm" onClick={() => setShowAddCR(false)}>Cancel</Button>
+            <Button size="sm" onClick={saveAddCR} disabled={crSaving || !crForm.title.trim()}>
               {crSaving ? 'Saving…' : 'Add Change Request'}
-            </button>
+            </Button>
           </div>
         </Modal>
       )}
@@ -1421,14 +1487,14 @@ export function MaintenanceDetailView() {
       {showEditCR && editCRTarget && (
         <Modal open={showEditCR} title="Edit Change Request" maxWidth={480} onClose={() => { setShowEditCR(false); setEditCRTarget(null) }}>
           <CRModalFields form={crForm} setForm={setCRForm} />
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => { setShowEditCR(false); setEditCRTarget(null) }}>Cancel</button>
-            <button className="btn btn-secondary btn-sm" onClick={saveEditCR} disabled={crSaving || !crForm.title.trim()}>
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" size="sm" onClick={() => { setShowEditCR(false); setEditCRTarget(null) }}>Cancel</Button>
+            <Button variant="outline" size="sm" onClick={saveEditCR} disabled={crSaving || !crForm.title.trim()}>
               {crSaving ? 'Saving…' : 'Save'}
-            </button>
-            <button className="btn btn-primary btn-sm" onClick={saveEditCRAndPlan} disabled={crSaving || !crForm.title.trim()}>
+            </Button>
+            <Button size="sm" onClick={saveEditCRAndPlan} disabled={crSaving || !crForm.title.trim()}>
               {crSaving ? 'Saving…' : 'Save & Add to Plan'}
-            </button>
+            </Button>
           </div>
         </Modal>
       )}
@@ -1436,84 +1502,78 @@ export function MaintenanceDetailView() {
       {/* Plan CR invoice modal */}
       {showPlanCR && planCRTarget && (
         <Modal open={showPlanCR} title="Plan Invoice" maxWidth={440} onClose={() => { setShowPlanCR(false); setPlanCRTarget(null) }}>
-          <p style={{ fontSize: 13, color: 'var(--c2)', marginBottom: 16 }}>
+          <p className="text-[13px] text-[#374151] mb-4">
             Adding invoice plan for: <strong>{planCRTarget.title}</strong>
           </p>
-          <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-            <div className="form-group">
-              <label className="form-label">Invoice month <span style={{ color: 'var(--red)' }}>*</span></label>
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Invoice month <span className="text-[#dc2626]">*</span></label>
               <input type="month" value={planCRMonth} onChange={e => setPlanCRMonth(e.target.value)} autoFocus />
             </div>
-            <div className="form-group">
-              <label className="form-label">Amount (€)</label>
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Amount (€)</label>
               <input type="number" value={planCRAmount} onChange={e => setPlanCRAmount(e.target.value)} placeholder="0" />
             </div>
           </div>
           {planCRMonth && (
-            <div className="alert alert-amber" style={{ fontSize: 12, marginBottom: 4 }}>
+            <div className="rounded-lg border border-[#fcd34d] bg-[#fef9ee] px-3 py-2 text-sm text-[#92400e] text-[12px] mb-1">
               Will add a planned invoice row for {fmtMonth(planCRMonth + '-01')} — {planCRAmount ? fmtEuro(Number(planCRAmount)) : 'no amount set'}
             </div>
           )}
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => { setShowPlanCR(false); setPlanCRTarget(null) }}>Cancel</button>
-            <button className="btn btn-primary btn-sm" onClick={savePlanCR} disabled={planCRSaving || !planCRMonth}>
+          <div className="flex gap-2 justify-end mt-5">
+            <Button variant="outline" size="sm" onClick={() => { setShowPlanCR(false); setPlanCRTarget(null) }}>Cancel</Button>
+            <Button size="sm" onClick={savePlanCR} disabled={planCRSaving || !planCRMonth}>
               {planCRSaving ? 'Saving…' : '+ Add to Invoice Plan'}
-            </button>
+            </Button>
           </div>
         </Modal>
       )}
 
       {/* Delete CR confirmation */}
-      <Modal open={!!deleteCRTarget} title="Delete Change Request" maxWidth={380} onClose={() => setDeleteCRTarget(null)}
-        footer={<>
-          <button className="btn btn-secondary btn-sm" onClick={() => setDeleteCRTarget(null)}>Cancel</button>
-          <button className="btn btn-sm" style={{ background: 'var(--red)', color: '#fff' }} onClick={() => deleteCRTarget && deleteCR(deleteCRTarget)}>Delete</button>
-        </>}>
-        {deleteCRTarget && (
-          <p style={{ margin: 0, color: 'var(--c2)', fontSize: 14 }}>
-            Delete change request "<strong>{deleteCRTarget.title}</strong>"? This cannot be undone.
-          </p>
-        )}
-      </Modal>
+      <ConfirmDialog
+        open={!!deleteCRTarget}
+        title="Delete Change Request"
+        message={deleteCRTarget ? `Delete change request "${deleteCRTarget.title}"? This cannot be undone.` : ''}
+        confirmLabel="Delete"
+        onConfirm={() => deleteCRTarget && deleteCR(deleteCRTarget)}
+        onCancel={() => setDeleteCRTarget(null)}
+      />
 
       {/* Add cost modal */}
       <Modal open={showAddCost} title="Add Cost" maxWidth={400} onClose={() => setShowAddCost(false)}
         footer={<>
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowAddCost(false)}>Cancel</button>
-          <button className="btn btn-primary btn-sm" onClick={handleAddCost} disabled={!costForm.month || !costForm.amount || saving}>Add</button>
+          <Button variant="outline" size="sm" onClick={() => setShowAddCost(false)}>Cancel</Button>
+          <Button size="sm" onClick={handleAddCost} disabled={!costForm.month || !costForm.amount || saving}>Add</Button>
         </>}>
-        <div className="form-row" style={{ marginBottom: 14 }}>
-          <div className="form-group">
-            <label className="form-label">Month</label>
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="mb-4">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Month</label>
             <input type="month" value={costForm.month} onChange={e => setCostForm(f => ({ ...f, month: e.target.value }))} autoFocus />
           </div>
-          <div className="form-group">
-            <label className="form-label">Amount (€)</label>
+          <div className="mb-4">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Amount (€)</label>
             <input type="number" value={costForm.amount} onChange={e => setCostForm(f => ({ ...f, amount: e.target.value }))} placeholder="0" />
           </div>
         </div>
-        <div className="form-group">
-          <label className="form-label">Description</label>
+        <div className="mb-4">
+          <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Description</label>
           <input value={costForm.description} onChange={e => setCostForm(f => ({ ...f, description: e.target.value }))} placeholder="e.g. SSL certificate, plugin license…" />
         </div>
       </Modal>
 
       {/* Delete cost confirmation */}
-      <Modal open={!!deleteCostRow} title="Remove Cost" maxWidth={380} onClose={() => setDeleteCostRow(null)}
-        footer={<>
-          <button className="btn btn-secondary btn-sm" onClick={() => setDeleteCostRow(null)}>Cancel</button>
-          <button className="btn btn-sm" style={{ background: 'var(--red)', color: '#fff' }} onClick={async () => {
-            if (!deleteCostRow) return
-            await handleDeleteCost(deleteCostRow.id)
-            setDeleteCostRow(null)
-          }}>Remove</button>
-        </>}>
-        <p style={{ margin: 0, color: 'var(--c2)', fontSize: 14 }}>
-          Are you sure you want to remove this cost entry
-          {deleteCostRow?.notes ? <> "<strong>{deleteCostRow.notes}</strong>"</> : ''}?
-          This cannot be undone.
-        </p>
-      </Modal>
+      <ConfirmDialog
+        open={!!deleteCostRow}
+        title="Remove Cost"
+        message={`Are you sure you want to remove this cost entry${deleteCostRow?.notes ? ` "${deleteCostRow.notes}"` : ''}? This cannot be undone.`}
+        confirmLabel="Remove"
+        onConfirm={async () => {
+          if (!deleteCostRow) return
+          await handleDeleteCost(deleteCostRow.id)
+          setDeleteCostRow(null)
+        }}
+        onCancel={() => setDeleteCostRow(null)}
+      />
     </div>
   )
 }

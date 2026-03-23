@@ -1,13 +1,16 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
-import type { CompanyHoliday } from '../lib/types'
+import type { CompanyHoliday, TeamMember } from '../lib/types'
 import { useSettingsStore } from '../stores/settings'
 import { useResourceStore } from '../stores/resource'
 import { useHolidayStore } from '../stores/holidays'
 import { toast } from '../lib/toast'
 import { Select } from '../components/Select'
 import { Modal } from '../components/Modal'
-import type { TeamMember } from '../lib/types'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
 
 const FUNCTIONS_URL = import.meta.env.VITE_SUPABASE_URL?.replace('.supabase.co', '.supabase.co/functions/v1')
 const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -28,8 +31,9 @@ type SettingsTab = 'general' | 'team' | 'holidays'
 
 interface MemberForm {
   name: string; email: string; team_id: string; role: string; skills: string
+  overhead_meetings_month: number; overhead_sales_month: number; vacation_days_year: number
 }
-const EMPTY_FORM: MemberForm = { name: '', email: '', team_id: '', role: '', skills: '' }
+const EMPTY_FORM: MemberForm = { name: '', email: '', team_id: '', role: '', skills: '', overhead_meetings_month: 0, overhead_sales_month: 0, vacation_days_year: 0 }
 
 function getTeamCategory(m: TeamMember): 'uxui' | 'dev' | 'content' | 'other' {
   const teamName = (m.team?.name ?? '').toLowerCase()
@@ -59,6 +63,9 @@ export function SettingsView() {
   const [agencySaving, setAgencySaving]   = useState(false)
   const [pmInput, setPmInput] = useState('')
   const [pmSaving, setPmSaving] = useState(false)
+  const [internalRate, setInternalRate] = useState(String(settingsStore.internalHourlyRate || ''))
+  const [cmsInput, setCmsInput] = useState('')
+  const [cmsSaving, setCmsSaving] = useState(false)
 
   // ── Team ─────────────────────────────────────────────────────────────────
   const [showMemberModal, setShowMemberModal] = useState(false)
@@ -114,6 +121,8 @@ export function SettingsView() {
     checkTgStatus()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => { setInternalRate(String(settingsStore.internalHourlyRate || '')) }, [settingsStore.internalHourlyRate])
+
   useEffect(() => {
     if (!linkCode || codeExpiry <= 0) return
     const t = setInterval(() => setCodeExpiry(s => { if (s <= 1) { setLinkCode(null); clearInterval(t); return 0 } return s - 1 }), 1000)
@@ -127,6 +136,7 @@ export function SettingsView() {
     try {
       await settingsStore.setAgencyName(agencyInput.trim())
       await settingsStore.setAgencyLogo(logoInput.trim())
+      await settingsStore.setInternalHourlyRate(parseFloat(internalRate) || 0)
       toast('success', 'Settings saved')
       setEditingGeneral(false)
     } catch { toast('error', 'Failed to save') }
@@ -157,6 +167,24 @@ export function SettingsView() {
     finally { setPmSaving(false) }
   }
 
+  async function addCms() {
+    const name = cmsInput.trim()
+    if (!name || settingsStore.cmsOptions.includes(name)) return
+    setCmsSaving(true)
+    try {
+      await settingsStore.setCmsOptions([...settingsStore.cmsOptions, name])
+      setCmsInput(''); toast('success', `${name} added`)
+    } catch { toast('error', 'Failed') }
+    finally { setCmsSaving(false) }
+  }
+
+  async function removeCms(name: string) {
+    setCmsSaving(true)
+    try { await settingsStore.setCmsOptions(settingsStore.cmsOptions.filter(c => c !== name)) }
+    catch { toast('error', 'Failed') }
+    finally { setCmsSaving(false) }
+  }
+
   async function generateCode() {
     setTgLoading(true)
     try {
@@ -182,7 +210,7 @@ export function SettingsView() {
 
   function openEdit(m: TeamMember) {
     setEditTarget(m)
-    setMemberForm({ name: m.name, email: m.email ?? '', team_id: m.team_id ?? '', role: m.role ?? '', skills: m.skills ?? '' })
+    setMemberForm({ name: m.name, email: m.email ?? '', team_id: m.team_id ?? '', role: m.role ?? '', skills: m.skills ?? '', overhead_meetings_month: m.overhead_meetings_month ?? 0, overhead_sales_month: m.overhead_sales_month ?? 0, vacation_days_year: m.vacation_days_year ?? 0 })
     setShowMemberModal(true)
   }
 
@@ -190,6 +218,11 @@ export function SettingsView() {
     if (!memberForm.name.trim()) return
     setMemberSaving(true)
     try {
+      const overheadPayload = {
+        overhead_meetings_month: memberForm.overhead_meetings_month || null,
+        overhead_sales_month: memberForm.overhead_sales_month || null,
+        vacation_days_year: memberForm.vacation_days_year || null,
+      }
       if (editTarget) {
         await resourceStore.updateMember(editTarget.id, {
           name: memberForm.name.trim(),
@@ -197,6 +230,7 @@ export function SettingsView() {
           team_id: memberForm.team_id || null,
           role: memberForm.role || null,
           skills: memberForm.skills || null,
+          ...overheadPayload,
         })
         toast('success', 'Member updated')
       } else {
@@ -206,6 +240,7 @@ export function SettingsView() {
           team_id: memberForm.team_id || null,
           role: memberForm.role || undefined,
           skills: memberForm.skills || undefined,
+          ...overheadPayload,
         })
         toast('success', 'Member added')
       }
@@ -237,108 +272,129 @@ export function SettingsView() {
 
   function renderGeneral() {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="flex flex-col gap-4">
         {/* Top row: General Info | Team summary */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 16, alignItems: 'start' }}>
+        <div className="grid gap-4 items-start [grid-template-columns:1fr_260px]">
 
           {/* General Information */}
-          <div className="card">
-            <div className="card-body" style={{ padding: '20px 24px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(99,102,241,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Card>
+            <CardContent className="px-6 py-5">
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-[rgba(99,102,241,0.1)] flex items-center justify-center">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
                   </div>
-                  <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--c0)' }}>General Information</span>
+                  <span className="font-bold text-[15px] text-foreground">General Information</span>
                 </div>
                 {!editingGeneral && (
-                  <button className="btn btn-secondary btn-sm" onClick={() => setEditingGeneral(true)}>
+                  <Button variant="outline" size="sm" onClick={() => setEditingGeneral(true)}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     Edit
-                  </button>
+                  </Button>
                 )}
               </div>
 
               {editingGeneral ? (
                 <>
-                  <div className="form-group" style={{ marginBottom: 16 }}>
-                    <label className="form-label">AGENCY NAME</label>
+                  <div className="mb-4">
+                    <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">AGENCY NAME</label>
                     <input autoFocus value={agencyInput} onChange={e => setAgencyInput(e.target.value)} placeholder="e.g. Renderspace d.o.o." onKeyDown={e => e.key === 'Enter' && saveGeneral()} />
                   </div>
 
-                  <div className="form-group" style={{ marginBottom: 24 }}>
-                    <label className="form-label">AGENCY LOGO</label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                      <div style={{ width: 64, height: 64, border: '2px dashed var(--c5)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', background: 'var(--c7)' }}>
+                  <div className="mb-6">
+                    <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">AGENCY LOGO</label>
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-16 h-16 border-2 border-dashed border-border rounded-[10px] flex items-center justify-center shrink-0 overflow-hidden bg-[var(--c7)]">
                         {logoInput
-                          ? <img src={logoInput} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={e => (e.currentTarget.style.display = 'none')} />
-                          : <span style={{ fontSize: 9, color: 'var(--c4)', textAlign: 'center', lineHeight: 1.4, fontWeight: 600 }}>AGENCY<br/>LOGO</span>
+                          ? <img src={logoInput} alt="Logo" className="w-full h-full object-contain" onError={e => (e.currentTarget.style.display = 'none')} />
+                          : <span className="text-[9px] text-muted-foreground text-center leading-[1.4] font-semibold">AGENCY<br/>LOGO</span>
                         }
                       </div>
-                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', padding: '8px 14px', borderRadius: 8, border: '1px solid var(--c5)', background: '#fff', fontSize: 13, fontWeight: 600, color: 'var(--c1)', width: 'fit-content' }}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                          Upload image
-                          <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => {
-                            const file = e.target.files?.[0]
-                            if (!file) return
-                            const reader = new FileReader()
-                            reader.onload = ev => setLogoInput(ev.target?.result as string)
-                            reader.readAsDataURL(file)
-                          }} />
-                        </label>
-                        {logoInput && (
-                          <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red)', width: 'fit-content' }} onClick={() => setLogoInput('')}>Remove logo</button>
-                        )}
-                        <div style={{ fontSize: 11, color: 'var(--c4)' }}>PNG, SVG or JPG · max 512×512px recommended</div>
+                      <div className="flex-1 flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                          <label className="inline-flex items-center gap-1.5 cursor-pointer px-3.5 py-2 rounded-lg border border-border bg-white text-[13px] font-semibold text-foreground">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                            Upload image
+                            <input type="file" accept="image/*" className="hidden" onChange={e => {
+                              const file = e.target.files?.[0]
+                              if (!file) return
+                              const reader = new FileReader()
+                              reader.onload = ev => setLogoInput(ev.target?.result as string)
+                              reader.readAsDataURL(file)
+                            }} />
+                          </label>
+                          {logoInput && (
+                            <Button variant="ghost" size="xs" className="text-[#dc2626]" onClick={() => setLogoInput('')}>Remove logo</Button>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground">PNG, SVG or JPG · max 512×512px recommended</div>
                       </div>
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button className="btn btn-primary btn-sm" onClick={saveGeneral} disabled={agencySaving}>
+                  <div className="mb-4">
+                    <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">
+                      Internal cost / hour (€)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={internalRate}
+                      onChange={e => setInternalRate(e.target.value)}
+                      placeholder="0"
+                      style={{ maxWidth: 140 }}
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={saveGeneral} disabled={agencySaving}>
                       {agencySaving ? 'Saving…' : 'Save Configuration'}
-                    </button>
-                    <button className="btn btn-secondary btn-sm" onClick={cancelGeneral}>Cancel</button>
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={cancelGeneral}>Cancel</Button>
                   </div>
                 </>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div className="flex flex-col gap-4">
                   <div>
-                    <div className="form-label" style={{ marginBottom: 6 }}>AGENCY NAME</div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--c0)' }}>
-                      {settingsStore.agencyName || <span style={{ color: 'var(--c4)', fontWeight: 400 }}>Not set</span>}
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground font-medium mb-1.5">AGENCY NAME</div>
+                    <div className="text-sm font-semibold text-foreground">
+                      {settingsStore.agencyName || <span className="text-muted-foreground font-normal">Not set</span>}
                     </div>
                   </div>
                   <div>
-                    <div className="form-label" style={{ marginBottom: 8 }}>AGENCY LOGO</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <div style={{ width: 56, height: 56, border: '1px solid var(--c5)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: 'var(--c7)', flexShrink: 0 }}>
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground font-medium mb-2">AGENCY LOGO</div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-14 h-14 border border-border rounded-[10px] flex items-center justify-center overflow-hidden bg-[var(--c7)] shrink-0">
                         {settingsStore.agencyLogo
-                          ? <img src={settingsStore.agencyLogo} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                          : <span style={{ fontSize: 9, color: 'var(--c4)', textAlign: 'center', lineHeight: 1.4, fontWeight: 600 }}>AGENCY<br/>LOGO</span>
+                          ? <img src={settingsStore.agencyLogo} alt="Logo" className="w-full h-full object-contain" />
+                          : <span className="text-[9px] text-muted-foreground text-center leading-[1.4] font-semibold">AGENCY<br/>LOGO</span>
                         }
                       </div>
-                      <span style={{ fontSize: 13, color: settingsStore.agencyLogo ? 'var(--c2)' : 'var(--c4)' }}>
-                        {settingsStore.agencyLogo ? settingsStore.agencyLogo.replace(/^https?:\/\//, '') : 'No logo set'}
-                      </span>
+                      {settingsStore.agencyLogo
+                        ? <span className="text-[13px] text-[#16a34a] font-medium flex items-center gap-1.5">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                            Logo uploaded
+                          </span>
+                        : <span className="text-[13px] text-muted-foreground">No logo set</span>
+                      }
                     </div>
                   </div>
                 </div>
               )}
-            </div>
-          </div>
+            </CardContent>
+          </Card>
 
           {/* Team & Workspace dark card */}
-          <div style={{ background: 'var(--navy)', borderRadius: 12, padding: '20px 22px', color: '#fff' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <div className="bg-primary rounded-xl px-[22px] py-5 text-white">
+            <div className="flex items-center gap-2 mb-1">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#818cf8" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-              <span style={{ fontWeight: 700, fontSize: 15 }}>Team &amp; Workspace</span>
+              <span className="font-bold text-[15px]">Team &amp; Workspace</span>
             </div>
-            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 18, lineHeight: 1.5 }}>
+            <p className="text-xs text-white/40 mb-4 leading-relaxed">
               Manage your core team across disciplines.
             </p>
-            <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 16, marginBottom: 16 }}>
+            <div className="border-t border-white/[0.08] pt-4 mb-4">
               {[
                 { label: 'Total Members', value: members.length },
                 { label: 'UX/UI', value: uxuiCount },
@@ -346,85 +402,108 @@ export function SettingsView() {
                 { label: 'Content', value: contentCount },
                 { label: 'Others', value: otherCount },
               ].map(row => (
-                <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10, fontSize: 13 }}>
-                  <span style={{ color: 'rgba(255,255,255,0.5)' }}>{row.label}</span>
-                  <span style={{ fontWeight: 700 }}>{row.value}</span>
+                <div key={row.label} className="flex justify-between mb-2.5 text-[13px]">
+                  <span className="text-white/50">{row.label}</span>
+                  <span className="font-bold">{row.value}</span>
                 </div>
               ))}
             </div>
             <button
               onClick={() => setActiveTab('team')}
-              style={{ width: '100%', background: '#6366f1', border: 'none', borderRadius: 8, padding: '10px 0', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+              className="w-full bg-[#6366f1] border-none rounded-lg py-2.5 text-white font-bold text-[13px] cursor-pointer"
             >
               Manage Team →
             </button>
           </div>
         </div>
 
-        {/* Project Managers */}
-        <div className="card">
-          <div className="card-body" style={{ padding: '20px 24px' }}>
-            <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--c0)', marginBottom: 4 }}>Project Managers</div>
-            <div style={{ fontSize: 13, color: 'var(--c3)', marginBottom: 16 }}>People available as PMs in project forms.</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
-              {settingsStore.projectManagers.map(name => (
-                <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--c7)', borderRadius: 6, padding: '5px 10px', fontSize: 13, color: 'var(--c1)' }}>
-                  <span>{name}</span>
-                  <button onClick={() => removePM(name)} disabled={pmSaving}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c4)', fontSize: 15, lineHeight: 1, padding: 0 }}>×</button>
-                </div>
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: 8, maxWidth: 360 }}>
-              <input value={pmInput} onChange={e => setPmInput(e.target.value)} placeholder="Add name…"
-                onKeyDown={e => e.key === 'Enter' && addPM()} style={{ flex: 1 }} />
-              <button className="btn btn-primary btn-sm" onClick={addPM} disabled={pmSaving || !pmInput.trim()}>Add</button>
-            </div>
-          </div>
+        {/* Project Managers + CMS side by side */}
+        <div className="grid grid-cols-2 gap-4">
+          <Card>
+            <CardContent className="px-6 py-5">
+              <div className="font-bold text-[15px] text-foreground mb-0.5">Project Managers</div>
+              <div className="text-[13px] text-muted-foreground mb-4">People available as PMs in project forms.</div>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {settingsStore.projectManagers.map(name => (
+                  <div key={name} className="flex items-center gap-1.5 bg-[var(--c7)] rounded border border-border px-2.5 py-1 text-[13px] text-foreground">
+                    <span>{name}</span>
+                    <button onClick={() => removePM(name)} disabled={pmSaving}
+                      className="bg-transparent border-none cursor-pointer text-muted-foreground text-[15px] leading-none p-0 hover:text-[#dc2626]">×</button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input value={pmInput} onChange={e => setPmInput(e.target.value)} placeholder="Add name…"
+                  onKeyDown={e => e.key === 'Enter' && addPM()} className="flex-1" />
+                <Button size="sm" onClick={addPM} disabled={pmSaving || !pmInput.trim()}>Add</Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="px-6 py-5">
+              <div className="font-bold text-[15px] text-foreground mb-0.5">CMS / Technology</div>
+              <div className="text-[13px] text-muted-foreground mb-4">Options available when adding projects or maintenances.</div>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {settingsStore.cmsOptions.map(name => (
+                  <div key={name} className="flex items-center gap-1.5 bg-[var(--c7)] rounded border border-border px-2.5 py-1 text-[13px] text-foreground">
+                    <span>{name}</span>
+                    <button onClick={() => removeCms(name)} disabled={cmsSaving}
+                      className="bg-transparent border-none cursor-pointer text-muted-foreground text-[15px] leading-none p-0 hover:text-[#dc2626]">×</button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input value={cmsInput} onChange={e => setCmsInput(e.target.value)} placeholder="Add CMS…"
+                  onKeyDown={e => e.key === 'Enter' && addCms()} className="flex-1" />
+                <Button size="sm" onClick={addCms} disabled={cmsSaving || !cmsInput.trim()}>Add</Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Telegram */}
-        <div className="card">
-          <div className="card-body" style={{ padding: '20px 24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-              <div style={{ width: 40, height: 40, borderRadius: 10, background: '#e8f2ff', color: '#229ED9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Card>
+          <CardContent className="px-6 py-5">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-[10px] bg-[#e8f2ff] text-[#229ED9] flex items-center justify-center">
                 <TelegramIcon />
               </div>
               <div>
-                <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--c0)' }}>Telegram Bot</div>
-                <div style={{ fontSize: 12, color: 'var(--c3)' }}>@nino_personal_bot — natural language worker</div>
+                <div className="font-bold text-[15px] text-foreground">Telegram Bot</div>
+                <div className="text-xs text-muted-foreground">@nino_personal_bot — natural language worker</div>
               </div>
               {linked !== null && (
-                <span className={`badge ${linked ? 'badge-green' : 'badge-gray'}`} style={{ marginLeft: 'auto' }}>
+                <Badge variant={linked ? 'green' : 'gray'} className="ml-auto">
                   {linked ? 'Connected' : 'Not connected'}
-                </span>
+                </Badge>
               )}
             </div>
 
-            {linked === null && <div style={{ fontSize: 13, color: 'var(--c4)' }}>Checking status…</div>}
+            {linked === null && <div className="text-[13px] text-muted-foreground">Checking status…</div>}
 
             {linked === false && (
               <div>
-                <p style={{ fontSize: 13, color: 'var(--c3)', marginBottom: 16, lineHeight: 1.6 }}>
+                <p className="text-[13px] text-muted-foreground mb-4 leading-relaxed">
                   Connect your Telegram account to use the bot. Generate a link code below, then send it to the bot.
                 </p>
                 {!linkCode ? (
-                  <button className="btn btn-primary btn-sm" onClick={generateCode} disabled={tgLoading}>
+                  <Button size="sm" onClick={generateCode} disabled={tgLoading}>
                     {tgLoading ? 'Generating…' : 'Generate link code'}
-                  </button>
+                  </Button>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <div style={{ background: 'var(--c7)', borderRadius: 8, padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <code style={{ fontSize: 15, fontWeight: 700, letterSpacing: 1, color: 'var(--c1)', fontFamily: 'monospace' }}>/start {linkCode}</code>
-                      <button className="btn btn-secondary btn-sm" onClick={() => navigator.clipboard.writeText(`/start ${linkCode}`)}>Copy</button>
+                  <div className="flex flex-col gap-3">
+                    <div className="bg-[var(--c7)] rounded-lg px-[18px] py-3.5 flex items-center justify-between">
+                      <code className="text-[15px] font-bold tracking-wide text-foreground">/start {linkCode}</code>
+                      <Button variant="outline" size="sm" onClick={() => navigator.clipboard.writeText(`/start ${linkCode}`)}>Copy</Button>
                     </div>
-                    <p style={{ fontSize: 12, color: 'var(--c4)' }}>
+                    <p className="text-xs text-muted-foreground">
                       Open <strong>@nino_personal_bot</strong> in Telegram and send this message.
-                      Expires in <strong style={{ color: codeExpiry < 60 ? 'var(--red)' : 'var(--c2)' }}>{expiryLabel}</strong>.
+                      Expires in <strong className={codeExpiry < 60 ? 'text-[#dc2626]' : 'text-[#374151]'}>{expiryLabel}</strong>.
                     </p>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button className="btn btn-primary btn-sm" onClick={generateCode} disabled={tgLoading}>Regenerate</button>
-                      <button className="btn btn-secondary btn-sm" onClick={checkTgStatus}>Check status</button>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={generateCode} disabled={tgLoading}>Regenerate</Button>
+                      <Button variant="outline" size="sm" onClick={checkTgStatus}>Check status</Button>
                     </div>
                   </div>
                 )}
@@ -433,29 +512,28 @@ export function SettingsView() {
 
             {linked === true && (
               <div>
-                <div style={{ background: 'var(--c7)', borderRadius: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div className="bg-[var(--c7)] rounded-lg px-4 py-3 flex items-center justify-between mb-4">
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--c1)' }}>Bot connected</div>
-                    {linkedAt && <div style={{ fontSize: 12, color: 'var(--c4)' }}>Since {new Date(linkedAt).toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' })}</div>}
+                    <div className="text-[13px] font-semibold text-foreground">Bot connected</div>
+                    {linkedAt && <div className="text-xs text-muted-foreground">Since {new Date(linkedAt).toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' })}</div>}
                   </div>
-                  <div style={{ color: '#22c55e', fontSize: 20 }}>✓</div>
+                  <div className="text-[#22c55e] text-xl">✓</div>
                 </div>
-                <p style={{ fontSize: 13, color: 'var(--c3)', marginBottom: 14, lineHeight: 1.6 }}>
+                <p className="text-[13px] text-muted-foreground mb-3.5 leading-relaxed">
                   Open <strong>@nino_personal_bot</strong> in Telegram and start chatting.
                 </p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+                <div className="flex flex-wrap gap-1.5 mb-4">
                   {['list active projects', 'show planned invoices', 'create project for Acme, fixed 5000€', 'issue March invoice for Acme'].map(ex => (
-                    <span key={ex} style={{ background: 'var(--c7)', borderRadius: 20, padding: '4px 10px', fontSize: 12, color: 'var(--c2)', fontStyle: 'italic' }}>"{ex}"</span>
+                    <span key={ex} className="bg-[var(--c7)] rounded-full px-2.5 py-1 text-xs text-[#374151] italic">"{ex}"</span>
                   ))}
                 </div>
-                <button className="btn btn-secondary btn-sm" onClick={revokeBot} disabled={revoking}
-                  style={{ color: 'var(--red)', borderColor: 'var(--red)' }}>
+                <Button variant="outline" size="sm" className="text-[#dc2626] border-[#dc2626] hover:text-[#dc2626]" onClick={revokeBot} disabled={revoking}>
                   {revoking ? 'Disconnecting…' : 'Disconnect bot'}
-                </button>
+                </Button>
               </div>
             )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -519,34 +597,34 @@ export function SettingsView() {
       h.recurrence === 'yearly' || h.date.startsWith(String(filterYear))
     )
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div className="section-bar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button className="btn btn-ghost btn-sm" onClick={() => setFilterYear(y => y - 1)}>‹</button>
-            <span style={{ fontWeight: 700, fontSize: 14, minWidth: 40, textAlign: 'center' }}>{filterYear}</span>
-            <button className="btn btn-ghost btn-sm" onClick={() => setFilterYear(y => y + 1)}>›</button>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setFilterYear(y => y - 1)}>‹</Button>
+            <span className="font-bold text-sm min-w-[40px] text-center">{filterYear}</span>
+            <Button variant="ghost" size="sm" onClick={() => setFilterYear(y => y + 1)}>›</Button>
           </div>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowHolidayForm(v => !v)}>
+          <Button size="sm" onClick={() => setShowHolidayForm(v => !v)}>
             {showHolidayForm ? 'Cancel' : '+ Add Holiday'}
-          </button>
+          </Button>
         </div>
 
         {showHolidayForm && (
-          <div className="card">
-            <div className="card-body">
-              <div className="form-row" style={{ marginBottom: 14 }}>
-                <div className="form-group">
-                  <label className="form-label">Holiday Name</label>
+          <Card>
+            <CardContent className="p-4">
+              <div className="grid grid-cols-2 gap-4 mb-3.5">
+                <div className="mb-4">
+                  <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Holiday Name</label>
                   <input autoFocus value={holidayForm.name} onChange={e => setHolidayForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Christmas Day" />
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Date</label>
+                <div className="mb-4">
+                  <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Date</label>
                   <input type="date" value={holidayForm.date} onChange={e => setHolidayForm(f => ({ ...f, date: e.target.value }))} />
                 </div>
               </div>
-              <div className="form-row" style={{ marginBottom: 14 }}>
-                <div className="form-group">
-                  <label className="form-label">Type</label>
+              <div className="grid grid-cols-2 gap-4 mb-3.5">
+                <div className="mb-4">
+                  <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Type</label>
                   <Select
                     value={holidayForm.type}
                     onChange={val => setHolidayForm(f => ({ ...f, type: val as 'public_holiday' | 'company_shutdown' }))}
@@ -556,8 +634,8 @@ export function SettingsView() {
                     ]}
                   />
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Recurrence</label>
+                <div className="mb-4">
+                  <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Recurrence</label>
                   <Select
                     value={holidayForm.recurrence}
                     onChange={val => setHolidayForm(f => ({ ...f, recurrence: val as 'none' | 'yearly' }))}
@@ -568,20 +646,13 @@ export function SettingsView() {
                   />
                 </div>
               </div>
-              <div className="form-group" style={{ marginBottom: 16 }}>
-                <label className="form-label">Applies To</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
-                  {/* "All Teams" pill */}
+              <div className="mb-4">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-2">Applies To</label>
+                <div className="flex flex-wrap gap-2 mt-2">
                   <button
                     type="button"
                     onClick={() => setHolidayForm(f => ({ ...f, applies_to: [] }))}
-                    style={{
-                      padding: '5px 14px', borderRadius: 20, border: '1.5px solid',
-                      borderColor: holidayForm.applies_to.length === 0 ? 'var(--navy)' : 'var(--c5)',
-                      background: holidayForm.applies_to.length === 0 ? 'var(--navy)' : '#fff',
-                      color: holidayForm.applies_to.length === 0 ? '#fff' : 'var(--c2)',
-                      fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-                    }}
+                    className={`px-3.5 py-1 rounded-full border-[1.5px] text-[13px] font-semibold cursor-pointer ${holidayForm.applies_to.length === 0 ? 'border-primary bg-primary text-white' : 'border-border bg-white text-[#374151]'}`}
                   >All Teams</button>
                   {resourceStore.teams.map(t => {
                     const selected = holidayForm.applies_to.includes(t.id)
@@ -596,32 +667,31 @@ export function SettingsView() {
                             : [...f.applies_to, t.id],
                         }))}
                         style={{
-                          padding: '5px 14px', borderRadius: 20, border: '1.5px solid',
-                          borderColor: selected ? t.color : 'var(--c5)',
-                          background: selected ? t.color + '22' : '#fff',
-                          color: selected ? t.color : 'var(--c2)',
-                          fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                          borderColor: selected ? t.color : undefined,
+                          background: selected ? t.color + '22' : undefined,
+                          color: selected ? t.color : undefined,
                         }}
+                        className={`px-3.5 py-1 rounded-full border-[1.5px] text-[13px] font-semibold cursor-pointer ${!selected ? 'border-border bg-white text-[#374151]' : ''}`}
                       >{t.name}</button>
                     )
                   })}
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                <button className="btn btn-secondary btn-sm" onClick={() => setShowHolidayForm(false)}>Cancel</button>
-                <button className="btn btn-primary btn-sm" onClick={saveHoliday} disabled={holidaySaving || !holidayForm.name.trim() || !holidayForm.date}>
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" size="sm" onClick={() => setShowHolidayForm(false)}>Cancel</Button>
+                <Button size="sm" onClick={saveHoliday} disabled={holidaySaving || !holidayForm.name.trim() || !holidayForm.date}>
                   {holidaySaving ? 'Saving…' : 'Save Holiday'}
-                </button>
+                </Button>
               </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         )}
 
-        <div className="card">
+        <Card>
           {holidayStore.loading ? (
-            <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--c4)' }}>Loading…</div>
+            <div className="text-center py-8 text-muted-foreground">Loading…</div>
           ) : visibleHolidays.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--c4)', fontSize: 13 }}>
+            <div className="text-center py-10 text-muted-foreground text-[13px]">
               No holidays for {filterYear}. Click "Add Holiday" to get started.
             </div>
           ) : (
@@ -633,7 +703,7 @@ export function SettingsView() {
                   <th>TYPE</th>
                   <th>RECURRENCE</th>
                   <th>APPLIES TO</th>
-                  <th style={{ width: 130 }}>ACTIONS</th>
+                  <th className="w-[130px]">ACTIONS</th>
                 </tr>
               </thead>
               <tbody>
@@ -648,19 +718,19 @@ export function SettingsView() {
                     : h.applies_to.map(tid => resourceStore.teams.find(t => t.id === tid)?.name ?? tid).join(', ')
                   return (
                     <tr key={h.id}>
-                      <td className="text-mono" style={{ fontSize: 13 }}>{displayDate}</td>
-                      <td style={{ fontWeight: 600 }}>{h.name}</td>
+                      <td className="text-[13px]">{displayDate}</td>
+                      <td className="font-semibold">{h.name}</td>
                       <td>
-                        <span className={`badge ${h.type === 'public_holiday' ? 'badge-blue' : 'badge-amber'}`}>
+                        <Badge variant={h.type === 'public_holiday' ? 'blue' : 'amber'}>
                           {h.type === 'public_holiday' ? 'Public Holiday' : 'Company Shutdown'}
-                        </span>
+                        </Badge>
                       </td>
-                      <td style={{ fontSize: 13, color: 'var(--c2)' }}>{h.recurrence === 'yearly' ? 'Yearly' : 'Once'}</td>
-                      <td style={{ fontSize: 13, color: 'var(--c2)' }}>{teamLabels}</td>
+                      <td className="text-[13px] text-[#374151]">{h.recurrence === 'yearly' ? 'Yearly' : 'Once'}</td>
+                      <td className="text-[13px] text-[#374151]">{teamLabels}</td>
                       <td>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <button className="btn btn-secondary btn-xs" onClick={() => openEditHoliday(h)}>Edit</button>
-                          <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red)' }} onClick={() => deleteHoliday(h.id, h.name)}>Remove</button>
+                        <div className="flex gap-1.5">
+                          <Button variant="outline" size="xs" onClick={() => openEditHoliday(h)}>Edit</Button>
+                          <Button variant="ghost" size="xs" className="text-[#dc2626]" onClick={() => deleteHoliday(h.id, h.name)}>Remove</Button>
                         </div>
                       </td>
                     </tr>
@@ -669,16 +739,16 @@ export function SettingsView() {
               </tbody>
             </table>
           )}
-        </div>
+        </Card>
       </div>
     )
   }
 
   function renderTeam() {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="flex flex-col gap-4">
         {/* Stats strip */}
-        <div className="stats-strip">
+        <div className="grid grid-cols-4 gap-3 mb-4">
           {[
             { label: 'TOTAL MEMBERS', value: members.length, sub: 'All active', iconBg: 'rgba(99,102,241,0.1)', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg> },
             { label: 'UX/UI', value: uxuiCount, sub: 'Design & UX', iconBg: 'rgba(245,158,11,0.1)', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg> },
@@ -686,42 +756,42 @@ export function SettingsView() {
             { label: 'CONTENT', value: contentCount, sub: 'Writers & editors', iconBg: 'rgba(16,185,129,0.1)', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="1.8" strokeLinecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> },
             { label: 'OTHERS', value: otherCount, sub: 'Other roles', iconBg: 'rgba(100,116,139,0.1)', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg> },
           ].map(card => (
-            <div key={card.label} className="stat-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                <div className="stat-card-label">{card.label}</div>
-                <div style={{ width: 36, height: 36, borderRadius: 9, background: card.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <div key={card.label} className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+              <div className="flex justify-between items-start mb-3">
+                <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">{card.label}</div>
+                <div className="w-9 h-9 rounded-[9px] flex items-center justify-center shrink-0" style={{ background: card.iconBg }}>
                   {card.icon}
                 </div>
               </div>
-              <div className="stat-card-value">{card.value}</div>
-              <div className="stat-card-sub">{card.sub}</div>
+              <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{card.value}</div>
+              <div className="text-xs text-muted-foreground mt-1">{card.sub}</div>
             </div>
           ))}
         </div>
 
         {/* Table header */}
-        <div className="section-bar" style={{ marginBottom: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <h2 style={{ margin: 0 }}>Team Members</h2>
+        <div className="flex items-center justify-between mb-0">
+          <div className="flex items-center gap-3">
+            <h2 className="m-0 whitespace-nowrap">Team Members</h2>
             <input
               value={memberSearch}
               onChange={e => setMemberSearch(e.target.value)}
               placeholder="Search members…"
-              style={{ height: 34, fontSize: 13, padding: '0 12px', borderRadius: 6, border: '1px solid var(--c5)', width: 220, fontFamily: 'inherit', boxSizing: 'border-box' }}
+              className="h-[34px] text-[13px] px-3 rounded border border-border w-[220px]"
             />
           </div>
-          <button className="btn btn-primary btn-sm" onClick={openInvite}>
+          <Button size="sm" onClick={openInvite}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Add
-          </button>
+          </Button>
         </div>
 
         {/* Members table */}
-        <div className="card">
+        <Card>
           {resourceStore.loading ? (
-            <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--c4)' }}>Loading…</div>
+            <div className="text-center py-8 text-muted-foreground">Loading…</div>
           ) : members.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--c4)', fontSize: 13 }}>
+            <div className="text-center py-10 text-muted-foreground text-[13px]">
               No team members yet. Click Add to get started.
             </div>
           ) : (
@@ -732,50 +802,48 @@ export function SettingsView() {
                   <th>TEAM</th>
                   <th>ROLE</th>
                   <th>SKILLS</th>
-                  <th style={{ width: 100 }}>ACTIONS</th>
+                  <th className="w-[100px]">ACTIONS</th>
                 </tr>
               </thead>
               <tbody>
                 {members.filter(m => !memberSearch.trim() || m.name.toLowerCase().includes(memberSearch.toLowerCase()) || (m.role ?? '').toLowerCase().includes(memberSearch.toLowerCase())).map(m => (
-                  <tr key={m.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/team/${m.id}`)}>
+                  <tr key={m.id} className="cursor-pointer" onClick={() => navigate(`/team/${m.id}`)}>
                     <td onClick={e => e.stopPropagation()}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: m.team?.color ?? 'var(--navy)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0" style={{ background: m.team?.color ?? 'var(--navy)' }}>
                           {m.name.charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <Link to={`/team/${m.id}`} style={{ fontWeight: 600, fontSize: 13, color: 'var(--c0)', textDecoration: 'none' }}
-                            onMouseEnter={e => (e.currentTarget.style.color = 'var(--navy)')}
-                            onMouseLeave={e => (e.currentTarget.style.color = 'var(--c0)')}>
+                          <Link to={`/team/${m.id}`} className="font-semibold text-[13px] text-foreground no-underline hover:text-primary">
                             {m.name}
                           </Link>
-                          {m.email && <div style={{ fontSize: 11, color: 'var(--c4)' }}>{m.email}</div>}
+                          {m.email && <div className="text-[11px] text-muted-foreground">{m.email}</div>}
                         </div>
                       </div>
                     </td>
                     <td>
                       {m.team
-                        ? <span className="badge badge-blue" style={{ background: `${m.team.color ?? 'var(--navy)'}20`, color: m.team.color ?? 'var(--navy)', border: `1px solid ${m.team.color ?? 'var(--navy)'}40` }}>{m.team.name}</span>
-                        : <span style={{ color: 'var(--c4)' }}>—</span>}
+                        ? <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border" style={{ background: `${m.team.color ?? 'var(--navy)'}20`, color: m.team.color ?? 'var(--navy)', borderColor: `${m.team.color ?? 'var(--navy)'}40` }}>{m.team.name}</span>
+                        : <span className="text-muted-foreground">—</span>}
                     </td>
-                    <td style={{ fontSize: 13, color: 'var(--c2)' }}>{m.role || <span style={{ color: 'var(--c4)' }}>—</span>}</td>
+                    <td className="text-[13px] text-[#374151]">{m.role || <span className="text-muted-foreground">—</span>}</td>
                     <td>
                       {m.skills
-                        ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        ? <div className="flex flex-wrap gap-1">
                             {m.skills.split(',').slice(0, 3).map(s => (
-                              <span key={s} style={{ fontSize: 11, padding: '2px 7px', borderRadius: 4, background: 'var(--c7)', color: 'var(--c2)', fontWeight: 500 }}>{s.trim()}</span>
+                              <span key={s} className="text-[11px] px-[7px] py-px rounded bg-[var(--c7)] text-[#374151] font-medium">{s.trim()}</span>
                             ))}
                             {m.skills.split(',').length > 3 && (
-                              <span style={{ fontSize: 11, color: 'var(--c4)' }}>+{m.skills.split(',').length - 3}</span>
+                              <span className="text-[11px] text-muted-foreground">+{m.skills.split(',').length - 3}</span>
                             )}
                           </div>
-                        : <span style={{ color: 'var(--c4)', fontSize: 13 }}>—</span>}
+                        : <span className="text-muted-foreground text-[13px]">—</span>}
                     </td>
                     <td onClick={e => e.stopPropagation()}>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <Link to={`/team/${m.id}`} className="btn btn-secondary btn-xs" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>View</Link>
-                        <button className="btn btn-secondary btn-xs" onClick={() => openEdit(m)}>Edit</button>
-                        <button className="btn btn-ghost btn-xs" style={{ color: 'var(--red)' }} onClick={() => setDeleteTarget(m)}>Remove</button>
+                      <div className="flex gap-1.5">
+                        <Link to={`/team/${m.id}`} className="inline-flex items-center no-underline"><Button variant="outline" size="xs" asChild><span>View</span></Button></Link>
+                        <Button variant="outline" size="xs" onClick={() => openEdit(m)}>Edit</Button>
+                        <Button variant="ghost" size="xs" className="text-[#dc2626]" onClick={() => setDeleteTarget(m)}>Remove</Button>
                       </div>
                     </td>
                   </tr>
@@ -783,7 +851,7 @@ export function SettingsView() {
               </tbody>
             </table>
           )}
-        </div>
+        </Card>
       </div>
     )
   }
@@ -793,39 +861,56 @@ export function SettingsView() {
       {/* ── Invite / Edit modal ── */}
       {showMemberModal && (
         <Modal title={editTarget ? 'Edit Member' : 'Add Member'} onClose={() => setShowMemberModal(false)}>
-          <div className="form-row" style={{ marginBottom: 14 }}>
-            <div className="form-group">
-              <label className="form-label">Name</label>
+          <div className="grid grid-cols-2 gap-4 mb-3.5">
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Name</label>
               <input autoFocus value={memberForm.name} onChange={e => setMemberForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Ana Novak" />
             </div>
-            <div className="form-group">
-              <label className="form-label">Email <span style={{ fontWeight: 400, color: 'var(--c4)' }}>optional</span></label>
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Email <span className="font-normal text-muted-foreground">optional</span></label>
               <input type="email" value={memberForm.email} onChange={e => setMemberForm(f => ({ ...f, email: e.target.value }))} placeholder="ana@agency.si" />
             </div>
           </div>
-          <div className="form-row" style={{ marginBottom: 14 }}>
-            <div className="form-group">
-              <label className="form-label">Team</label>
+          <div className="grid grid-cols-2 gap-4 mb-3.5">
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Team</label>
               <Select
                 value={memberForm.team_id}
                 onChange={val => setMemberForm(f => ({ ...f, team_id: val }))}
                 options={[{ value: '', label: '— No team —' }, ...teams.map(t => ({ value: t.id, label: t.name }))]}
               />
             </div>
-            <div className="form-group">
-              <label className="form-label">Role</label>
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Role</label>
               <input value={memberForm.role} onChange={e => setMemberForm(f => ({ ...f, role: e.target.value }))} placeholder="e.g. Senior Designer" />
             </div>
           </div>
-          <div className="form-group" style={{ marginBottom: 20 }}>
-            <label className="form-label">Skills <span style={{ fontWeight: 400, color: 'var(--c4)' }}>comma-separated</span></label>
+          <div className="mb-3.5">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Skills <span className="font-normal text-muted-foreground">comma-separated</span></label>
             <input value={memberForm.skills} onChange={e => setMemberForm(f => ({ ...f, skills: e.target.value }))} placeholder="e.g. Figma, UI/UX, Prototyping" />
           </div>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowMemberModal(false)}>Cancel</button>
-            <button className="btn btn-primary btn-sm" onClick={saveMember} disabled={memberSaving || !memberForm.name.trim()}>
+          <div className="border-t border-border pt-4 mb-5">
+            <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-3">Capacity Overhead</div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Meetings <span className="font-normal normal-case">h/mo</span></label>
+                <input type="number" value={memberForm.overhead_meetings_month} onChange={e => setMemberForm(f => ({ ...f, overhead_meetings_month: Number(e.target.value) }))} min={0} step={1} />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Sales <span className="font-normal normal-case">h/mo</span></label>
+                <input type="number" value={memberForm.overhead_sales_month} onChange={e => setMemberForm(f => ({ ...f, overhead_sales_month: Number(e.target.value) }))} min={0} step={1} />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Vacation <span className="font-normal normal-case">days/yr</span></label>
+                <input type="number" value={memberForm.vacation_days_year} onChange={e => setMemberForm(f => ({ ...f, vacation_days_year: Number(e.target.value) }))} min={0} step={1} />
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" size="sm" onClick={() => setShowMemberModal(false)}>Cancel</Button>
+            <Button size="sm" onClick={saveMember} disabled={memberSaving || !memberForm.name.trim()}>
               {memberSaving ? 'Saving…' : editTarget ? 'Save changes' : 'Add member'}
-            </button>
+            </Button>
           </div>
         </Modal>
       )}
@@ -833,75 +918,73 @@ export function SettingsView() {
       {/* ── Edit Holiday modal ── */}
       {editHolidayTarget && (
         <Modal title="Edit Holiday" onClose={() => setEditHolidayTarget(null)}>
-          <div className="form-row" style={{ marginBottom: 14 }}>
-            <div className="form-group">
-              <label className="form-label">Holiday Name</label>
+          <div className="grid grid-cols-2 gap-4 mb-3.5">
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Holiday Name</label>
               <input autoFocus value={editHolidayForm.name} onChange={e => setEditHolidayForm(f => ({ ...f, name: e.target.value }))} />
             </div>
-            <div className="form-group">
-              <label className="form-label">Date</label>
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Date</label>
               <input type="date" value={editHolidayForm.date} onChange={e => setEditHolidayForm(f => ({ ...f, date: e.target.value }))} />
             </div>
           </div>
-          <div className="form-row" style={{ marginBottom: 14 }}>
-            <div className="form-group">
-              <label className="form-label">Type</label>
+          <div className="grid grid-cols-2 gap-4 mb-3.5">
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Type</label>
               <Select value={editHolidayForm.type} onChange={val => setEditHolidayForm(f => ({ ...f, type: val as 'public_holiday' | 'company_shutdown' }))} options={[{ value: 'public_holiday', label: 'Public Holiday' }, { value: 'company_shutdown', label: 'Company Shutdown' }]} />
             </div>
-            <div className="form-group">
-              <label className="form-label">Recurrence</label>
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Recurrence</label>
               <Select value={editHolidayForm.recurrence} onChange={val => setEditHolidayForm(f => ({ ...f, recurrence: val as 'none' | 'yearly' }))} options={[{ value: 'none', label: 'Once' }, { value: 'yearly', label: 'Yearly' }]} />
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => setEditHolidayTarget(null)}>Cancel</button>
-            <button className="btn btn-primary btn-sm" onClick={saveEditHoliday} disabled={editHolidaySaving || !editHolidayForm.name.trim() || !editHolidayForm.date}>
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" size="sm" onClick={() => setEditHolidayTarget(null)}>Cancel</Button>
+            <Button size="sm" onClick={saveEditHoliday} disabled={editHolidaySaving || !editHolidayForm.name.trim() || !editHolidayForm.date}>
               {editHolidaySaving ? 'Saving…' : 'Save'}
-            </button>
+            </Button>
           </div>
         </Modal>
       )}
 
-      {/* ── Delete confirm ── */}
-      {confirmHolidayDelete && (
-        <Modal title="Remove holiday" onClose={() => setConfirmHolidayDelete(null)}>
-          <p style={{ margin: '0 0 20px', fontSize: 14 }}>Remove <strong>{confirmHolidayDelete.name}</strong>? This cannot be undone.</p>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => setConfirmHolidayDelete(null)}>Cancel</button>
-            <button className="btn btn-sm" style={{ background: 'var(--red)', color: '#fff', borderColor: 'var(--red)' }} onClick={confirmHolidayDeleteFn}>Remove</button>
-          </div>
-        </Modal>
-      )}
+      {/* ── Delete confirm dialogs ── */}
+      <ConfirmDialog
+        open={!!confirmHolidayDelete}
+        title="Remove holiday"
+        message={confirmHolidayDelete ? `Remove "${confirmHolidayDelete.name}"? This cannot be undone.` : ''}
+        confirmLabel="Remove"
+        onConfirm={confirmHolidayDeleteFn}
+        onCancel={() => setConfirmHolidayDelete(null)}
+      />
 
-      {deleteTarget && (
-        <Modal title="Remove member" onClose={() => setDeleteTarget(null)}>
-          <p style={{ margin: '0 0 20px', fontSize: 14 }}>Remove <strong>{deleteTarget.name}</strong> from the team? This cannot be undone.</p>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => setDeleteTarget(null)}>Cancel</button>
-            <button className="btn btn-sm" style={{ background: 'var(--red)', color: '#fff', borderColor: 'var(--red)' }} onClick={confirmDelete}>Remove</button>
-          </div>
-        </Modal>
-      )}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Remove member"
+        message={deleteTarget ? `Remove ${deleteTarget.name} from the team? This cannot be undone.` : ''}
+        confirmLabel="Remove"
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
 
       {/* ── Page header with tabs ── */}
-      <div className="page-header" style={{ alignItems: 'flex-start', flexDirection: 'column', gap: 0, paddingBottom: 0 }}>
-        <div style={{ paddingBottom: 16, width: '100%', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+      <div className="flex items-start flex-col gap-0 px-6 py-4 bg-background border-b border-border pb-0">
+        <div className="pb-4 w-full flex items-start justify-between">
           <div>
             <h1>Settings Command Center</h1>
             <p>Global configuration and administrative controls for Agency Intelligence.</p>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 0, borderTop: '1px solid var(--c6)', width: '100%', marginLeft: -28, paddingLeft: 28, marginRight: -28 }}>
+        <div className="flex gap-0 border-t border-border w-full -mx-6 px-6">
           {(['general', 'team', 'holidays'] as SettingsTab[]).map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)}
-              style={{ background: 'transparent', border: 'none', borderBottom: activeTab === tab ? '2px solid var(--navy)' : '2px solid transparent', cursor: 'pointer', padding: '10px 16px', fontFamily: 'inherit', fontWeight: 600, fontSize: 13, color: activeTab === tab ? 'var(--navy)' : 'var(--c3)', transition: 'color .12s', whiteSpace: 'nowrap', marginBottom: -1, textTransform: 'capitalize' }}>
+              className={`bg-transparent border-0 cursor-pointer px-4 py-2.5 font-semibold text-[13px] whitespace-nowrap -mb-px capitalize transition-colors ${activeTab === tab ? 'border-b-2 border-primary text-primary' : 'border-b-2 border-transparent text-muted-foreground'}`}>
               {tab === 'general' ? 'General' : tab === 'team' ? 'Team' : 'Holidays'}
             </button>
           ))}
         </div>
       </div>
 
-      <div className="page-content">
+      <div className="flex-1 overflow-auto p-6">
         {activeTab === 'general' && renderGeneral()}
         {activeTab === 'team' && renderTeam()}
         {activeTab === 'holidays' && renderHolidays()}

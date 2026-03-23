@@ -9,6 +9,10 @@ import { toast } from '../lib/toast'
 import type { PipelineItem } from '../lib/types'
 import { Select } from '../components/Select'
 import { Modal } from '../components/Modal'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
 
 function fmtEuro(n?: number | null) {
   if (!n) return '—'
@@ -61,10 +65,10 @@ const TYPE_OPTS = [
   { value: 'fixed',    label: 'Fixed — plan by month' },
 ]
 
-const STATUS_BADGE: Record<string, string> = {
-  proposal: 'badge-amber',
-  won:      'badge-green',
-  lost:     'badge-red',
+const STATUS_BADGE_VARIANT: Record<string, 'amber' | 'green' | 'red' | 'gray'> = {
+  proposal: 'amber',
+  won:      'green',
+  lost:     'red',
 }
 
 function dealToProjectType(dealType: string): 'fixed' | 'maintenance' | 'variable' {
@@ -106,14 +110,14 @@ function TypePills({ value, onChange }: { value: string; onChange: (v: string) =
     { key: 'variable',    label: 'Variable',    sub: 'Estimate per month' },
   ]
   return (
-    <div style={{ marginBottom: 16 }}>
-      <div className="form-label" style={{ marginBottom: 8 }}>Project type</div>
-      <div style={{ display: 'flex', gap: 8 }}>
+    <div className="mb-4">
+      <div className="form-label mb-2">Project type</div>
+      <div className="flex gap-2">
         {types.map(t => (
           <div key={t.key} onClick={() => onChange(t.key)}
-            style={{ flex: 1, border: `2px solid ${value === t.key ? 'var(--navy)' : 'var(--c6)'}`, borderRadius: 'var(--r)', padding: '10px', cursor: 'pointer', background: value === t.key ? 'var(--navy-light)' : '#fff', textAlign: 'center', transition: 'all .12s' }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: value === t.key ? 'var(--navy)' : 'var(--c1)' }}>{t.label}</div>
-            <div style={{ fontSize: 11, color: 'var(--c4)', marginTop: 2 }}>{t.sub}</div>
+            className={`flex-1 rounded border-2 p-[10px] cursor-pointer text-center transition-all ${value === t.key ? 'border-primary bg-[var(--navy-light)]' : 'border-border bg-white'}`}>
+            <div className={`font-bold text-[13px] ${value === t.key ? 'text-primary' : 'text-foreground'}`}>{t.label}</div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">{t.sub}</div>
           </div>
         ))}
       </div>
@@ -459,63 +463,64 @@ export function SalesView() {
 
   return (
     <div>
-      <div className="page-header">
+      <div className="flex items-center justify-between px-6 py-4 bg-background border-b border-border">
         <div>
           <h1>Sales Pipeline</h1>
-          <p style={{ color: 'var(--c3)', fontSize: 13, margin: 0 }}>Track pitches and proposals for revenue forecasting</p>
+          <p className="text-muted-foreground text-[13px] m-0">Track pitches and proposals for revenue forecasting</p>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={openAdd}>+ Add deal</button>
+        <Button size="sm" onClick={openAdd}>+ Add deal</Button>
       </div>
 
-      <div className="stats-strip" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-        <div className="stat-card" style={{ '--left-color': 'var(--amber, #d97706)' } as React.CSSProperties}>
-          <div className="stat-card-label">ACTIVE DEALS</div>
-          <div className="stat-card-value">{activeItems.length}</div>
-          <div className="stat-card-sub">{fmtEuro(totalFace)} face value</div>
+      <div className="grid grid-cols-4 gap-3 mb-4 px-6 pt-4">
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">ACTIVE DEALS</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{activeItems.length}</div>
+          <div className="text-xs text-muted-foreground mt-1">{fmtEuro(totalFace)} face value</div>
         </div>
-        <div className="stat-card" style={{ '--left-color': 'var(--navy)' } as React.CSSProperties}>
-          <div className="stat-card-label">LIKELY SCENARIO</div>
-          <div className="stat-card-value" style={{ color: 'var(--navy)' }}>{fmtEuro(totalLikely) || '—'}</div>
-          <div className="stat-card-sub">{likelyItems.length} deals at ≥50% probability</div>
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">LIKELY SCENARIO</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-primary">{fmtEuro(totalLikely) || '—'}</div>
+          <div className="text-xs text-muted-foreground mt-1">{likelyItems.length} deals at ≥50% probability</div>
         </div>
-        <div className="stat-card" style={{ '--left-color': 'var(--blue)' } as React.CSSProperties}>
-          <div className="stat-card-label">HOPEFULLY SCENARIO</div>
-          <div className="stat-card-value" style={{ color: 'var(--blue)' }}>{fmtEuro(totalHopefully) || '—'}</div>
-          <div className="stat-card-sub">{hopefulItems.length} deals at ≥25% probability</div>
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">HOPEFULLY SCENARIO</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-[#2563eb]">{fmtEuro(totalHopefully) || '—'}</div>
+          <div className="text-xs text-muted-foreground mt-1">{hopefulItems.length} deals at ≥25% probability</div>
         </div>
-        <div className="stat-card" style={{ '--left-color': 'var(--green)' } as React.CSSProperties}>
-          <div className="stat-card-label">WON</div>
-          <div className="stat-card-value" style={{ color: 'var(--green)' }}>{fmtEuro(totalWon) || '—'}</div>
-          <div className="stat-card-sub">{items.filter(i => i.status === 'won').length} deals closed</div>
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">WON</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-[#16a34a]">{fmtEuro(totalWon) || '—'}</div>
+          <div className="text-xs text-muted-foreground mt-1">{items.filter(i => i.status === 'won').length} deals closed</div>
         </div>
       </div>
 
-      <div className="page-content">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <div style={{ display: 'flex', gap: 6 }}>
+      <div className="flex-1 overflow-auto p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex gap-1.5">
             {(['active', 'all', 'won', 'lost'] as const).map(opt => (
-              <button
+              <Button
                 key={opt}
-                className={`btn btn-sm ${filter === opt ? 'btn-primary' : 'btn-secondary'}`}
+                size="sm"
+                variant={filter === opt ? 'default' : 'outline'}
                 onClick={() => setFilter(opt)}
-                style={{ textTransform: 'capitalize' }}
+                className="capitalize"
               >
                 {opt}
-              </button>
+              </Button>
             ))}
           </div>
-          <div style={{ display: 'flex', gap: 4, background: 'var(--c7)', borderRadius: 8, padding: 3 }}>
+          <div className="flex gap-1 bg-[var(--c7)] rounded-lg p-[3px]">
             <button
               onClick={() => setViewMode('list')}
               title="List view"
-              style={{ border: 'none', cursor: 'pointer', borderRadius: 6, padding: '5px 10px', background: viewMode === 'list' ? '#fff' : 'transparent', color: viewMode === 'list' ? 'var(--navy)' : 'var(--c4)', boxShadow: viewMode === 'list' ? '0 1px 3px rgba(0,0,0,.1)' : 'none', transition: 'all .12s' }}
+              className={`border-none cursor-pointer rounded px-[10px] py-[5px] transition-all ${viewMode === 'list' ? 'bg-white text-primary shadow-sm' : 'bg-transparent text-muted-foreground'}`}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
             </button>
             <button
               onClick={() => setViewMode('kanban')}
               title="Kanban view"
-              style={{ border: 'none', cursor: 'pointer', borderRadius: 6, padding: '5px 10px', background: viewMode === 'kanban' ? '#fff' : 'transparent', color: viewMode === 'kanban' ? 'var(--navy)' : 'var(--c4)', boxShadow: viewMode === 'kanban' ? '0 1px 3px rgba(0,0,0,.1)' : 'none', transition: 'all .12s' }}
+              className={`border-none cursor-pointer rounded px-[10px] py-[5px] transition-all ${viewMode === 'kanban' ? 'bg-white text-primary shadow-sm' : 'bg-transparent text-muted-foreground'}`}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="10" rx="1"/></svg>
             </button>
@@ -523,59 +528,59 @@ export function SalesView() {
         </div>
 
         {viewMode === 'kanban' ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, alignItems: 'start' }}>
+          <div className="grid grid-cols-3 gap-4 items-start">
             {([
               { status: 'proposal', label: 'Proposal', color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
-              { status: 'won',      label: 'Won',      color: 'var(--green)', bg: '#f0fdf4', border: '#bbf7d0' },
-              { status: 'lost',     label: 'Lost',     color: 'var(--red)',   bg: '#fff1f1', border: '#fecaca' },
+              { status: 'won',      label: 'Won',      color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
+              { status: 'lost',     label: 'Lost',     color: '#dc2626', bg: '#fff1f1', border: '#fecaca' },
             ] as const).map(col => {
               const colItems = items.filter(i => i.status === col.status)
               const colTotal = colItems.reduce((s, i) => s + dealTotal(i), 0)
               return (
                 <div key={col.status}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: col.bg, border: `1px solid ${col.border}`, borderRadius: '8px 8px 0 0', borderBottom: 'none' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontWeight: 700, fontSize: 13, color: col.color }}>{col.label}</span>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: col.color, background: col.border, borderRadius: 10, padding: '1px 7px' }}>{colItems.length}</span>
+                  <div className="flex items-center justify-between px-[14px] py-[10px] rounded-t-lg border border-b-0" style={{ background: col.bg, borderColor: col.border }}>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-[13px]" style={{ color: col.color }}>{col.label}</span>
+                      <span className="text-[11px] font-semibold rounded-[10px] px-[7px] py-[1px]" style={{ color: col.color, background: col.border }}>{colItems.length}</span>
                     </div>
-                    {colTotal > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--c3)' }}>{fmtEuro(colTotal)}</span>}
+                    {colTotal > 0 && <span className="text-[11px] font-semibold text-muted-foreground">{fmtEuro(colTotal)}</span>}
                   </div>
-                  <div style={{ border: `1px solid ${col.border}`, borderTop: 'none', borderRadius: '0 0 8px 8px', minHeight: 80, background: '#fafafa' }}>
+                  <div className="rounded-b-lg border border-t-0 min-h-[80px] bg-[#fafafa]" style={{ borderColor: col.border }}>
                     {colItems.length === 0 ? (
-                      <div style={{ padding: '24px 14px', textAlign: 'center', color: 'var(--c5)', fontSize: 12 }}>No deals</div>
+                      <div className="px-[14px] py-6 text-center text-muted-foreground text-xs">No deals</div>
                     ) : colItems.map((item, idx) => {
                       const name = item.company_name ?? item.client?.name ?? '—'
                       const total = dealTotal(item)
                       return (
-                        <div key={item.id} style={{ padding: '12px 14px', background: '#fff', borderBottom: idx < colItems.length - 1 ? `1px solid ${col.border}` : 'none', borderRadius: idx === colItems.length - 1 ? '0 0 8px 8px' : 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6, marginBottom: 6 }}>
+                        <div key={item.id} className={`px-[14px] py-3 bg-white ${idx < colItems.length - 1 ? 'border-b' : 'rounded-b-lg'}`} style={{ borderColor: col.border }}>
+                          <div className="flex items-start justify-between gap-1.5 mb-1.5">
                             <div>
-                              <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--c1)', lineHeight: 1.3 }}>{item.title}</div>
-                              <div style={{ fontSize: 11, color: 'var(--c3)', marginTop: 2 }}>{name}</div>
+                              <div className="font-bold text-[13px] text-foreground leading-tight">{item.title}</div>
+                              <div className="text-[11px] text-muted-foreground mt-0.5">{name}</div>
                             </div>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: item.probability >= 75 ? 'var(--green)' : item.probability >= 50 ? 'var(--navy)' : 'var(--amber, #d97706)', flexShrink: 0 }}>{item.probability}%</span>
+                            <span className={`text-[11px] font-bold shrink-0 ${item.probability >= 75 ? 'text-[#16a34a]' : item.probability >= 50 ? 'text-primary' : 'text-[#d97706]'}`}>{item.probability}%</span>
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+                          <div className="flex items-center gap-1.5 mb-2 flex-wrap">
                             {item.deal_type === 'monthly'
-                              ? <span className="badge badge-blue" style={{ fontSize: 10 }}>Monthly</span>
+                              ? <Badge variant="blue" className="text-[10px]">Monthly</Badge>
                               : item.deal_type === 'fixed'
-                              ? <span className="badge badge-navy" style={{ fontSize: 10 }}>Fixed</span>
-                              : <span className="badge badge-gray" style={{ fontSize: 10 }}>One-time</span>}
-                            {total > 0 && <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--c1)', fontVariantNumeric: 'tabular-nums' }}>
+                              ? <Badge variant="navy" className="text-[10px]">Fixed</Badge>
+                              : <Badge variant="gray" className="text-[10px]">One-time</Badge>}
+                            {total > 0 && <span className="text-xs font-bold text-foreground tabular-nums">
                               {item.deal_type === 'monthly' ? `${fmtEuro(item.estimated_amount)}/mo` : fmtEuro(total)}
                             </span>}
-                            {item.expected_month && <span style={{ fontSize: 11, color: 'var(--c4)' }}>{fmtMonth(item.expected_month)}</span>}
+                            {item.expected_month && <span className="text-[11px] text-muted-foreground">{fmtMonth(item.expected_month)}</span>}
                           </div>
-                          {item.description && <div style={{ fontSize: 11, color: 'var(--c4)', marginBottom: 8, lineHeight: 1.4 }}>{item.description}</div>}
-                          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                          {item.description && <div className="text-[11px] text-muted-foreground mb-2 leading-snug">{item.description}</div>}
+                          <div className="flex gap-1 flex-wrap">
                             {item.status !== 'won' && item.status !== 'lost' && (
                               <>
-                                <button className="btn btn-xs" style={{ color: 'var(--green)', border: '1px solid var(--green)', padding: '2px 7px', fontSize: 10, fontWeight: 700 }} onClick={() => openWon(item)}>Won ✓</button>
-                                <button className="btn btn-xs" style={{ color: 'var(--red)', border: '1px solid var(--red)', padding: '2px 7px', fontSize: 10, fontWeight: 700 }} onClick={() => setLostTarget(item)}>Lost ✗</button>
+                                <Button size="xs" variant="outline" className="text-[#16a34a] border-[#16a34a] text-[10px] font-bold px-[7px] py-[2px]" onClick={() => openWon(item)}>Won ✓</Button>
+                                <Button size="xs" variant="outline" className="text-[#dc2626] border-[#dc2626] text-[10px] font-bold px-[7px] py-[2px]" onClick={() => setLostTarget(item)}>Lost ✗</Button>
                               </>
                             )}
-                            <button className="btn btn-secondary btn-xs" onClick={() => openEdit(item)}>Edit</button>
-                            <button className="btn btn-xs" style={{ color: 'var(--c4)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', fontSize: 13 }} onClick={() => setDeleteTarget(item)}>✕</button>
+                            <Button variant="outline" size="xs" onClick={() => openEdit(item)}>Edit</Button>
+                            <Button variant="ghost" size="xs" className="text-muted-foreground" onClick={() => setDeleteTarget(item)}>✕</Button>
                           </div>
                         </div>
                       )
@@ -586,12 +591,12 @@ export function SalesView() {
             })}
           </div>
         ) : (
-        <div className="card">
+        <Card>
           {filtered.length === 0 ? (
-            <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>
+            <CardContent className="py-8 text-center text-muted-foreground text-[13px]">
               No {filter === 'active' ? 'active ' : ''}deals.{' '}
-              <span className="table-link" onClick={openAdd}>Add one</span>
-            </div>
+              <span className="font-medium text-primary hover:underline cursor-pointer" onClick={openAdd}>Add one</span>
+            </CardContent>
           ) : (
             <table>
               <thead>
@@ -600,8 +605,8 @@ export function SalesView() {
                   <th>COMPANY</th>
                   <th>TITLE</th>
                   <th>TYPE</th>
-                  <th className="th-right">AMOUNT</th>
-                  <th className="th-right">PROB</th>
+                  <th className="text-right">AMOUNT</th>
+                  <th className="text-right">PROB</th>
                   <th>SCENARIO</th>
                   <th>PERIOD</th>
                   <th></th>
@@ -611,58 +616,54 @@ export function SalesView() {
                 {filtered.map(item => {
                   const name = item.company_name ?? item.client?.name ?? '—'
                   const total = dealTotal(item)
-                  const scenarioLabel = item.status === 'won' ? { label: 'Won', cls: 'badge-green' }
-                    : item.status === 'lost' ? { label: 'Lost', cls: 'badge-red' }
-                    : item.probability >= 75 ? { label: 'Likely', cls: 'badge-navy' }
-                    : item.probability >= 50 ? { label: 'Likely', cls: 'badge-navy' }
-                    : item.probability >= 25 ? { label: 'Hopefully', cls: 'badge-blue' }
-                    : { label: 'Stretch', cls: 'badge-gray' }
+                  const scenarioLabel = item.status === 'won' ? { label: 'Won', variant: 'green' as const }
+                    : item.status === 'lost' ? { label: 'Lost', variant: 'red' as const }
+                    : item.probability >= 50 ? { label: 'Likely', variant: 'navy' as const }
+                    : item.probability >= 25 ? { label: 'Hopefully', variant: 'blue' as const }
+                    : { label: 'Stretch', variant: 'gray' as const }
                   return (
                     <tr key={item.id}>
                       <td>
-                        <span className={`badge ${STATUS_BADGE[item.status] ?? 'badge-gray'}`} style={{ fontSize: 10, textTransform: 'capitalize' }}>
+                        <Badge variant={STATUS_BADGE_VARIANT[item.status] ?? 'gray'} className="text-[10px] capitalize">
                           {item.status}
-                        </span>
+                        </Badge>
                       </td>
-                      <td style={{ fontSize: 13, color: 'var(--c1)', fontWeight: 600 }}>{name}</td>
-                      <td style={{ fontWeight: 700 }}>
+                      <td className="text-[13px] text-foreground font-semibold">{name}</td>
+                      <td className="font-bold">
                         {item.title}
                         {item.description && (
-                          <div style={{ fontSize: 11, color: 'var(--c4)', fontWeight: 400, marginTop: 2 }}>{item.description}</div>
+                          <div className="text-[11px] text-muted-foreground font-normal mt-0.5">{item.description}</div>
                         )}
                       </td>
                       <td>
                         {item.deal_type === 'monthly'
-                          ? <span className="badge badge-blue" style={{ fontSize: 10 }}>Monthly</span>
+                          ? <Badge variant="blue" className="text-[10px]">Monthly</Badge>
                           : item.deal_type === 'fixed'
-                          ? <span className="badge badge-navy" style={{ fontSize: 10 }}>Fixed</span>
-                          : <span className="badge badge-gray" style={{ fontSize: 10 }}>One-time</span>}
+                          ? <Badge variant="navy" className="text-[10px]">Fixed</Badge>
+                          : <Badge variant="gray" className="text-[10px]">One-time</Badge>}
                       </td>
-                      <td className="td-right text-mono">
+                      <td className="text-right">
                         {item.deal_type === 'fixed' && item.monthly_schedule?.length ? (
                           fmtEuro(total)
                         ) : item.estimated_amount ? (
                           item.deal_type === 'monthly'
-                            ? <>{fmtEuro(item.estimated_amount)}<span style={{ color: 'var(--c4)', fontSize: 11 }}>/mo</span></>
+                            ? <>{fmtEuro(item.estimated_amount)}<span className="text-muted-foreground text-[11px]">/mo</span></>
                             : fmtEuro(item.estimated_amount)
                         ) : '—'}
                       </td>
-                      <td className="td-right">
-                        <span style={{
-                          fontSize: 12, fontWeight: 700,
-                          color: item.probability >= 75 ? 'var(--green)' : item.probability >= 50 ? 'var(--navy)' : 'var(--amber, #d97706)'
-                        }}>
+                      <td className="text-right">
+                        <span className={`text-xs font-bold ${item.probability >= 75 ? 'text-[#16a34a]' : item.probability >= 50 ? 'text-primary' : 'text-[#d97706]'}`}>
                           {item.probability}%
                         </span>
                       </td>
                       <td>
-                        <span className={`badge ${scenarioLabel.cls}`} style={{ fontSize: 10 }}>
+                        <Badge variant={scenarioLabel.variant} className="text-[10px]">
                           {scenarioLabel.label}
-                        </span>
+                        </Badge>
                       </td>
-                      <td style={{ fontSize: 12, color: 'var(--c2)' }}>
+                      <td className="text-xs text-[#374151]">
                         {item.deal_type === 'fixed' && item.monthly_schedule?.length ? (
-                          <span style={{ fontSize: 11, color: 'var(--c4)' }}>
+                          <span className="text-[11px] text-muted-foreground">
                             {item.monthly_schedule.length} payment{item.monthly_schedule.length !== 1 ? 's' : ''}
                           </span>
                         ) : item.expected_month
@@ -672,27 +673,15 @@ export function SalesView() {
                           : '—'}
                       </td>
                       <td>
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'nowrap' }}>
+                        <div className="flex gap-1.5 items-center flex-nowrap">
                           {item.status !== 'won' && item.status !== 'lost' && (
                             <>
-                              <button
-                                className="btn btn-xs"
-                                style={{ color: 'var(--green)', border: '1px solid var(--green)', borderRadius: 6, padding: '2px 8px', fontWeight: 700, fontSize: 11 }}
-                                onClick={() => openWon(item)}
-                              >Won ✓</button>
-                              <button
-                                className="btn btn-xs"
-                                style={{ color: 'var(--red)', border: '1px solid var(--red)', borderRadius: 6, padding: '2px 8px', fontWeight: 700, fontSize: 11 }}
-                                onClick={() => setLostTarget(item)}
-                              >Lost ✗</button>
+                              <Button size="xs" variant="outline" className="text-[#16a34a] border-[#16a34a] font-bold text-[11px]" onClick={() => openWon(item)}>Won ✓</Button>
+                              <Button size="xs" variant="outline" className="text-[#dc2626] border-[#dc2626] font-bold text-[11px]" onClick={() => setLostTarget(item)}>Lost ✗</Button>
                             </>
                           )}
-                          <button className="btn btn-secondary btn-xs" onClick={() => openEdit(item)}>Edit</button>
-                          <button
-                            className="btn btn-xs"
-                            style={{ color: 'var(--red)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px' }}
-                            onClick={() => setDeleteTarget(item)}
-                          >✕</button>
+                          <Button variant="outline" size="xs" onClick={() => openEdit(item)}>Edit</Button>
+                          <Button variant="ghost" size="xs" className="text-[#dc2626]" onClick={() => setDeleteTarget(item)}>✕</Button>
                         </div>
                       </td>
                     </tr>
@@ -701,49 +690,49 @@ export function SalesView() {
               </tbody>
             </table>
           )}
-        </div>
+        </Card>
         )}
 
         {/* Forecast by month */}
         {forecastRows.length > 0 && (
           <>
-            <div className="section-bar" style={{ marginTop: 24, marginBottom: 10 }}>
+            <div className="flex items-center justify-between mt-6 mb-[10px]">
               <h2>Forecast by Month</h2>
-              <span style={{ fontSize: 12, color: 'var(--c4)' }}>active deals · scenario-based</span>
+              <span className="text-xs text-muted-foreground">active deals · scenario-based</span>
             </div>
-            <div className="card">
+            <Card>
               <table>
                 <thead>
                   <tr>
                     <th>MONTH</th>
-                    <th className="th-right">DEALS</th>
-                    <th className="th-right">FACE VALUE</th>
-                    <th className="th-right" style={{ color: 'var(--navy)' }}>LIKELY (≥50%)</th>
-                    <th className="th-right" style={{ color: 'var(--blue)' }}>HOPEFULLY (≥25%)</th>
+                    <th className="text-right">DEALS</th>
+                    <th className="text-right">FACE VALUE</th>
+                    <th className="text-right text-primary">LIKELY (≥50%)</th>
+                    <th className="text-right text-[#2563eb]">HOPEFULLY (≥25%)</th>
                   </tr>
                 </thead>
                 <tbody>
                   {forecastRows.map(([key, g]) => (
                     <tr key={key}>
-                      <td style={{ fontWeight: 600 }}>{fmtMonth(key)}</td>
-                      <td className="td-right text-mono" style={{ color: 'var(--c3)' }}>{g.count}</td>
-                      <td className="td-right text-mono">{fmtEuro(g.face)}</td>
-                      <td className="td-right text-mono" style={{ color: 'var(--navy)', fontWeight: 700 }}>{g.likely > 0 ? fmtEuro(g.likely) : '—'}</td>
-                      <td className="td-right text-mono" style={{ color: 'var(--blue)', fontWeight: 700 }}>{g.hopefully > 0 ? fmtEuro(g.hopefully) : '—'}</td>
+                      <td className="font-semibold">{fmtMonth(key)}</td>
+                      <td className="text-right text-muted-foreground">{g.count}</td>
+                      <td className="text-right">{fmtEuro(g.face)}</td>
+                      <td className="text-right text-primary font-bold">{g.likely > 0 ? fmtEuro(g.likely) : '—'}</td>
+                      <td className="text-right text-[#2563eb] font-bold">{g.hopefully > 0 ? fmtEuro(g.hopefully) : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr style={{ background: 'var(--c7)', borderTop: '2px solid var(--c6)' }}>
-                    <td style={{ fontWeight: 700, fontSize: 12, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total</td>
-                    <td className="td-right text-mono" style={{ color: 'var(--c3)' }}>{activeItems.length}</td>
-                    <td className="td-right text-mono" style={{ fontWeight: 700 }}>{fmtEuro(totalFace)}</td>
-                    <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--navy)' }}>{fmtEuro(totalLikely) || '—'}</td>
-                    <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--blue)' }}>{fmtEuro(totalHopefully) || '—'}</td>
+                  <tr className="bg-[var(--c7)] border-t-2 border-border">
+                    <td className="font-bold text-xs text-muted-foreground uppercase tracking-[0.5px]">Total</td>
+                    <td className="text-right text-muted-foreground">{activeItems.length}</td>
+                    <td className="text-right font-bold">{fmtEuro(totalFace)}</td>
+                    <td className="text-right font-bold text-primary">{fmtEuro(totalLikely) || '—'}</td>
+                    <td className="text-right font-bold text-[#2563eb]">{fmtEuro(totalHopefully) || '—'}</td>
                   </tr>
                 </tfoot>
               </table>
-            </div>
+            </Card>
           </>
         )}
       </div>
@@ -754,19 +743,19 @@ export function SalesView() {
         title={editing ? 'Edit deal' : 'Add deal'}
         onClose={() => setShowModal(false)}
       >
-        <div className="form-row" style={{ marginBottom: 14 }}>
-          <div className="form-group">
-            <label className="form-label">Company / Prospect <span style={{ color: 'var(--red)' }}>*</span></label>
+        <div className="grid grid-cols-2 gap-4 mb-[14px]">
+          <div className="mb-4">
+            <label className="form-label">Company / Prospect <span className="text-[#dc2626]">*</span></label>
             <input value={form.company_name} onChange={f('company_name')} placeholder="e.g. Acme Corp" autoFocus={!editing} />
           </div>
-          <div className="form-group">
-            <label className="form-label">Title <span style={{ color: 'var(--red)' }}>*</span></label>
+          <div className="mb-4">
+            <label className="form-label">Title <span className="text-[#dc2626]">*</span></label>
             <input value={form.title} onChange={f('title')} placeholder="e.g. Website redesign" />
           </div>
         </div>
 
-        <div className="form-row" style={{ marginBottom: 14 }}>
-          <div className="form-group">
+        <div className="grid grid-cols-2 gap-4 mb-[14px]">
+          <div className="mb-4">
             <label className="form-label">Status</label>
             <Select
               value={form.status}
@@ -774,7 +763,7 @@ export function SalesView() {
               options={STATUS_OPTS}
             />
           </div>
-          <div className="form-group">
+          <div className="mb-4">
             <label className="form-label">Probability</label>
             <Select
               value={form.probability}
@@ -784,7 +773,7 @@ export function SalesView() {
           </div>
         </div>
 
-        <div className="form-group" style={{ marginBottom: 14 }}>
+        <div className="mb-[14px]">
           <label className="form-label">Deal type</label>
           <Select
             value={form.deal_type}
@@ -794,14 +783,14 @@ export function SalesView() {
         </div>
 
         {form.deal_type !== 'fixed' && (
-          <div className="form-row" style={{ marginBottom: 14 }}>
-            <div className="form-group">
+          <div className="grid grid-cols-2 gap-4 mb-[14px]">
+            <div className="mb-4">
               <label className="form-label">
                 {form.deal_type === 'monthly' ? 'Amount / month (€)' : 'Amount (€)'}
               </label>
               <input type="number" value={form.estimated_amount} onChange={f('estimated_amount')} placeholder="0" />
             </div>
-            <div className="form-group">
+            <div className="mb-4">
               <label className="form-label">
                 {form.deal_type === 'monthly' ? 'Start month' : 'Expected month'}
               </label>
@@ -811,14 +800,14 @@ export function SalesView() {
         )}
 
         {form.deal_type === 'monthly' && (
-          <div className="form-group" style={{ marginBottom: 14 }}>
+          <div className="mb-[14px]">
             <label className="form-label">End month</label>
             <input type="month" value={form.expected_end_month} onChange={f('expected_end_month')} />
             {form.expected_month && form.expected_end_month && (() => {
               const count = monthCount(form.expected_month + '-01', form.expected_end_month + '-01')
               const total = Number(form.estimated_amount || 0) * count
               return (
-                <div className="form-hint">
+                <div className="text-xs text-muted-foreground mt-1">
                   {count} month{count !== 1 ? 's' : ''} · total {fmtEuro(total)}
                 </div>
               )
@@ -827,86 +816,75 @@ export function SalesView() {
         )}
 
         {form.deal_type === 'fixed' && (
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <label className="form-label" style={{ margin: 0 }}>Payment schedule</label>
-              <button className="btn btn-secondary btn-xs" onClick={addScheduleRow} type="button">+ Add month</button>
+          <div className="mb-[14px]">
+            <div className="flex items-center justify-between mb-2">
+              <label className="form-label m-0">Payment schedule</label>
+              <Button variant="outline" size="xs" onClick={addScheduleRow} type="button">+ Add month</Button>
             </div>
             {form.schedule.length === 0 && (
-              <div style={{ fontSize: 12, color: 'var(--c4)', padding: '10px 0' }}>No payments added yet.</div>
+              <div className="text-xs text-muted-foreground py-[10px]">No payments added yet.</div>
             )}
             {form.schedule.map((row, i) => (
-              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+              <div key={i} className="flex gap-2 items-center mb-1.5">
                 <input
                   type="month"
                   value={row.month}
                   onChange={e => updateScheduleRow(i, 'month', e.target.value)}
-                  style={{ flex: 1 }}
+                  className="flex-1"
                 />
-                <div style={{ position: 'relative', flex: 1 }}>
-                  <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--c3)', fontSize: 13, pointerEvents: 'none' }}>€</span>
+                <div className="relative flex-1">
+                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-[13px] pointer-events-none">€</span>
                   <input
                     type="number"
                     value={row.amount}
                     onChange={e => updateScheduleRow(i, 'amount', e.target.value)}
                     placeholder="0"
-                    style={{ paddingLeft: 22, width: '100%' }}
+                    className="pl-[22px] w-full"
                   />
                 </div>
                 <button
                   type="button"
                   onClick={() => removeScheduleRow(i)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c4)', fontSize: 16, padding: '0 4px', lineHeight: 1 }}
+                  className="bg-none border-none cursor-pointer text-muted-foreground text-base px-1 leading-none"
                 >×</button>
               </div>
             ))}
             {form.schedule.length > 0 && (
-              <div className="form-hint" style={{ textAlign: 'right' }}>
+              <div className="text-xs text-muted-foreground mt-1 text-right">
                 Total: {fmtEuro(fixedScheduleTotal())}
               </div>
             )}
           </div>
         )}
 
-        <div className="form-group" style={{ marginBottom: 14 }}>
-          <label className="form-label">Notes <span className="form-hint" style={{ display: 'inline' }}>optional</span></label>
-          <textarea value={form.notes} onChange={f('notes')} rows={2} style={{ resize: 'vertical' }} />
+        <div className="mb-[14px]">
+          <label className="form-label">Notes <span className="text-xs text-muted-foreground ml-1">optional</span></label>
+          <textarea value={form.notes} onChange={f('notes')} rows={2} className="resize-y" />
         </div>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowModal(false)}>Cancel</button>
-          <button className="btn btn-primary btn-sm" onClick={save} disabled={saving || !form.company_name || !form.title}>
+        <div className="flex gap-2 justify-end mt-2">
+          <Button variant="outline" size="sm" onClick={() => setShowModal(false)}>Cancel</Button>
+          <Button size="sm" onClick={save} disabled={saving || !form.company_name || !form.title}>
             {saving ? 'Saving…' : editing ? 'Save changes' : 'Add deal'}
-          </button>
+          </Button>
         </div>
       </Modal>
 
       {/* Delete confirm */}
-      <Modal
+      <ConfirmDialog
         open={!!deleteTarget}
         title="Remove deal"
-        onClose={() => setDeleteTarget(null)}
-        footer={
-          <>
-            <button className="btn btn-secondary btn-sm" onClick={() => setDeleteTarget(null)}>Cancel</button>
-            <button
-              className="btn btn-primary btn-sm"
-              style={{ background: 'var(--red)', borderColor: 'var(--red)' }}
-              onClick={confirmDelete}
-            >
-              Remove
-            </button>
-          </>
-        }
-      >
-        <p>Remove <strong>{deleteTarget?.title}</strong>? This cannot be undone.</p>
-      </Modal>
+        message={`Remove "${deleteTarget?.title}"? This cannot be undone.`}
+        confirmLabel="Remove"
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
 
       {/* Won modal */}
       {wonTarget && (
         <Modal open title={`Mark "${wonTarget.title}" as won`} onClose={() => setWonTarget(null)}>
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-              <input type="checkbox" checked={wonCreateProject} onChange={e => setWonCreateProject(e.target.checked)} style={{ width: 15, height: 15 }} />
+          <div className="mb-4">
+            <label className="flex items-center gap-2 cursor-pointer text-[13px] font-semibold">
+              <input type="checkbox" checked={wonCreateProject} onChange={e => setWonCreateProject(e.target.checked)} className="w-[15px] h-[15px]" />
               Create a project from this deal
             </label>
           </div>
@@ -915,16 +893,16 @@ export function SalesView() {
             <>
               <TypePills value={wonForm.type} onChange={v => setWonF('type', v)} />
 
-              <div className="form-row" style={{ marginBottom: 14 }}>
-                <div className="form-group" style={{ maxWidth: 160 }}>
+              <div className="grid grid-cols-3 gap-4 mb-[14px]">
+                <div className="mb-4" style={{ maxWidth: 160 }}>
                   <label className="form-label">Project #</label>
-                  <input value={wonForm.pn} onChange={e => setWonF('pn', e.target.value)} className="text-mono" />
+                  <input value={wonForm.pn} onChange={e => setWonF('pn', e.target.value)} className="font-mono" />
                 </div>
-                <div className="form-group">
+                <div className="mb-4">
                   <label className="form-label">Project name</label>
                   <input value={wonForm.name} onChange={e => setWonF('name', e.target.value)} autoFocus />
                 </div>
-                <div className="form-group">
+                <div className="mb-4">
                   <label className="form-label">Client</label>
                   <Select
                     value={wonShowNewClient ? '__new__' : wonForm.client_id}
@@ -932,17 +910,17 @@ export function SalesView() {
                     placeholder="— Select client —"
                     options={[...cStore.clients.map(c => ({ value: c.id, label: c.name })), { value: '__new__', label: '+ New client…' }]}
                   />
-                  {wonShowNewClient && <input style={{ marginTop: 8 }} value={wonNewClientName} onChange={e => setWonNewClientName(e.target.value)} placeholder="New client name…" />}
+                  {wonShowNewClient && <input className="mt-2" value={wonNewClientName} onChange={e => setWonNewClientName(e.target.value)} placeholder="New client name…" />}
                 </div>
               </div>
 
-              <div className="form-row" style={{ marginBottom: 14 }}>
-                <div className="form-group">
+              <div className="grid grid-cols-2 gap-4 mb-[14px]">
+                <div className="mb-4">
                   <label className="form-label">Project Manager</label>
                   <Select value={wonForm.pm} onChange={v => setWonF('pm', v)} options={pmOptions} />
                 </div>
                 {wonForm.type !== 'variable' && (
-                  <div className="form-group">
+                  <div className="mb-4">
                     <label className="form-label">{wonForm.type === 'maintenance' ? 'Monthly amount (€)' : 'Project value (€)'}</label>
                     <input type="number" value={wonForm.value} onChange={e => setWonF('value', e.target.value)} placeholder={wonForm.type === 'maintenance' ? '2000' : '45000'} />
                   </div>
@@ -951,23 +929,23 @@ export function SalesView() {
 
               {wonForm.type === 'maintenance' && (
                 <>
-                  <div className="form-row" style={{ marginBottom: 14 }}>
-                    <div className="form-group">
+                  <div className="grid grid-cols-2 gap-4 mb-[14px]">
+                    <div className="mb-4">
                       <label className="form-label">Starting from</label>
                       <input type="month" value={wonForm.starting_from} onChange={e => setWonF('starting_from', e.target.value)} />
                     </div>
-                    <div className="form-group" style={{ maxWidth: 140 }}>
+                    <div className="mb-4" style={{ maxWidth: 140 }}>
                       <label className="form-label">Number of months</label>
                       <input type="number" min="1" max="60" value={wonForm.num_months} onChange={e => setWonF('num_months', e.target.value)} placeholder="12" />
                     </div>
                   </div>
                   {wonForm.value && wonForm.num_months && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, padding: '8px 12px', background: 'var(--c7)', borderRadius: 6 }}>
-                      <span style={{ fontSize: 12, color: 'var(--c3)' }}>Initial value:</span>
-                      <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--navy)' }}>
+                    <div className="flex items-center gap-2 mb-[10px] px-3 py-2 bg-[var(--c7)] rounded">
+                      <span className="text-xs text-muted-foreground">Initial value:</span>
+                      <span className="text-sm font-bold text-primary">
                         {(parseFloat(wonForm.value) * Math.max(1, Math.min(60, parseInt(wonForm.num_months) || 12))).toLocaleString()} €
                       </span>
-                      <span style={{ fontSize: 11, color: 'var(--c4)' }}>({wonForm.value} €/mo × {wonForm.num_months} mo)</span>
+                      <span className="text-[11px] text-muted-foreground">({wonForm.value} €/mo × {wonForm.num_months} mo)</span>
                     </div>
                   )}
                 </>
@@ -975,37 +953,37 @@ export function SalesView() {
 
               {wonForm.type === 'variable' && (
                 <>
-                  <div className="form-row" style={{ marginBottom: 12 }}>
-                    <div className="form-group">
+                  <div className="grid grid-cols-4 gap-4 mb-3">
+                    <div className="mb-4">
                       <label className="form-label">Start month</label>
                       <input type="month" value={wonForm.start_month} onChange={e => setWonF('start_month', e.target.value)} />
                     </div>
-                    <div className="form-group">
+                    <div className="mb-4">
                       <label className="form-label">End month</label>
                       <input type="month" value={wonForm.end_month} onChange={e => setWonF('end_month', e.target.value)} />
                     </div>
-                    <div className="form-group" style={{ maxWidth: 140 }}>
+                    <div className="mb-4" style={{ maxWidth: 140 }}>
                       <label className="form-label">Default amount (€)</label>
                       <input type="number" value={wonForm.value} onChange={e => { setWonF('value', e.target.value); setWonVarRows(rows => rows.map(r => ({ ...r, amount: e.target.value }))) }} placeholder="0" />
                     </div>
-                    <div className="form-group" style={{ maxWidth: 200 }}>
+                    <div className="mb-4" style={{ maxWidth: 200 }}>
                       <label className="form-label">Set all rows to</label>
-                      <div style={{ display: 'flex', gap: 6 }}>
+                      <div className="flex gap-1.5">
                         <select value={wonForm.probability} onChange={e => setWonF('probability', e.target.value)}
-                          style={{ flex: 1, height: 42, border: '1px solid var(--c6)', borderRadius: 10, padding: '0 10px', fontSize: 14, background: '#fff', fontFamily: 'inherit' }}>
+                          className="flex-1 h-[42px] border border-border rounded-[10px] px-[10px] text-sm bg-white font-[inherit]">
                           <option value="25">25%</option>
                           <option value="50">50%</option>
                           <option value="100">100%</option>
                         </select>
-                        <button type="button" className="btn btn-secondary btn-sm"
+                        <Button type="button" variant="outline" size="sm"
                           onClick={() => setWonVarRows(rows => rows.map(r => ({ ...r, probability: wonForm.probability })))}>
                           Apply
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   </div>
                   {wonVarRows.length > 0 && wonForm.start_month && wonForm.end_month && (
-                    <div style={{ marginBottom: 4, fontSize: 12, color: 'var(--c3)', textAlign: 'right' }}>
+                    <div className="mb-1 text-xs text-muted-foreground text-right">
                       {(() => {
                         const total = wonVarRows.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0)
                         const weighted = wonVarRows.reduce((s, r) => s + (parseFloat(r.amount) || 0) * (parseInt(r.probability) || 0) / 100, 0)
@@ -1014,24 +992,24 @@ export function SalesView() {
                     </div>
                   )}
                   {wonVarRows.length > 0 && (
-                    <div style={{ marginBottom: 12, border: '1px solid var(--c6)', borderRadius: 'var(--r)', overflow: 'hidden' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <div className="mb-3 border border-border rounded overflow-hidden">
+                      <table className="w-full border-collapse">
                         <thead>
-                          <tr style={{ background: 'var(--c7)', borderBottom: '1px solid var(--c6)' }}>
-                            <th style={{ padding: '8px 14px', fontWeight: 600, fontSize: 11, textAlign: 'left', color: 'var(--c3)' }}>MONTH</th>
-                            <th style={{ padding: '8px 14px', fontWeight: 600, fontSize: 11, textAlign: 'right', color: 'var(--c3)' }}>AMOUNT (€)</th>
-                            <th style={{ padding: '8px 14px', fontWeight: 600, fontSize: 11, textAlign: 'right', color: 'var(--c3)' }}>LIKELIHOOD</th>
+                          <tr className="bg-[var(--c7)] border-b border-border">
+                            <th className="px-[14px] py-2 font-semibold text-[11px] text-left text-muted-foreground">MONTH</th>
+                            <th className="px-[14px] py-2 font-semibold text-[11px] text-right text-muted-foreground">AMOUNT (€)</th>
+                            <th className="px-[14px] py-2 font-semibold text-[11px] text-right text-muted-foreground">LIKELIHOOD</th>
                           </tr>
                         </thead>
                         <tbody>
                           {wonVarRows.map((r, i) => (
-                            <tr key={r.month} style={{ borderBottom: i < wonVarRows.length - 1 ? '1px solid var(--c6)' : undefined }}>
-                              <td style={{ padding: '8px 14px', fontWeight: 600, fontSize: 13 }}>{new Date(r.month + '-01T00:00:00').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}</td>
-                              <td style={{ padding: '6px 8px' }}>
-                                <input type="number" value={r.amount} onChange={e => setWonVarRows(rows => rows.map((row, idx) => idx === i ? { ...row, amount: e.target.value } : row))} placeholder="0" style={{ width: '100%', textAlign: 'right', padding: '6px 10px', fontSize: 13, border: '1px solid var(--c6)', borderRadius: 4 }} />
+                            <tr key={r.month} className={i < wonVarRows.length - 1 ? 'border-b border-border' : ''}>
+                              <td className="px-[14px] py-2 font-semibold text-[13px]">{new Date(r.month + '-01T00:00:00').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}</td>
+                              <td className="px-2 py-1.5">
+                                <input type="number" value={r.amount} onChange={e => setWonVarRows(rows => rows.map((row, idx) => idx === i ? { ...row, amount: e.target.value } : row))} placeholder="0" className="w-full text-right px-[10px] py-1.5 text-[13px] border border-border rounded" />
                               </td>
-                              <td style={{ padding: '6px 8px', minWidth: 110 }}>
-                                <select value={r.probability} onChange={e => setWonVarRows(rows => rows.map((row, idx) => idx === i ? { ...row, probability: e.target.value } : row))} style={{ width: '100%', height: 36, border: '1px solid var(--c6)', borderRadius: 6, padding: '0 8px', fontSize: 13, background: '#fff', fontFamily: 'inherit' }}>
+                              <td className="px-2 py-1.5 min-w-[110px]">
+                                <select value={r.probability} onChange={e => setWonVarRows(rows => rows.map((row, idx) => idx === i ? { ...row, probability: e.target.value } : row))} className="w-full h-9 border border-border rounded px-2 text-[13px] bg-white font-[inherit]">
                                   <option value="25">25%</option><option value="50">50%</option><option value="100">100%</option>
                                 </select>
                               </td>
@@ -1042,7 +1020,7 @@ export function SalesView() {
                     </div>
                   )}
                   {(!wonForm.start_month || !wonForm.end_month) && (
-                    <div className="info-box">
+                    <div className="rounded-lg border border-[#bfdbfe] bg-[#eff6ff] px-3 py-2 text-sm text-[#2563eb] flex items-center gap-2">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                       Set start and end months to generate the per-month plan table.
                     </div>
@@ -1051,7 +1029,7 @@ export function SalesView() {
               )}
 
               {wonForm.type === 'maintenance' && wonForm.num_months && wonForm.starting_from && (
-                <div className="info-box">
+                <div className="rounded-lg border border-[#bfdbfe] bg-[#eff6ff] px-3 py-2 text-sm text-[#2563eb] flex items-center gap-2">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                   {wonForm.num_months} monthly invoice plans will be created from {wonForm.starting_from}.
                 </div>
@@ -1059,40 +1037,27 @@ export function SalesView() {
             </>
           )}
 
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => setWonTarget(null)}>Cancel</button>
-            <button
-              className="btn btn-primary btn-sm"
-              style={{ background: 'var(--green)', borderColor: 'var(--green)' }}
+          <div className="flex gap-2 justify-end mt-4">
+            <Button variant="outline" size="sm" onClick={() => setWonTarget(null)}>Cancel</Button>
+            <Button size="sm" className="bg-[#16a34a] border-[#16a34a] hover:bg-[#15803d]"
               onClick={confirmWon}
               disabled={wonSaving || (wonCreateProject && !wonForm.name.trim())}
             >
               {wonSaving ? 'Saving…' : wonCreateProject ? 'Won + Create Project' : 'Mark as Won'}
-            </button>
+            </Button>
           </div>
         </Modal>
       )}
 
       {/* Lost confirm */}
-      <Modal
+      <ConfirmDialog
         open={!!lostTarget}
         title="Mark as lost"
-        onClose={() => setLostTarget(null)}
-        footer={
-          <>
-            <button className="btn btn-secondary btn-sm" onClick={() => setLostTarget(null)}>Cancel</button>
-            <button
-              className="btn btn-primary btn-sm"
-              style={{ background: 'var(--red)', borderColor: 'var(--red)' }}
-              onClick={confirmLost}
-            >
-              Mark as Lost
-            </button>
-          </>
-        }
-      >
-        <p>Mark <strong>{lostTarget?.title}</strong> as lost?</p>
-      </Modal>
+        message={`Mark "${lostTarget?.title}" as lost?`}
+        confirmLabel="Mark as Lost"
+        onConfirm={confirmLost}
+        onCancel={() => setLostTarget(null)}
+      />
     </div>
   )
 }

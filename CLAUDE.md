@@ -1,34 +1,47 @@
 # Agency Intelligence OS
 
 ## Project overview
-React + TypeScript + Vite frontend for an agency management tool ("Agency Intelligence OS"). Supabase backend. No Tailwind — custom CSS design system only.
+React + TypeScript + Vite frontend for an agency management tool ("Agency Intelligence OS"). Supabase backend. Uses Tailwind CSS v4 + shadcn/ui components, with a custom CSS design system (`design-system.css`) for base layout and typography.
 
 ## Tech stack
 - React 19, TypeScript (strict), Vite
+- Tailwind CSS v4 via `@tailwindcss/vite`
+- shadcn/ui components in `src/components/ui/` (customised to match design system)
 - Zustand v5 for state management
 - Supabase JS client (`src/lib/supabase.ts`) — uses `createClient<any>` intentionally (not generated types)
 - React Router v7
-- Custom CSS variables in `src/design-system.css`
+- CSS variables in `src/design-system.css` + tokens in `src/index.css`
 
 ## Key conventions
 
-### CSS classes
-Use existing classes from `design-system.css`. Never add inline styles for things already covered:
-- Layout: `page-header`, `page-content`, `app-layout`, `app-main`
-- Cards: `card`, `card-body`
-- Stats: `stats-strip`, `stat-card`, `stat-card-label`, `stat-card-value`, `stat-card-sub`
-- Sections: `section-bar`
-- Badges: `badge`, `badge-green`, `badge-blue`, `badge-navy`, `badge-amber`, `badge-gray`, `badge-red`
-- Forms: `form-group`, `form-label`, `form-row`, `form-hint`
-- Buttons: `btn`, `btn-primary`, `btn-secondary`, `btn-ghost`, `btn-sm`, `btn-xs`
-- Tables: `th-right`, `td-right`, `text-mono`, `table-link`
-- Alerts: `alert`, `alert-red`, `alert-amber`
-- Modals: `modal-overlay`, `modal-box`, `modal-header`, `modal-body`, `modal-footer`, `modal-close`
-- Sidebar: `sidebar`, `sidebar-nav`, `sidebar-item`, `sidebar-group-label`, `sidebar-divider`
+### Components — always prefer these over raw HTML or CSS classes
+- **Buttons**: `<Button>` from `@/components/ui/button` — variants: `default` (navy), `outline` (secondary), `ghost`, `destructive` (red) — sizes: `default`/`sm` (34px), `xs` (28px), `lg` (42px)
+- **Badges**: `<Badge variant="...">` from `@/components/ui/badge` — variants: `green`, `amber`, `blue`, `navy`, `red`, `gray`, `secondary`
+- **Cards**: `<Card>` + `<CardContent>` from `@/components/ui/card` — matches old `.card`/`.card-body` styles
+- **Modals**: `<Modal>` from `src/components/Modal` — props: `open?`, `title`, `onClose`, `children`, `footer?`, `maxWidth?`
+- **Delete confirmations**: `<ConfirmDialog>` from `src/components/ConfirmDialog`
 
-### CSS variables
+### Tailwind for layout and spacing
+Use Tailwind utilities instead of custom CSS classes or inline styles:
+- Layout: `flex items-center justify-between px-6 py-5 bg-white border-b border-border` (page header)
+- Content area: `flex-1 overflow-auto p-6`
+- Section headers: `flex items-center justify-between mb-3`
+- Stats grid: `grid grid-cols-4 gap-4 mb-6`
+- Stat card: `bg-white rounded-[10px] border border-border p-4`
+- Form group: `mb-4`
+- Form row: `grid grid-cols-2 gap-4`
+- Form hint: `text-xs text-muted-foreground mt-1`
+- Alerts: `rounded-lg border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-sm text-[#be123c]`
+
+### Design tokens (CSS variables)
+Still available from `design-system.css`:
 `--navy`, `--green`, `--red`, `--amber`, `--blue`, `--navy-light`
 `--c0` (darkest) through `--c7` (lightest) for grays
+
+Tailwind also has: `text-primary` = navy, `text-muted-foreground` = gray, `border-border` = `#e8e3ea`
+
+### Sidebar / layout (keep as CSS classes — don't migrate)
+`sidebar`, `sidebar-nav`, `sidebar-item`, `sidebar-group-label`, `sidebar-divider`, `app-layout`, `app-main`
 
 ### Stores (Zustand)
 All stores in `src/stores/`. Pattern: `useXxxStore()`. Key stores:

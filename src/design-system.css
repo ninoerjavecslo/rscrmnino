@@ -7,7 +7,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,0&display=swap');
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after { box-sizing: border-box; }
 
 @keyframes slideIn {
   from { opacity: 0; transform: translateY(10px); }
@@ -68,9 +68,32 @@ html, body, #root {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Manrope for headings */
-h1, h2, h3, h4, h5 {
-  font-family: 'Manrope', sans-serif;
+/* Manrope for headings — inside @layer base so Tailwind utilities can override */
+@layer base {
+  h1, h2, h3, h4, h5 {
+    font-family: 'Manrope', sans-serif;
+  }
+  h1 {
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -0.4px;
+    color: var(--c0);
+  }
+  h2 {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--c0);
+  }
+  h3 {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--c0);
+  }
+  h4, h5 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--c0);
+  }
 }
 
 /* Material Symbols */
@@ -85,14 +108,17 @@ h1, h2, h3, h4, h5 {
 .msym.fill { font-variation-settings: 'FILL' 1, 'wght' 300, 'GRAD' 0, 'opsz' 24; }
 
 /* ── Typography ──────────────────────────── */
-.text-xl    { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; color: var(--c0); font-family: 'Manrope', sans-serif; }
-.text-lg    { font-size: 20px; font-weight: 800; letter-spacing: -0.4px; color: var(--c0); font-family: 'Manrope', sans-serif; }
-.text-md    { font-size: 16px; font-weight: 700; letter-spacing: -0.2px; color: var(--c0); font-family: 'Manrope', sans-serif; }
-.text-sm-h  { font-size: 14px; font-weight: 700; color: var(--c1); font-family: 'Manrope', sans-serif; }
-.text-body  { font-size: 14px; font-weight: 400; color: var(--c2); line-height: 1.5; }
-.text-sm    { font-size: 13px; font-weight: 400; color: var(--c2); }
-.text-xs    { font-size: 11px; font-weight: 500; color: var(--c4); }
-.text-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; color: var(--c4); font-family: 'Manrope', sans-serif; }
+/* Legacy semantic text classes — kept in @layer base so Tailwind utilities override colors/weights */
+@layer base {
+  .text-xl    { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; color: var(--c0); font-family: 'Manrope', sans-serif; }
+  .text-lg    { font-size: 20px; font-weight: 800; letter-spacing: -0.4px; color: var(--c0); font-family: 'Manrope', sans-serif; }
+  .text-md    { font-size: 16px; font-weight: 700; letter-spacing: -0.2px; color: var(--c0); font-family: 'Manrope', sans-serif; }
+  .text-sm-h  { font-size: 14px; font-weight: 700; color: var(--c1); font-family: 'Manrope', sans-serif; }
+  .text-body  { font-size: 14px; font-weight: 400; color: var(--c2); line-height: 1.5; }
+  .text-sm    { font-size: 13px; font-weight: 400; color: var(--c2); }
+  .text-xs    { font-size: 11px; font-weight: 500; color: var(--c4); }
+  .text-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; color: var(--c4); font-family: 'Manrope', sans-serif; }
+}
 .text-mono  { font-variant-numeric: tabular-nums; font-family: 'Manrope', sans-serif; font-weight: 800; }
 .text-muted { color: var(--c3) !important; }
 .text-navy  { color: var(--navy) !important; }
@@ -255,7 +281,7 @@ select {
 table  { width: 100%; border-collapse: collapse; }
 th {
   text-align: left;
-  padding: 11px 20px;
+  padding: 9px 16px;
   background: var(--c8);            /* #f4f2f6 */
   border-top: 1px solid var(--c6);
   border-bottom: 1px solid var(--c6);
@@ -268,11 +294,19 @@ th {
   white-space: nowrap;
 }
 td {
-  padding: 13px 20px;
+  padding: 9px 16px;
   border-bottom: 1px solid var(--c7);
-  color: var(--c1);
   font-size: 13px;
   vertical-align: middle;
+}
+@layer base {
+  td { color: var(--c1); }
+  /* Page header subtitle — p immediately after h1 in page headers */
+  h1 + p {
+    font-size: 13px;
+    color: var(--c3);
+    margin-top: 3px;
+  }
 }
 tr:last-child td { border-bottom: none; }
 tbody tr:hover td { background: var(--c7); }

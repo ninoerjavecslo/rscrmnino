@@ -10,6 +10,9 @@ import { useChangeRequestsStore } from '../stores/changeRequests'
 import { usePipelineStore } from '../stores/pipeline'
 import type { Client } from '../lib/types'
 import { Modal } from '../components/Modal'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
 
 const CURRENT_YEAR = new Date().getFullYear()
 
@@ -112,23 +115,27 @@ export function ClientsView() {
 
   return (
     <div>
-      <div className="page-header">
+      <div className="flex items-center justify-between px-6 py-4 bg-background border-b border-border">
         <div>
           <h1>Clients</h1>
           <p>Manage client relationships and invoice history</p>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>
+        <Button size="sm" onClick={() => setShowAdd(true)}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           New Client
-        </button>
+        </Button>
       </div>
 
-      <div className="page-content">
-        {store.error && <div className="alert alert-red" style={{marginBottom:16}}>Failed to load clients. Please check your connection.</div>}
+      <div className="flex-1 overflow-auto p-6">
+        {store.error && (
+          <div className="rounded-lg border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-sm text-[#be123c] mb-4">
+            Failed to load clients. Please check your connection.
+          </div>
+        )}
 
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center' }}>
-          <div style={{ position: 'relative', flex: 1, maxWidth: 360 }}>
-            <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--c4)' }}>
+        <div className="flex items-center gap-2 mb-4">
+          <div className="relative flex-1" style={{ maxWidth: 360 }}>
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
             </span>
             <input
@@ -141,32 +148,32 @@ export function ClientsView() {
         </div>
 
         {!store.loading && store.clients.length === 0 ? (
-          <div className="card">
-            <div className="card-body" style={{textAlign:'center',padding:'52px 20px'}}>
-              <div style={{fontSize:32,marginBottom:10}}>👥</div>
-              <div style={{fontWeight:700,fontSize:15,color:'var(--c2)',marginBottom:5}}>No clients yet</div>
-              <div className="text-sm" style={{marginBottom:16}}>Add your first client to get started</div>
-              <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>New Client</button>
-            </div>
-          </div>
+          <Card>
+            <CardContent className="text-center py-14 px-5">
+              <div className="text-3xl mb-2">👥</div>
+              <div className="font-bold text-[15px] text-[#374151] mb-1">No clients yet</div>
+              <div className="text-sm mb-4">Add your first client to get started</div>
+              <Button size="sm" onClick={() => setShowAdd(true)}>New Client</Button>
+            </CardContent>
+          </Card>
         ) : (
-          <div className="card">
+          <Card>
             <table>
               <thead>
                 <tr>
                   <th>Client Name</th>
-                  <th className="th-right" style={{width:80}}>Projects</th>
-                  <th className="th-right" style={{width:80}}>Pipeline</th>
+                  <th className="text-right" style={{width:80}}>Projects</th>
+                  <th className="text-right" style={{width:80}}>Pipeline</th>
                   <th style={{width:80}}>Hosting</th>
                   <th style={{width:80}}>Domains</th>
                   <th style={{width:110}}>Maintenance</th>
-                  <th className="th-right" style={{width:140}}>Invoiced YTD</th>
+                  <th className="text-right" style={{width:140}}>Invoiced YTD</th>
                   <th style={{width:80}}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {store.loading ? (
-                  <tr><td colSpan={8} style={{textAlign:'center',padding:32,color:'var(--c4)'}}>Loading…</td></tr>
+                  <tr><td colSpan={8} className="text-center text-muted-foreground" style={{padding:32}}>Loading…</td></tr>
                 ) : pagedClients.map((c: Client) => {
                   const clientProjects = pStore.projects.filter(p => p.client_id === c.id)
                   const hasHosting     = infraStore.hostingClients.some(h => h.client_id === c.id && h.status === 'active')
@@ -176,66 +183,66 @@ export function ClientsView() {
 
                   return (
                     <tr key={c.id}>
-                      <td className="table-link" style={{fontWeight:700}} onClick={() => navigate(`/clients/${c.id}`)}>{c.name}</td>
+                      <td className="font-medium text-primary hover:underline cursor-pointer font-bold" onClick={() => navigate(`/clients/${c.id}`)}>{c.name}</td>
 
-                      <td className="td-right">
+                      <td className="text-right">
                         {clientProjects.length === 0
-                          ? <span className="text-muted">—</span>
-                          : <span style={{fontWeight:600,fontSize:13}}>{clientProjects.length}</span>}
+                          ? <span className="text-muted-foreground">—</span>
+                          : <span className="font-semibold text-[13px]">{clientProjects.length}</span>}
                       </td>
 
-                      <td className="td-right">
+                      <td className="text-right">
                         {pipelineCount === 0
-                          ? <span className="text-muted">—</span>
-                          : <span className="badge badge-amber">{pipelineCount}</span>}
+                          ? <span className="text-muted-foreground">—</span>
+                          : <Badge variant="amber">{pipelineCount}</Badge>}
                       </td>
 
                       <td><YesNo yes={hasHosting} /></td>
                       <td><YesNo yes={hasDomains} /></td>
                       <td><YesNo yes={hasMaintenance} /></td>
 
-                      <td className="td-right">
+                      <td className="text-right">
                         {(() => {
                           const inv = invoicedByClient.get(c.id)
                           return inv
-                            ? <span className="text-mono" style={{fontWeight:600,color:'var(--green)'}}>{inv.toLocaleString()} €</span>
-                            : <span className="text-muted">—</span>
+                            ? <span className="font-semibold text-[#16a34a]">{inv.toLocaleString()} €</span>
+                            : <span className="text-muted-foreground">—</span>
                         })()}
                       </td>
 
-                      <td><button className="btn btn-secondary btn-xs" onClick={() => navigate(`/clients/${c.id}`)}>View →</button></td>
+                      <td><Button variant="outline" size="xs" onClick={() => navigate(`/clients/${c.id}`)}>View →</Button></td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
             {totalPages > 1 && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderTop: '1px solid var(--c6)', fontSize: 13, color: 'var(--c3)' }}>
+              <div className="flex items-center justify-between px-4 py-3 border-t border-border text-[13px] text-muted-foreground">
                 <span>Displaying {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filteredClients.length)} of {filteredClients.length}</span>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  <button className="btn btn-secondary btn-xs" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>‹ Prev</button>
+                <div className="flex gap-1">
+                  <Button variant="outline" size="xs" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>‹ Prev</Button>
                   {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-                    <button key={p} className={`btn btn-xs ${p === page ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setPage(p)}>{p}</button>
+                    <Button key={p} variant={p === page ? 'default' : 'outline'} size="xs" onClick={() => setPage(p)}>{p}</Button>
                   ))}
-                  <button className="btn btn-secondary btn-xs" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>Next ›</button>
+                  <Button variant="outline" size="xs" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>Next ›</Button>
                 </div>
               </div>
             )}
-          </div>
+          </Card>
         )}
       </div>
 
       <Modal open={showAdd} title="New Client" onClose={() => { setShowAdd(false); setName('') }}
         footer={<>
-          <button className="btn btn-secondary btn-sm" onClick={() => { setShowAdd(false); setName('') }}>Cancel</button>
-          <button className="btn btn-primary btn-sm" onClick={handleCreate} disabled={saving || !name.trim()}>
+          <Button variant="outline" size="sm" onClick={() => { setShowAdd(false); setName('') }}>Cancel</Button>
+          <Button size="sm" onClick={handleCreate} disabled={saving || !name.trim()}>
             {saving ? <span className="spinner" style={{borderTopColor:'#fff'}}/> : null}
             Create client
-          </button>
+          </Button>
         </>}
       >
-        <div className="form-group">
-          <label className="form-label">Client name</label>
+        <div className="mb-4">
+          <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Client name</label>
           <input
             value={name}
             onChange={e => setName(e.target.value)}

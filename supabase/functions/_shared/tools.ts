@@ -139,7 +139,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'list_maintenances',
-    description: 'List maintenance contracts with monthly retainer amounts.',
+    description: 'List maintenance contracts with retainer amounts. billing_cycle is "monthly" or "annual". For annual contracts, billing_month (1-12) is the month the invoice is created; monthly_retainer stores the monthly equivalent. Hours per month shows how many team hours are committed.',
     input_schema: {
       type: 'object',
       properties: {
@@ -175,6 +175,27 @@ export const TOOL_DEFINITIONS = [
       type: 'object',
       properties: {
         status: { type: 'string', description: 'Filter by status (active, won, lost). Omit for active only.' },
+      },
+    },
+  },
+  {
+    name: 'list_team_members',
+    description: 'List team members with their capacity settings: hours_per_day, overhead_meetings_month (internal meeting hours per month), overhead_sales_month (sales overhead hours per month), vacation_days_year. Use for questions about team capacity, yearly/monthly available hours, overhead.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        active_only: { type: 'boolean', description: 'Only active members (default true).' },
+      },
+    },
+  },
+  {
+    name: 'list_resource_allocations',
+    description: 'List project deliverables with team assignments — who is working on which deliverable, estimated hours, start/due dates, and member percentage splits. Use for questions about workload, who is assigned to what, or how hours are distributed across the team.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        member_name: { type: 'string', description: 'Filter deliverables assigned to this team member (partial name, case-insensitive).' },
+        project_pn: { type: 'string', description: 'Filter by project number e.g. RS-2026-001.' },
       },
     },
   },
@@ -381,7 +402,7 @@ export async function executeTool(
     case 'list_maintenances': {
       let q = supabase
         .from('maintenances')
-        .select('id, monthly_retainer, status, project_pn, client:clients(name)')
+        .select('id, monthly_retainer, billing_cycle, billing_month, status, project_pn, hours_per_month, client:clients(name)')
         .order('status')
       if (input.status) q = q.eq('status', input.status)
       const { data, error } = await q
@@ -518,6 +539,55 @@ export async function executeTool(
       const { data, error } = await q
       if (error) return { result: { error: error.message } }
       return { result: data }
+    }
+
+    case 'list_team_members': {
+      let q = supabase
+        .from('team_members')
+        .select('id, name, role, hours_per_day, overhead_meetings_month, overhead_sales_month, vacation_days_year, active')
+        .order('name')
+      if (input.active_only !== false) q = q.eq('active', true)
+      const { data, error } = await q
+      if (error) return { result: { error: error.message } }
+      return { result: data }
+    }
+
+    case 'list_resource_allocations': {
+      // Fetch deliverables — team is stored as member_percentages JSON and team array
+      let q = supabase
+        .from('project_deliverables')
+        .select('id, title, start_date, due_date, estimated_hours, team, member_percentages, status, project:projects(pn, name, client:clients(name))')
+        .order('start_date')
+
+      if (input.project_pn) {
+        const { data: proj } = await supabase.from('projects').select('id').eq('pn', input.project_pn).single()
+        if (proj) q = q.eq('project_id', proj.id)
+      }
+
+      const { data, error } = await q
+      if (error) return { result: { error: error.message } }
+
+      // Filter by member name if requested (team is a text array of member IDs or names)
+      let results = data ?? []
+      if (input.member_name) {
+        const search = (input.member_name as string).toLowerCase()
+        // Also fetch team member names to resolve IDs
+        const { data: members } = await supabase
+          .from('team_members')
+          .select('id, name')
+          .ilike('name', `%${search}%`)
+        const matchIds = new Set((members ?? []).map((m: Record<string, unknown>) => m.id as string))
+
+        results = results.filter((d: Record<string, unknown>) => {
+          const team = d.team as string[] | null
+          const mp = d.member_percentages as Record<string, unknown> | null
+          if (team?.some(t => matchIds.has(t))) return true
+          if (mp && Object.keys(mp).some(k => matchIds.has(k))) return true
+          return false
+        })
+      }
+
+      return { result: results }
     }
 
     default:

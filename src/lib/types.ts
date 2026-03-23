@@ -23,7 +23,7 @@ export interface Project {
   client_id?: string | null
   pn: string                 // e.g. RS-2026-001
   name: string
-  type: 'fixed' | 'maintenance' | 'variable'
+  type: 'fixed' | 'maintenance' | 'variable' | 'internal'
   status: 'active' | 'paused' | 'completed' | 'cancelled'
   pm?: string | null
   contract_value?: number | null
@@ -33,6 +33,8 @@ export interface Project {
   end_date?: string | null
   notes?: string | null
   contract_url?: string | null
+  is_maintenance?: boolean | null
+  cms?: string | null
   // Joined from clients table
   client?: Pick<Client, 'id' | 'name'> | null
 }
@@ -116,6 +118,8 @@ export interface Maintenance {
   project_pn?: string | null
   name: string
   monthly_retainer: number
+  billing_cycle: 'monthly' | 'annual'
+  billing_month?: number | null  // 1-12, only for annual billing
   help_requests_included: number
   hours_included: number
   contract_start: string   // YYYY-MM-DD
@@ -123,6 +127,8 @@ export interface Maintenance {
   contract_url?: string | null
   status: 'active' | 'paused' | 'cancelled'
   notes?: string | null
+  cms?: string | null
+  team_hours?: Record<string, number> | null  // monthly hours per team for resource planning
   created_at: string
   // Joined
   client?: Pick<Client, 'id' | 'name'> | null
@@ -406,6 +412,9 @@ export interface TeamMember {
   team_id?: string | null
   skills?: string | null
   hours_per_day: number
+  overhead_meetings_month?: number | null
+  overhead_sales_month?: number | null
+  vacation_days_year?: number | null
   display_order: number
   active: boolean
   share_token: string
@@ -481,6 +490,7 @@ export interface ProjectDeliverable {
   estimated_hours?: number | null
   team?: string | null
   team_hours?: Record<string, number> | null  // per-team hour breakdown
+  member_percentages?: Record<string, number> | null  // per-member % breakdown (member_id → %)
   status: 'active' | 'completed' | 'delayed'
   notes?: string | null
   created_at: string

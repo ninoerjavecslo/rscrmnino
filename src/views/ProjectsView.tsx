@@ -9,6 +9,10 @@ import { supabase } from '../lib/supabase'
 import type { Project } from '../lib/types'
 import { Select } from '../components/Select'
 import { Modal } from '../components/Modal'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
 
 const CURRENT_YEAR = new Date().getFullYear()
 
@@ -32,16 +36,16 @@ function nextPn(projects: { pn: string }[]) {
   return `${prefix}${String(max + 1).padStart(3, '0')}`
 }
 
-const STATUS_BADGE: Record<string, string> = {
-  active: 'badge-green', paused: 'badge-amber',
-  completed: 'badge-gray', cancelled: 'badge-red'
+const STATUS_BADGE: Record<string, 'green' | 'amber' | 'gray' | 'red'> = {
+  active: 'green', paused: 'amber',
+  completed: 'gray', cancelled: 'red'
 }
 
-const TYPE_BADGE: Record<string, string> = {
-  fixed: 'badge-blue', maintenance: 'badge-amber', variable: 'badge-green'
+const TYPE_BADGE: Record<string, 'blue' | 'amber' | 'green' | 'gray'> = {
+  fixed: 'blue', maintenance: 'amber', variable: 'green', internal: 'gray'
 }
 const TYPE_LABEL: Record<string, string> = {
-  fixed: 'Fixed', maintenance: 'Recurring', variable: 'Variable'
+  fixed: 'Fixed', maintenance: 'Recurring', variable: 'Variable', internal: 'Internal'
 }
 
 // ── Type selector pills ───────────────────────────────────────────────────────
@@ -54,17 +58,19 @@ function TypePills({ value, onChange }: { value: string; onChange: (v: string) =
       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg> },
     { key: 'variable',    label: 'Variable',      sub: 'Hourly / usage-based',
       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg> },
+    { key: 'internal',    label: 'Internal',    sub: 'Non-billable',
+      icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> },
   ]
   return (
-    <div style={{marginBottom:16}}>
-      <div className="form-label" style={{marginBottom:8}}>Project type</div>
-      <div style={{display:'flex',gap:8}}>
+    <div className="mb-4">
+      <div className="text-xs uppercase tracking-wide text-muted-foreground font-medium mb-2">Project type</div>
+      <div className="flex gap-2">
         {types.map(t => (
           <div key={t.key} onClick={() => onChange(t.key)}
             style={{flex:1,border:`2px solid ${value===t.key?'var(--navy)':'var(--c6)'}`,borderRadius:'var(--r)',padding:'12px 10px',cursor:'pointer',background:value===t.key?'var(--navy-light)':'#fff',textAlign:'center',transition:'all .12s'}}>
-            <div style={{display:'flex',justifyContent:'center',marginBottom:6}}>{t.icon}</div>
+            <div className="flex justify-center mb-1.5">{t.icon}</div>
             <div style={{fontWeight:700,fontSize:13,color:value===t.key?'var(--navy)':'var(--c1)'}}>{t.label}</div>
-            <div style={{fontSize:11,color:'var(--c4)',marginTop:2}}>{t.sub}</div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">{t.sub}</div>
           </div>
         ))}
       </div>
@@ -74,7 +80,7 @@ function TypePills({ value, onChange }: { value: string; onChange: (v: string) =
 
 // ── Main view ─────────────────────────────────────────────────────────────────
 
-const EMPTY = { pn:'', name:'', client_id:'', type:'fixed', pm:'Nino', value:'', start_month:'', end_month:'', starting_from:'', probability:'50', num_months:'12' }
+const EMPTY = { pn:'', name:'', client_id:'', type:'fixed', pm:'Nino', value:'', start_month:'', end_month:'', starting_from:'', probability:'50', num_months:'12', is_maintenance: false, cms: '' }
 
 interface VarRow { month: string; amount: string; probability: string }
 
@@ -175,6 +181,8 @@ export function ProjectsView() {
           start_date:     form.start_month ? form.start_month + '-01' : null,
           end_date:       form.end_month   ? form.end_month   + '-01' : null,
           notes:          null,
+          is_maintenance: form.type !== 'internal' ? form.is_maintenance : false,
+          cms:            form.cms.trim() || null,
         })
         .select('id').single()
       if (pe) throw pe
@@ -223,7 +231,7 @@ export function ProjectsView() {
 
   const activeCount    = pStore.projects.filter(p => p.status === 'active').length
   const portfolioValue = pStore.projects
-    .filter(p => p.status === 'active')
+    .filter(p => p.status === 'active' && p.type !== 'internal')
     .reduce((sum, p) => {
       const isRecurring = p.type === 'maintenance' || p.type === 'variable'
       const regularRows = rpStore.rows.filter(r => r.project_id === p.id && !r.notes?.startsWith('CR:') && r.status !== 'cost')
@@ -237,139 +245,201 @@ export function ProjectsView() {
 
   return (
     <div>
-      <div className="page-header">
+      <div className="flex items-center justify-between px-6 py-4 bg-background border-b border-border">
         <div>
           <h1>Projects</h1>
           <p>Manage your project portfolio</p>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={() => { setForm(f => ({ ...f, pn: nextPn(pStore.projects) })); setShowAdd(true) }}>
+        <Button size="sm" onClick={() => { setForm(f => ({ ...f, pn: nextPn(pStore.projects) })); setShowAdd(true) }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           New Project
-        </button>
+        </Button>
       </div>
 
       {/* Stats strip */}
-      <div className="stats-strip">
+      <div className="grid grid-cols-4 gap-3 mb-4 px-6 pt-6">
         {[
-          { label:'Total projects',  value:String(pStore.projects.length), sub:`${activeCount} active`, color:'var(--c5)' },
-          { label:'Portfolio value', value: portfolioValue ? `${portfolioValue.toLocaleString()} €` : '—', sub:'active contracts', color:'var(--navy)' },
-          { label:'Invoiced YTD',    value: invoicedYTD ? `${invoicedYTD.toLocaleString(undefined,{maximumFractionDigits:0})} €` : '—', sub:'from invoices', color:'var(--green)' },
+          { label:'Total projects',  value:String(pStore.projects.length), sub:`${activeCount} active` },
+          { label:'Portfolio value', value: portfolioValue ? `${portfolioValue.toLocaleString()} €` : '—', sub:'active contracts' },
+          { label:'Invoiced YTD',    value: invoicedYTD ? `${invoicedYTD.toLocaleString(undefined,{maximumFractionDigits:0})} €` : '—', sub:'from invoices' },
         ].map(s => (
-          <div key={s.label} className="stat-card" style={{'--left-color':s.color} as React.CSSProperties}>
-            <div className="stat-card-label">{s.label}</div>
-            <div className="stat-card-value">{s.value}</div>
-            <div className="stat-card-sub">{s.sub}</div>
+          <div key={s.label} className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">{s.label}</div>
+            <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{s.value}</div>
+            <div className="text-xs text-muted-foreground mt-1">{s.sub}</div>
           </div>
         ))}
       </div>
 
-      <div className="page-content">
-        {pStore.error && <div className="alert alert-red" style={{marginBottom:16}}>Failed to load projects. Please check your connection.</div>}
-
-        {!pStore.loading && pStore.projects.length === 0 ? (
-          <div className="card">
-            <div className="card-body" style={{textAlign:'center',padding:'52px 20px'}}>
-              <div style={{fontSize:32,marginBottom:10}}>📁</div>
-              <div style={{fontWeight:700,fontSize:15,color:'var(--c2)',marginBottom:5}}>No projects yet</div>
-              <div className="text-sm" style={{marginBottom:16}}>Create your first project</div>
-              <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(true)}>New Project</button>
-            </div>
-          </div>
-        ) : (
-          <div className="card">
-            <table>
-              <thead>
-                <tr>
-                  <th>#</th><th>Project</th><th>Client</th><th>Type</th>
-                  <th className="th-right">Value</th><th>PM</th><th>Status</th><th style={{width:60}}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {pStore.loading ? (
-                  <tr><td colSpan={8} style={{textAlign:'center',padding:32,color:'var(--c4)'}}>Loading…</td></tr>
-                ) : pStore.projects.map((p: Project) => (
-                  <tr key={p.id}>
-                    <td style={{color:'var(--c3)',fontSize:11,fontWeight:600,fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{p.pn}</td>
-                    <td className="table-link" style={{fontWeight:700}} onClick={() => navigate(`/projects/${p.id}`)}>{p.name}</td>
-                    <td className="text-sm text-muted" style={{cursor: p.client ? 'pointer' : 'default'}}
-                      onClick={() => p.client && navigate(`/clients/${p.client.id}`)}>{p.client?.name ?? '—'}</td>
-                    <td><span className={`badge ${TYPE_BADGE[p.type] ?? 'badge-gray'}`}>{TYPE_LABEL[p.type] ?? p.type}</span></td>
-                    <td className="td-right text-mono" style={{fontWeight:600}}>
-                      {(() => {
-                        const isRecurring = p.type === 'maintenance' || p.type === 'variable'
-                        const regularRows = rpStore.rows.filter(r => r.project_id === p.id && !r.notes?.startsWith('CR:') && r.status !== 'cost')
-                        const crTotal = crStore.approvedCRs.filter(cr => cr.project_id === p.id).reduce((s, cr) => s + (cr.amount ?? 0), 0)
-                        const base = isRecurring
-                          ? regularRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0)
-                          : (p.initial_contract_value ?? p.contract_value ?? null)
-                        const val = base != null ? base + crTotal : null
-                        return val ? `${val.toLocaleString()} €` : <span className="text-muted">—</span>
-                      })()}
-                    </td>
-                    <td className="text-sm" style={{color:'var(--c2)'}}>{p.pm ?? <span className="text-muted">—</span>}</td>
-                    <td><span className={`badge ${STATUS_BADGE[p.status] ?? 'badge-gray'}`}>{p.status.charAt(0).toUpperCase()+p.status.slice(1)}</span></td>
-                    <td style={{whiteSpace:'nowrap'}}>
-                      <button className="btn btn-secondary btn-xs" onClick={() => navigate(`/projects/${p.id}`)}>Edit</button>
-                      {' '}
-                      <button className="btn btn-ghost btn-xs" style={{color:'var(--red)'}} onClick={() => setDeleteTarget(p)}>Delete</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <div className="flex-1 overflow-auto px-6 pb-6">
+        {pStore.error && (
+          <div className="rounded-lg border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-sm text-[#be123c] mb-4">
+            Failed to load projects. Please check your connection.
           </div>
         )}
+
+        {(() => {
+          const clientProjects = pStore.projects.filter((p: Project) => p.type !== 'internal')
+          const internalProjects = pStore.projects.filter((p: Project) => p.type === 'internal')
+
+          function ProjectRow({ p }: { p: Project }) {
+            return (
+              <tr key={p.id}>
+                <td className="text-muted-foreground text-[11px] font-semibold whitespace-nowrap">{p.pn}</td>
+                <td className="font-medium text-primary hover:underline cursor-pointer font-bold" onClick={() => navigate(`/projects/${p.id}`)}>{p.name}</td>
+                <td className="text-sm text-muted-foreground" style={{cursor: p.client ? 'pointer' : 'default'}}
+                  onClick={() => p.client && navigate(`/clients/${p.client!.id}`)}>{p.client?.name ?? '—'}</td>
+                <td><Badge variant={TYPE_BADGE[p.type] ?? 'gray'}>{TYPE_LABEL[p.type] ?? p.type}</Badge></td>
+                <td className="text-right font-semibold">
+                  {(() => {
+                    const isRecurring = p.type === 'maintenance' || p.type === 'variable'
+                    const regularRows = rpStore.rows.filter(r => r.project_id === p.id && !r.notes?.startsWith('CR:') && r.status !== 'cost')
+                    const crTotal = crStore.approvedCRs.filter(cr => cr.project_id === p.id).reduce((s, cr) => s + (cr.amount ?? 0), 0)
+                    const base = isRecurring
+                      ? regularRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0)
+                      : (p.initial_contract_value ?? p.contract_value ?? null)
+                    const val = base != null ? base + crTotal : null
+                    return val ? `${val.toLocaleString()} €` : <span className="text-muted-foreground">—</span>
+                  })()}
+                </td>
+                <td className="text-sm text-[#374151]">{p.pm ?? <span className="text-muted-foreground">—</span>}</td>
+                <td><Badge variant={STATUS_BADGE[p.status] ?? 'gray'}>{p.status.charAt(0).toUpperCase()+p.status.slice(1)}</Badge></td>
+                <td className="whitespace-nowrap">
+                  <Button variant="outline" size="xs" onClick={() => navigate(`/projects/${p.id}`)}>Edit</Button>
+                  {' '}
+                  <Button variant="ghost" size="xs" className="text-[#dc2626]" onClick={() => setDeleteTarget(p)}>Delete</Button>
+                </td>
+              </tr>
+            )
+          }
+
+          return (
+            <>
+              {!pStore.loading && clientProjects.length === 0 ? (
+                <Card>
+                  <div className="text-center py-14 px-5">
+                    <div className="text-3xl mb-2">📁</div>
+                    <div className="font-bold text-[15px] text-[#374151] mb-1">No projects yet</div>
+                    <div className="text-sm mb-4">Create your first project</div>
+                    <Button size="sm" onClick={() => setShowAdd(true)}>New Project</Button>
+                  </div>
+                </Card>
+              ) : (
+                <Card className="mb-4">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>#</th><th>Project</th><th>Client</th><th>Type</th>
+                        <th className="text-right">Value</th><th>PM</th><th>Status</th><th style={{width:60}}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pStore.loading ? (
+                        <tr><td colSpan={8} className="text-center text-muted-foreground" style={{padding:32}}>Loading…</td></tr>
+                      ) : clientProjects.map((p: Project) => <ProjectRow key={p.id} p={p} />)}
+                    </tbody>
+                  </table>
+                </Card>
+              )}
+
+              {internalProjects.length > 0 && (
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2 mt-2">Internal Projects</div>
+                  <Card>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>#</th><th>Project</th><th>Client</th><th>Type</th>
+                          <th className="text-right">Value</th><th>PM</th><th>Status</th><th style={{width:60}}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {internalProjects.map((p: Project) => <ProjectRow key={p.id} p={p} />)}
+                      </tbody>
+                    </table>
+                  </Card>
+                </div>
+              )}
+            </>
+          )
+        })()}
       </div>
 
       <Modal open={showAdd} title="New Project" onClose={closeModal} maxWidth={form.type === 'variable' ? 680 : 560}
         footer={<>
-          <button className="btn btn-secondary btn-sm" onClick={closeModal}>Cancel</button>
-          <button className="btn btn-primary btn-sm" onClick={handleCreate} disabled={saving || !form.name.trim()}>
+          <Button variant="outline" size="sm" onClick={closeModal}>Cancel</Button>
+          <Button size="sm" onClick={handleCreate} disabled={saving || !form.name.trim()}>
             {saving ? <span className="spinner" style={{borderTopColor:'#fff'}}/> : null}
             Create project
-          </button>
+          </Button>
         </>}
       >
         <TypePills value={form.type} onChange={v => setF('type', v)} />
 
-        <div className="form-row" style={{marginBottom:14}}>
-          <div className="form-group" style={{maxWidth:160}}>
-            <label className="form-label">Project #</label>
-            <input value={form.pn} onChange={e => setF('pn', e.target.value)} placeholder="RS-2026-001" className="text-mono" />
+        {form.type !== 'internal' && (
+          <label className="flex items-center gap-2.5 mb-4 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.is_maintenance}
+              onChange={e => setForm(f => ({ ...f, is_maintenance: e.target.checked }))}
+              style={{ width: 15, height: 15, accentColor: 'var(--navy)' }}
+            />
+            <div>
+              <div className="text-[13px] font-semibold">Is Maintenance</div>
+              <div className="text-xs text-muted-foreground">Include this project in maintenance planning</div>
+            </div>
+          </label>
+        )}
+
+        <div className="grid grid-cols-2 gap-4 mb-3">
+          <div className="mb-4" style={{maxWidth:160}}>
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Project #</label>
+            <input value={form.pn} onChange={e => setF('pn', e.target.value)} placeholder="RS-2026-001" className="font-mono" />
           </div>
-          <div className="form-group">
-            <label className="form-label">Project name</label>
+          <div className="mb-4">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Project name</label>
             <input value={form.name} onChange={e => setF('name', e.target.value)} placeholder="e.g. Petrol — Prenova" autoFocus />
           </div>
-          <div className="form-group">
-            <label className="form-label">Client</label>
-            <Select
-              value={showNewClient ? '__new__' : form.client_id}
-              onChange={handleClientChange}
-              placeholder="— Select client —"
-              options={[
-                ...cStore.clients.map(c => ({ value: c.id, label: c.name })),
-                { value: '__new__', label: '+ New client…' },
-              ]}
-            />
-            {showNewClient && (
-              <input style={{marginTop:8}} value={newClientName} onChange={e => setNewClientName(e.target.value)} placeholder="New client name…" />
-            )}
-          </div>
+          {form.type !== 'internal' && (
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Client</label>
+              <Select
+                value={showNewClient ? '__new__' : form.client_id}
+                onChange={handleClientChange}
+                placeholder="— Select client —"
+                options={[
+                  ...cStore.clients.map(c => ({ value: c.id, label: c.name })),
+                  { value: '__new__', label: '+ New client…' },
+                ]}
+              />
+              {showNewClient && (
+                <input className="mt-2" value={newClientName} onChange={e => setNewClientName(e.target.value)} placeholder="New client name…" />
+              )}
+            </div>
+          )}
         </div>
 
-        <div className="form-row" style={{marginBottom: 14}}>
-          <div className="form-group">
-            <label className="form-label">Project Manager</label>
+        <div className="grid grid-cols-2 gap-4 mb-3">
+          <div className="mb-4">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Project Manager</label>
             <Select
               value={form.pm}
               onChange={val => setF('pm', val)}
               options={pmOptions}
             />
           </div>
-          {form.type !== 'variable' && (
-            <div className="form-group">
-              <label className="form-label">
+          <div className="mb-4">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">CMS / Technology</label>
+            <Select
+              value={form.cms}
+              onChange={val => setF('cms', val)}
+              placeholder="— None —"
+              options={[{ value: '', label: '— None —' }, ...settingsStore.cmsOptions.map(c => ({ value: c, label: c }))]}
+            />
+          </div>
+          {form.type !== 'variable' && form.type !== 'internal' && (
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
                 {form.type === 'maintenance' ? 'Monthly amount (€)' : 'Project value (€)'}
               </label>
               <input type="number" value={form.value} onChange={e => setF('value', e.target.value)} placeholder={form.type === 'maintenance' ? '2000' : '45000'} />
@@ -380,23 +450,23 @@ export function ProjectsView() {
 
         {form.type === 'maintenance' && (
           <>
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Starting from</label>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="mb-4">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Starting from</label>
                 <input type="month" value={form.starting_from} onChange={e => setF('starting_from', e.target.value)} />
               </div>
-              <div className="form-group" style={{maxWidth:140}}>
-                <label className="form-label">Number of months</label>
+              <div className="mb-4" style={{maxWidth:140}}>
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Number of months</label>
                 <input type="number" min="1" max="60" value={form.num_months} onChange={e => setF('num_months', e.target.value)} placeholder="12" />
               </div>
             </div>
             {form.value && form.num_months && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, padding: '8px 12px', background: 'var(--c7)', borderRadius: 6 }}>
-                <span style={{ fontSize: 12, color: 'var(--c3)' }}>Initial value:</span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--navy)' }}>
+              <div className="flex items-center gap-2 mb-2.5 px-3 py-2 bg-[var(--c7)] rounded">
+                <span className="text-xs text-muted-foreground">Initial value:</span>
+                <span className="text-sm font-bold text-primary">
                   {(parseFloat(form.value) * Math.max(1, Math.min(60, parseInt(form.num_months) || 12))).toLocaleString()} €
                 </span>
-                <span style={{ fontSize: 11, color: 'var(--c4)' }}>({form.value} €/mo × {form.num_months} mo)</span>
+                <span className="text-[11px] text-muted-foreground">({form.value} €/mo × {form.num_months} mo)</span>
               </div>
             )}
             <div className="info-box">
@@ -410,43 +480,43 @@ export function ProjectsView() {
 
         {form.type === 'variable' && (
           <>
-            <div className="form-row" style={{marginBottom: 12}}>
-              <div className="form-group">
-                <label className="form-label">Start month</label>
+            <div className="grid grid-cols-2 gap-4 mb-3">
+              <div className="mb-4">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Start month</label>
                 <input type="month" value={form.start_month} onChange={e => setF('start_month', e.target.value)} />
               </div>
-              <div className="form-group">
-                <label className="form-label">End month</label>
+              <div className="mb-4">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">End month</label>
                 <input type="month" value={form.end_month} onChange={e => setF('end_month', e.target.value)} />
               </div>
-              <div className="form-group" style={{maxWidth:140}}>
-                <label className="form-label">Default amount (€)</label>
+              <div className="mb-4" style={{maxWidth:140}}>
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Default amount (€)</label>
                 <input type="number" value={form.value} onChange={e => {
                   setF('value', e.target.value)
                   setVarRows(rows => rows.map(r => ({ ...r, amount: e.target.value })))
                 }} placeholder="0" />
               </div>
-              <div className="form-group" style={{maxWidth:200}}>
-                <label className="form-label">Set all rows to</label>
-                <div style={{display:'flex',gap:6}}>
+              <div className="mb-4" style={{maxWidth:200}}>
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Set all rows to</label>
+                <div className="flex gap-1.5">
                   <select value={form.probability} onChange={e => setF('probability', e.target.value)}
                     style={{flex:1,height:42,border:'1px solid var(--c6)',borderRadius:10,padding:'0 10px',fontSize:14,background:'#fff',fontFamily:'inherit'}}>
                     <option value="25">25%</option>
                     <option value="50">50%</option>
                     <option value="100">100%</option>
                   </select>
-                  <button type="button" className="btn btn-secondary btn-sm"
+                  <Button type="button" variant="outline" size="sm"
                     onClick={() => setVarRows(rows => rows.map(r => ({ ...r, probability: form.probability })))}>
                     Apply
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
             {varRows.length > 0 && (
-              <div style={{marginBottom:12}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-                  <span className="form-label" style={{marginBottom:0}}>Monthly plan</span>
-                  <span style={{fontSize:12,color:'var(--c3)'}}>
+              <div className="mb-3">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Monthly plan</span>
+                  <span className="text-xs text-muted-foreground">
                     {(() => {
                       const total = varRows.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0)
                       const weighted = varRows.reduce((s, r) => s + (parseFloat(r.amount) || 0) * (parseInt(r.probability) || 0) / 100, 0)
@@ -503,27 +573,14 @@ export function ProjectsView() {
         )}
       </Modal>
 
-      {deleteTarget && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setDeleteTarget(null)}>
-          <div className="modal-box" style={{maxWidth:420}}>
-            <div className="modal-header">
-              <h2>Delete project</h2>
-              <button className="modal-close" onClick={() => setDeleteTarget(null)}>×</button>
-            </div>
-            <div className="modal-body">
-              <p>Are you sure you want to delete <strong>{deleteTarget.name}</strong> ({deleteTarget.pn})?</p>
-              <p style={{color:'var(--red)',fontSize:13,marginTop:8}}>This will also delete all invoice plans for this project. This cannot be undone.</p>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary btn-sm" onClick={() => setDeleteTarget(null)}>Cancel</button>
-              <button className="btn btn-primary btn-sm" style={{background:'var(--red)',borderColor:'var(--red)'}} onClick={handleDelete} disabled={deleting}>
-                {deleting ? <span className="spinner" style={{borderTopColor:'#fff'}}/> : null}
-                Delete project
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Delete project"
+        message={deleteTarget ? `Are you sure you want to delete "${deleteTarget.name}" (${deleteTarget.pn})? This will also delete all invoice plans for this project. This cannot be undone.` : ''}
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteTarget(null)}
+        confirmLabel={deleting ? 'Deleting…' : 'Delete project'}
+      />
     </div>
   )
 }

@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useResourceStore } from '../stores/resource'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
 import type { ResourceAllocation, AllocationCategory } from '../lib/types'
 
 /* ── helpers ──────────────────────────────────────────────────── */
@@ -44,13 +47,10 @@ function catInfo(c: AllocationCategory) {
 /* ── sub-components ───────────────────────────────────────────── */
 
 function UtilBar({ pct }: { pct: number }) {
+  const bg = pct > 100 ? 'var(--red)' : pct > 70 ? 'var(--green)' : 'var(--amber)'
   return (
-    <div style={{ width: 80, height: 6, background: 'var(--c6)', borderRadius: 3, overflow: 'hidden' }}>
-      <div style={{
-        width: `${Math.min(pct, 100)}%`,
-        height: '100%',
-        background: pct > 100 ? 'var(--red)' : pct > 70 ? 'var(--green)' : 'var(--amber)',
-      }} />
+    <div className="w-20 h-[6px] bg-[var(--c6)] rounded-[3px] overflow-hidden">
+      <div style={{ width: `${Math.min(pct, 100)}%`, height: '100%', background: bg }} />
     </div>
   )
 }
@@ -215,112 +215,113 @@ export function ResourceReportsView() {
     setTo(localDate(last))
   }
 
+  /* ── shared th class ──────────────────────────────────────────── */
+  const thClass = 'px-4 py-[10px] text-xs font-semibold text-[var(--c2)] bg-[var(--c7)]'
+
   /* ── render ───────────────────────────────────────────────────── */
 
   return (
-    <div className="page-content">
+    <div className="flex-1 overflow-auto p-6">
 
       {/* Header */}
-      <div className="page-header">
+      <div className="flex items-center justify-between px-6 py-4 bg-background border-b border-border -mx-6 -mt-6 mb-6">
         <div>
           <h1>Resource Reports</h1>
-          <p style={{ color: 'var(--c3)', fontSize: 13, margin: 0 }}>Allocation analytics by member, category and project</p>
+          <p className="text-muted-foreground text-[13px] m-0">Allocation analytics by member, category and project</p>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <div style={{ display: 'flex', gap: 4 }}>
-            <button className="btn btn-ghost btn-sm" onClick={setThisWeek}>This week</button>
-            <button className="btn btn-ghost btn-sm" onClick={setLastWeek}>Last week</button>
-            <button className="btn btn-ghost btn-sm" onClick={setThisMonth}>This month</button>
-            <button className="btn btn-ghost btn-sm" onClick={setLastMonth}>Last month</button>
+        <div className="flex gap-2 items-center flex-wrap justify-end">
+          <div className="flex gap-1">
+            <Button variant="ghost" size="sm" onClick={setThisWeek}>This week</Button>
+            <Button variant="ghost" size="sm" onClick={setLastWeek}>Last week</Button>
+            <Button variant="ghost" size="sm" onClick={setThisMonth}>This month</Button>
+            <Button variant="ghost" size="sm" onClick={setLastMonth}>Last month</Button>
           </div>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <div className="flex gap-[6px] items-center">
             <input type="date" value={from} onChange={e => setFrom(e.target.value)}
-              style={{ fontSize: 13, padding: '5px 8px', border: '1px solid var(--c5)', borderRadius: 'var(--r, 6px)', color: 'var(--c1)' }} />
-            <span style={{ color: 'var(--c4)' }}>→</span>
+              className="text-[13px] px-2 py-[5px] border border-border rounded text-[var(--c1)]" />
+            <span className="text-muted-foreground">→</span>
             <input type="date" value={to} onChange={e => setTo(e.target.value)}
-              style={{ fontSize: 13, padding: '5px 8px', border: '1px solid var(--c5)', borderRadius: 'var(--r, 6px)', color: 'var(--c1)' }} />
+              className="text-[13px] px-2 py-[5px] border border-border rounded text-[var(--c1)]" />
           </div>
         </div>
       </div>
 
-      {loading && <p style={{ color: 'var(--c3)', padding: '8px 0' }}>Loading...</p>}
+      {loading && <p className="text-muted-foreground py-2">Loading...</p>}
 
       {/* Stats strip */}
-      <div className="stats-strip">
-        <div className="stat-card">
-          <div className="stat-card-label">Total Hours</div>
-          <div className="stat-card-value">{totalHours.toFixed(1)}h</div>
-          <div className="stat-card-sub">{workDays} working days</div>
+      <div className="grid grid-cols-4 gap-3 mb-4">
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Total Hours</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{totalHours.toFixed(1)}h</div>
+          <div className="text-xs text-muted-foreground mt-1">{workDays} working days</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-card-label">Billable %</div>
-          <div className="stat-card-value">{billablePct}%</div>
-          <div className="stat-card-sub">{billableHours.toFixed(1)}h billable</div>
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Billable %</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{billablePct}%</div>
+          <div className="text-xs text-muted-foreground mt-1">{billableHours.toFixed(1)}h billable</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-card-label">Unplanned %</div>
-          <div className="stat-card-value">{unplannedPct}%</div>
-          <div className="stat-card-sub">{unplannedHours.toFixed(1)}h unplanned</div>
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Unplanned %</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{unplannedPct}%</div>
+          <div className="text-xs text-muted-foreground mt-1">{unplannedHours.toFixed(1)}h unplanned</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-card-label">Avg Utilization</div>
-          <div className="stat-card-value">{avgUtil}%</div>
-          <div className="stat-card-sub">{activeMemberIds.length} active members</div>
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Avg Utilization</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{avgUtil}%</div>
+          <div className="text-xs text-muted-foreground mt-1">{activeMemberIds.length} active members</div>
         </div>
       </div>
 
       {/* Section 1: By Member */}
-      <div className="section-bar" style={{ marginTop: 24 }}>By Member</div>
-      <div className="card">
-        <div className="card-body" style={{ padding: 0 }}>
+      <div className="flex items-center justify-between mb-3 mt-6">By Member</div>
+      <Card>
+        <CardContent className="p-0">
           {memberRows.length === 0 ? (
-            <p style={{ color: 'var(--c3)', padding: '16px 20px' }}>No data for this period.</p>
+            <p className="text-muted-foreground px-5 py-4">No data for this period.</p>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <table className="w-full border-collapse">
               <thead>
-                <tr style={{ borderBottom: '1px solid var(--c6)' }}>
-                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--c2)', background: 'var(--c7)' }}>Member</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: 'var(--c2)', background: 'var(--c7)' }}>Total</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: 'var(--c2)', background: 'var(--c7)' }}>Billable</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: 'var(--c2)', background: 'var(--c7)' }}>Billable %</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: 'var(--c2)', background: 'var(--c7)' }}>Unplanned</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'left',  fontSize: 12, fontWeight: 600, color: 'var(--c2)', background: 'var(--c7)' }}>Utilization</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'left',  fontSize: 12, fontWeight: 600, color: 'var(--c2)', background: 'var(--c7)' }}>Categories</th>
+                <tr className="border-b border-border">
+                  <th className={`${thClass} text-left`}>Member</th>
+                  <th className={`${thClass} text-right`}>Total</th>
+                  <th className={`${thClass} text-right`}>Billable</th>
+                  <th className={`${thClass} text-right`}>Billable %</th>
+                  <th className={`${thClass} text-right`}>Unplanned</th>
+                  <th className={`${thClass} text-left`}>Utilization</th>
+                  <th className={`${thClass} text-left`}>Categories</th>
                 </tr>
               </thead>
               <tbody>
                 {memberRows.map((row, i) => {
                   const billPct = row.total > 0 ? Math.round((row.billable / row.total) * 100) : 0
                   return (
-                    <tr key={row.id} style={{ borderBottom: i < memberRows.length - 1 ? '1px solid var(--c6)' : 'none' }}>
-                      <td style={{ padding: '10px 16px', fontWeight: 600, fontSize: 14 }}>{row.name}</td>
-                      <td style={{ padding: '10px 16px', textAlign: 'right', fontSize: 14, fontFamily: 'monospace' }}>{row.total.toFixed(1)}h</td>
-                      <td style={{ padding: '10px 16px', textAlign: 'right', fontSize: 14, fontFamily: 'monospace' }}>{row.billable.toFixed(1)}h</td>
-                      <td style={{ padding: '10px 16px', textAlign: 'right', fontSize: 14 }}>
-                        <span className={billPct >= 70 ? 'badge badge-green' : billPct >= 40 ? 'badge badge-amber' : 'badge badge-red'}>
+                    <tr key={row.id} className={i < memberRows.length - 1 ? 'border-b border-[var(--c6)]' : ''}>
+                      <td className="px-4 py-[10px] font-semibold text-sm">{row.name}</td>
+                      <td className="px-4 py-[10px] text-right text-sm">{row.total.toFixed(1)}h</td>
+                      <td className="px-4 py-[10px] text-right text-sm">{row.billable.toFixed(1)}h</td>
+                      <td className="px-4 py-[10px] text-right text-sm">
+                        <Badge variant={billPct >= 70 ? 'green' : billPct >= 40 ? 'amber' : 'red'}>
                           {billPct}%
-                        </span>
+                        </Badge>
                       </td>
-                      <td style={{ padding: '10px 16px', textAlign: 'right', fontSize: 14, fontFamily: 'monospace', color: row.unplanned > 0 ? 'var(--amber)' : 'var(--c3)' }}>
+                      <td className={`px-4 py-[10px] text-right text-sm ${row.unplanned > 0 ? 'text-[#d97706]' : 'text-muted-foreground'}`}>
                         {row.unplanned > 0 ? `${row.unplanned.toFixed(1)}h` : '—'}
                       </td>
-                      <td style={{ padding: '10px 16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <td className="px-4 py-[10px]">
+                        <div className="flex items-center gap-2">
                           <UtilBar pct={row.utilPct} />
-                          <span style={{ fontSize: 12, color: 'var(--c2)', fontFamily: 'monospace' }}>{row.utilPct}%</span>
+                          <span className="text-xs text-[var(--c2)]">{row.utilPct}%</span>
                         </div>
                       </td>
-                      <td style={{ padding: '10px 16px' }}>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      <td className="px-4 py-[10px]">
+                        <div className="flex flex-wrap gap-1">
                           {row.categories.map(({ cat, hours }) => {
                             const ci = catInfo(cat)
                             return (
-                              <span key={cat} style={{
-                                display: 'inline-flex', alignItems: 'center', gap: 4,
-                                padding: '2px 7px', borderRadius: 4, fontSize: 11, fontWeight: 600,
-                                background: ci.color + '18', color: ci.color,
-                                border: `1px solid ${ci.color}30`,
-                              }}>
+                              <span key={cat}
+                                className="inline-flex items-center gap-1 px-[7px] py-[2px] rounded text-[11px] font-semibold"
+                                style={{ background: ci.color + '18', color: ci.color, border: `1px solid ${ci.color}30` }}
+                              >
                                 {ci.label} {hours.toFixed(0)}h
                               </span>
                             )
@@ -333,38 +334,35 @@ export function ResourceReportsView() {
               </tbody>
             </table>
           )}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Section 2: By Category */}
-      <div className="section-bar" style={{ marginTop: 24 }}>By Category</div>
-      <div className="card">
-        <div className="card-body">
+      <div className="flex items-center justify-between mb-3 mt-6">By Category</div>
+      <Card>
+        <CardContent>
           {catTotals.length === 0 ? (
-            <p style={{ color: 'var(--c3)' }}>No data for this period.</p>
+            <p className="text-muted-foreground">No data for this period.</p>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div className="flex flex-col gap-3">
               {catTotals.map(cat => {
                 const pct = totalHours > 0 ? Math.round((cat.hours / totalHours) * 100) : 0
                 const barWidth = Math.round((cat.hours / maxCatHours) * 100)
                 return (
-                  <div key={cat.value} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{ width: 100, fontSize: 13, fontWeight: 600, color: cat.color, flexShrink: 0 }}>
+                  <div key={cat.value} className="flex items-center gap-3">
+                    <div className="w-[100px] text-[13px] font-semibold flex-shrink-0" style={{ color: cat.color }}>
                       {cat.label}
                     </div>
-                    <div style={{ flex: 1, height: 16, background: 'var(--c6)', borderRadius: 3, overflow: 'hidden' }}>
-                      <div style={{
-                        width: `${barWidth}%`,
-                        height: '100%',
-                        background: cat.color,
-                        borderRadius: 3,
-                        transition: 'width 0.3s',
-                      }} />
+                    <div className="flex-1 h-4 bg-[var(--c6)] rounded-[3px] overflow-hidden">
+                      <div
+                        className="h-full rounded transition-[width] duration-300"
+                        style={{ width: `${barWidth}%`, background: cat.color }}
+                      />
                     </div>
-                    <div style={{ width: 80, fontSize: 13, fontFamily: 'monospace', textAlign: 'right', color: 'var(--c1)', flexShrink: 0 }}>
+                    <div className="w-20 text-[13px] text-right text-[var(--c1)] flex-shrink-0">
                       {cat.hours.toFixed(1)}h
                     </div>
-                    <div style={{ width: 40, fontSize: 12, color: 'var(--c3)', textAlign: 'right', flexShrink: 0 }}>
+                    <div className="w-10 text-xs text-muted-foreground text-right flex-shrink-0">
                       {pct}%
                     </div>
                   </div>
@@ -372,58 +370,58 @@ export function ResourceReportsView() {
               })}
             </div>
           )}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Section 3: By Project */}
-      <div className="section-bar" style={{ marginTop: 24 }}>By Project</div>
-      <div className="card">
-        <div className="card-body" style={{ padding: 0 }}>
+      <div className="flex items-center justify-between mb-3 mt-6">By Project</div>
+      <Card>
+        <CardContent className="p-0">
           {projectRows.length === 0 ? (
-            <p style={{ color: 'var(--c3)', padding: '16px 20px' }}>No project allocations in this period.</p>
+            <p className="text-muted-foreground px-5 py-4">No project allocations in this period.</p>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <table className="w-full border-collapse">
               <thead>
-                <tr style={{ borderBottom: '1px solid var(--c6)' }}>
-                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--c2)', background: 'var(--c7)' }}>Project #</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--c2)', background: 'var(--c7)' }}>Project Name</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: 'var(--c2)', background: 'var(--c7)' }}>Total Hours</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: 'var(--c2)', background: 'var(--c7)' }}>Billable Hours</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'left',  fontSize: 12, fontWeight: 600, color: 'var(--c2)', background: 'var(--c7)' }}>Members</th>
+                <tr className="border-b border-border">
+                  <th className={`${thClass} text-left`}>Project #</th>
+                  <th className={`${thClass} text-left`}>Project Name</th>
+                  <th className={`${thClass} text-right`}>Total Hours</th>
+                  <th className={`${thClass} text-right`}>Billable Hours</th>
+                  <th className={`${thClass} text-left`}>Members</th>
                 </tr>
               </thead>
               <tbody>
                 {projectRows.map((row, i) => (
-                  <tr key={row.id} style={{ borderBottom: i < projectRows.length - 1 ? '1px solid var(--c6)' : 'none' }}>
-                    <td style={{ padding: '10px 16px', fontFamily: 'monospace', fontSize: 13, color: 'var(--navy)' }}>{row.pn}</td>
-                    <td style={{ padding: '10px 16px', fontSize: 14, fontWeight: 500 }}>{row.name}</td>
-                    <td style={{ padding: '10px 16px', textAlign: 'right', fontSize: 14, fontFamily: 'monospace' }}>{row.total.toFixed(1)}h</td>
-                    <td style={{ padding: '10px 16px', textAlign: 'right', fontSize: 14, fontFamily: 'monospace', color: 'var(--green)' }}>{row.billable.toFixed(1)}h</td>
-                    <td style={{ padding: '10px 16px', fontSize: 13, color: 'var(--c2)' }}>{row.memberNames.join(', ')}</td>
+                  <tr key={row.id} className={i < projectRows.length - 1 ? 'border-b border-[var(--c6)]' : ''}>
+                    <td className="px-4 py-[10px] text-[13px] text-primary">{row.pn}</td>
+                    <td className="px-4 py-[10px] text-sm font-medium">{row.name}</td>
+                    <td className="px-4 py-[10px] text-right text-sm">{row.total.toFixed(1)}h</td>
+                    <td className="px-4 py-[10px] text-right text-sm text-[#16a34a]">{row.billable.toFixed(1)}h</td>
+                    <td className="px-4 py-[10px] text-[13px] text-[var(--c2)]">{row.memberNames.join(', ')}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Section 4: Unplanned Work log */}
-      <div className="section-bar" style={{ marginTop: 24 }}>Unplanned Work</div>
-      <div className="card">
-        <div className="card-body" style={{ padding: 0 }}>
+      <div className="flex items-center justify-between mb-3 mt-6">Unplanned Work</div>
+      <Card>
+        <CardContent className="p-0">
           {unplannedLog.length === 0 ? (
-            <p style={{ color: 'var(--c3)', padding: '16px 20px' }}>No unplanned work in this period.</p>
+            <p className="text-muted-foreground px-5 py-4">No unplanned work in this period.</p>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <table className="w-full border-collapse">
               <thead>
-                <tr style={{ borderBottom: '1px solid var(--c6)' }}>
-                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--c2)', background: 'var(--c7)' }}>Date</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--c2)', background: 'var(--c7)' }}>Member</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--c2)', background: 'var(--c7)' }}>Category</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--c2)', background: 'var(--c7)' }}>Project</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: 'var(--c2)', background: 'var(--c7)' }}>Hours</th>
-                  <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--c2)', background: 'var(--c7)' }}>Description</th>
+                <tr className="border-b border-border">
+                  <th className={`${thClass} text-left`}>Date</th>
+                  <th className={`${thClass} text-left`}>Member</th>
+                  <th className={`${thClass} text-left`}>Category</th>
+                  <th className={`${thClass} text-left`}>Project</th>
+                  <th className={`${thClass} text-right`}>Hours</th>
+                  <th className={`${thClass} text-left`}>Description</th>
                 </tr>
               </thead>
               <tbody>
@@ -431,36 +429,34 @@ export function ResourceReportsView() {
                   const ci = catInfo(a.category)
                   const memberName = a.member?.name ?? members.find(m => m.id === a.member_id)?.name ?? a.member_id
                   return (
-                    <tr key={a.id} style={{ borderBottom: i < unplannedLog.length - 1 ? '1px solid var(--c6)' : 'none' }}>
-                      <td style={{ padding: '10px 16px', fontSize: 13, fontFamily: 'monospace', color: 'var(--c1)' }}>{a.date}</td>
-                      <td style={{ padding: '10px 16px', fontSize: 14, fontWeight: 500 }}>{memberName}</td>
-                      <td style={{ padding: '10px 16px' }}>
-                        <span style={{
-                          display: 'inline-block', padding: '2px 7px', borderRadius: 4,
-                          fontSize: 11, fontWeight: 600,
-                          background: ci.color + '18', color: ci.color,
-                          border: `1px solid ${ci.color}30`,
-                        }}>
+                    <tr key={a.id} className={i < unplannedLog.length - 1 ? 'border-b border-[var(--c6)]' : ''}>
+                      <td className="px-4 py-[10px] text-[13px] text-[var(--c1)]">{a.date}</td>
+                      <td className="px-4 py-[10px] text-sm font-medium">{memberName}</td>
+                      <td className="px-4 py-[10px]">
+                        <span
+                          className="inline-block px-[7px] py-[2px] rounded text-[11px] font-semibold"
+                          style={{ background: ci.color + '18', color: ci.color, border: `1px solid ${ci.color}30` }}
+                        >
                           {ci.label}
                         </span>
                       </td>
-                      <td style={{ padding: '10px 16px', fontSize: 13, color: 'var(--navy)' }}>
+                      <td className="px-4 py-[10px] text-[13px] text-primary">
                         {a.project ? `${a.project.pn} — ${a.project.name}` : (a.label ?? '—')}
                       </td>
-                      <td style={{ padding: '10px 16px', textAlign: 'right', fontSize: 14, fontFamily: 'monospace', color: 'var(--amber)' }}>
+                      <td className="px-4 py-[10px] text-right text-sm text-[#d97706]">
                         {a.hours.toFixed(1)}h
                       </td>
-                      <td style={{ padding: '10px 16px', fontSize: 13, color: 'var(--c2)' }}>{a.notes ?? a.label ?? '—'}</td>
+                      <td className="px-4 py-[10px] text-[13px] text-[var(--c2)]">{a.notes ?? a.label ?? '—'}</td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
           )}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      <div style={{ height: 40 }} />
+      <div className="h-10" />
     </div>
   )
 }

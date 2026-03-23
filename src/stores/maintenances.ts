@@ -41,22 +41,62 @@ async function upsertRetainerRows(maintenance: Maintenance) {
     .eq('maintenance_id', maintenance.id)
   const existingMonths = new Set((existing ?? []).map((r: { month: string }) => r.month))
 
-  const months = monthsInRange(maintenance.contract_start, maintenance.contract_end)
-  const newRows = months
-    .filter(m => !existingMonths.has(m))
-    .map(month => ({
-      maintenance_id: maintenance.id,
-      project_id: null as string | null,
-      month,
-      planned_amount: maintenance.monthly_retainer,
-      actual_amount: null as number | null,
-      status: 'planned' as const,
-      probability: 100,
-    }))
+  if (maintenance.billing_cycle === 'annual') {
+    // Annual billing: one invoice row per year in the selected billing month
+    const billingMonth = maintenance.billing_month ?? 1
+    const start = new Date(maintenance.contract_start + 'T00:00:00')
+    const end = maintenance.contract_end
+      ? new Date(maintenance.contract_end + 'T00:00:00')
+      : new Date(start.getFullYear(), start.getMonth() + 12, 1)
 
-  if (newRows.length > 0) {
-    const { error } = await supabase.from('revenue_planner').insert(newRows)
-    if (error) throw error
+    // Collect all years covered by the contract
+    const years = new Set<number>()
+    const cur = new Date(start.getFullYear(), start.getMonth(), 1)
+    while (cur <= end) {
+      years.add(cur.getFullYear())
+      cur.setMonth(cur.getMonth() + 1)
+    }
+
+    const newRows = [...years]
+      .map(year => {
+        const mm = String(billingMonth).padStart(2, '0')
+        const month = `${year}-${mm}-01`
+        return { month, year }
+      })
+      .filter(({ month }) => !existingMonths.has(month))
+      .map(({ month }) => ({
+        maintenance_id: maintenance.id,
+        project_id: null as string | null,
+        month,
+        planned_amount: maintenance.monthly_retainer,
+        actual_amount: null as number | null,
+        status: 'planned' as const,
+        probability: 100,
+      }))
+
+    if (newRows.length > 0) {
+      const { error } = await supabase.from('revenue_planner').insert(newRows)
+      if (error) throw error
+    }
+  } else {
+    // Monthly billing: one row per month
+    const months = monthsInRange(maintenance.contract_start, maintenance.contract_end)
+    const newRows = months
+      .filter(m => !existingMonths.has(m))
+      .map(month => ({
+        maintenance_id: maintenance.id,
+        project_id: null as string | null,
+        month,
+        planned_amount: maintenance.monthly_retainer,
+        actual_amount: null as number | null,
+        status: 'planned' as const,
+        probability: 100,
+      }))
+
+    if (newRows.length > 0) {
+      const { error } = await supabase.from('revenue_planner').insert(newRows)
+      if (error) throw error
+    }
   }
 }
 
@@ -118,7 +158,29 @@ export const useMaintenancesStore = create<MaintenancesState>((set, get) => ({
         .select('*, client:clients(id, name), hosting_clients(id)')
         .order('created_at', { ascending: false })
       if (error) throw error
-      set({ maintenances: (data ?? []) as Maintenance[] })
+
+      // For maintenances with no linked hosting_clients row (legacy data),
+      // fall back to checking if any hosting_client exists for the same client_id
+      const rows = (data ?? []) as Maintenance[]
+      const unlinked = rows.filter(m => !m.hosting_clients || m.hosting_clients.length === 0)
+      if (unlinked.length > 0) {
+        const clientIds = [...new Set(unlinked.map(m => m.client_id))]
+        const { data: legacyHosting } = await supabase
+          .from('hosting_clients')
+          .select('client_id')
+          .in('client_id', clientIds)
+          .is('maintenance_id', null)
+          .eq('status', 'active')
+        const clientsWithHosting = new Set((legacyHosting ?? []).map((h: { client_id: string }) => h.client_id))
+        const patched = rows.map(m =>
+          (!m.hosting_clients || m.hosting_clients.length === 0) && clientsWithHosting.has(m.client_id)
+            ? { ...m, hosting_clients: [{ id: 'legacy' }] }
+            : m
+        )
+        set({ maintenances: patched })
+      } else {
+        set({ maintenances: rows })
+      }
     } catch (err) {
       set({ error: (err as Error).message })
     } finally {

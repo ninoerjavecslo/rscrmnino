@@ -13,6 +13,8 @@ import { useChangeRequestsStore } from '../stores/changeRequests'
 import { usePipelineStore } from '../stores/pipeline'
 import { hostingAnnualValue } from '../lib/types'
 import type { PipelineItem, InfrastructureCost } from '../lib/types'
+import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -126,8 +128,8 @@ function MonthlyChart({ data }: { data: { label: string; plan: number; actual: n
 function MiniBar({ value, max, color = 'var(--navy)' }: { value: number; max: number; color?: string }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0
   return (
-    <div style={{ height: 6, background: 'var(--c6)', borderRadius: 3, overflow: 'hidden', minWidth: 80 }}>
-      <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 3, transition: 'width 0.4s ease' }} />
+    <div className="h-[6px] bg-[var(--c6)] rounded-[3px] overflow-hidden min-w-[80px]">
+      <div className="h-full rounded-[3px] transition-[width] duration-300 ease-in-out" style={{ width: `${pct}%`, background: color }} />
     </div>
   )
 }
@@ -584,122 +586,122 @@ export function StatisticsView() {
     const maxTop5 = top5Clients[0]?.amount ?? 1
     return (
       <>
-        <div className="stats-strip">
-          <div className="stat-card" style={{'--left-color':'var(--green)'} as React.CSSProperties}>
-            <div className="stat-card-label">INVOICED YTD</div>
-            <div className="stat-card-value" style={{color:'var(--green)'}}>{fmtEur(totalInvoicedYTD)}</div>
-            <div className="stat-card-sub">issued + paid {CURRENT_YEAR}</div>
+        <div className="grid grid-cols-4 gap-3 mb-4">
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">INVOICED YTD</div>
+            <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-[#16a34a]">{fmtEur(totalInvoicedYTD)}</div>
+            <div className="text-xs text-muted-foreground mt-1">issued + paid {CURRENT_YEAR}</div>
           </div>
-          <div className="stat-card" style={{'--left-color':'var(--navy)'} as React.CSSProperties}>
-            <div className="stat-card-label">MRR</div>
-            <div className="stat-card-value">{fmtEur(mrr)}</div>
-            <div className="stat-card-sub">retainers + hosting</div>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">MRR</div>
+            <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{fmtEur(mrr)}</div>
+            <div className="text-xs text-muted-foreground mt-1">retainers + hosting</div>
           </div>
-          <div className="stat-card" style={{'--left-color':'var(--blue)'} as React.CSSProperties}>
-            <div className="stat-card-label">ACTIVE PROJECTS</div>
-            <div className="stat-card-value">{activeProjects.length}</div>
-            <div className="stat-card-sub">of {projects.length} total</div>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">ACTIVE PROJECTS</div>
+            <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{activeProjects.length}</div>
+            <div className="text-xs text-muted-foreground mt-1">of {projects.length} total</div>
           </div>
-          <div className="stat-card" style={{'--left-color':'var(--amber)'} as React.CSSProperties}>
-            <div className="stat-card-label">PIPELINE WEIGHTED</div>
-            <div className="stat-card-value">{fmtEur(pipelineWeighted)}</div>
-            <div className="stat-card-sub">{activeDeals.length} active deals</div>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">PIPELINE WEIGHTED</div>
+            <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{fmtEur(pipelineWeighted)}</div>
+            <div className="text-xs text-muted-foreground mt-1">{activeDeals.length} active deals</div>
           </div>
         </div>
 
         {/* Alerts */}
         {(domainsExpiring30 > 0 || pipelineThisMonth > 0) && (
-          <div style={{ display: 'flex', gap: 8, padding: '0 0 16px 0', flexWrap: 'wrap' }}>
+          <div className="flex gap-2 pb-4 flex-wrap">
             {domainsExpiring30 > 0 && (
-              <span className="badge badge-amber">{domainsExpiring30} domain{domainsExpiring30 > 1 ? 's' : ''} expiring ≤30 days</span>
+              <Badge variant="amber">{domainsExpiring30} domain{domainsExpiring30 > 1 ? 's' : ''} expiring ≤30 days</Badge>
             )}
             {pipelineThisMonth > 0 && (
-              <span className="badge badge-blue">{pipelineThisMonth} deal{pipelineThisMonth > 1 ? 's' : ''} expected this month</span>
+              <Badge variant="blue">{pipelineThisMonth} deal{pipelineThisMonth > 1 ? 's' : ''} expected this month</Badge>
             )}
           </div>
         )}
 
-        <div className="page-content" style={{paddingTop:0}}>
+        <div className="overflow-auto p-6 pt-0">
 
           {/* Year Forecast Chart */}
-          <div className="section-bar" style={{marginBottom:12}}>
+          <div className="flex items-center justify-between mb-3">
             <h2>Full Year Forecast — {CURRENT_YEAR}</h2>
-            <span style={{fontSize:12,color:'var(--c3)',fontWeight:400}}>Past: invoiced vs plan · Future: confirmed plan + pipeline</span>
+            <span className="text-xs text-muted-foreground">Past: invoiced vs plan · Future: confirmed plan + pipeline</span>
           </div>
-          <div className="card card-body" style={{marginBottom:16}}>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col mb-6">
             <ForecastChart data={yearForecastData} currentMonth={shortMonth(CURRENT_MONTH_STR)} />
           </div>
 
           {/* Projection summary cards */}
-          <div className="stats-strip" style={{marginBottom:24}}>
-            <div className="stat-card" style={{'--left-color':'var(--green)'} as React.CSSProperties}>
-              <div className="stat-card-label">INVOICED YTD</div>
-              <div className="stat-card-value" style={{color:'var(--green)'}}>{fmtEur(totalInvoicedYTD)}</div>
-              <div className="stat-card-sub">issued + paid so far</div>
+          <div className="grid grid-cols-4 gap-3 mb-4">
+            <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+              <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">INVOICED YTD</div>
+              <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-[#16a34a]">{fmtEur(totalInvoicedYTD)}</div>
+              <div className="text-xs text-muted-foreground mt-1">issued + paid so far</div>
             </div>
-            <div className="stat-card" style={{'--left-color':'var(--navy)'} as React.CSSProperties}>
-              <div className="stat-card-label">REMAINING CONFIRMED</div>
-              <div className="stat-card-value">{fmtEur(projectionSummary.confirmedRemaining)}</div>
-              <div className="stat-card-sub">planned rows remaining</div>
+            <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+              <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">REMAINING CONFIRMED</div>
+              <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{fmtEur(projectionSummary.confirmedRemaining)}</div>
+              <div className="text-xs text-muted-foreground mt-1">planned rows remaining</div>
             </div>
-            <div className="stat-card" style={{'--left-color':'var(--amber)'} as React.CSSProperties}>
-              <div className="stat-card-label">PIPELINE TOTAL</div>
-              <div className="stat-card-value">{fmtEur(projectionSummary.pipelineFaceTotal)}</div>
-              <div className="stat-card-sub">weighted: {fmtEur(projectionSummary.pipelineWeightedTotal)}</div>
+            <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+              <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">PIPELINE TOTAL</div>
+              <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{fmtEur(projectionSummary.pipelineFaceTotal)}</div>
+              <div className="text-xs text-muted-foreground mt-1">weighted: {fmtEur(projectionSummary.pipelineWeightedTotal)}</div>
             </div>
-            <div className="stat-card" style={{'--left-color':'var(--blue)'} as React.CSSProperties}>
-              <div className="stat-card-label">PROJECTED YEAR-END</div>
-              <div className="stat-card-value" style={{color:'var(--blue)'}}>{fmtEur(projectionSummary.projectedYearEnd)}</div>
-              <div className="stat-card-sub">confirmed + all pipeline</div>
+            <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+              <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">PROJECTED YEAR-END</div>
+              <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-[#2563eb]">{fmtEur(projectionSummary.projectedYearEnd)}</div>
+              <div className="text-xs text-muted-foreground mt-1">confirmed + all pipeline</div>
             </div>
           </div>
 
           {/* Plan vs Actual this year */}
-          <div className="section-bar" style={{marginBottom:12}}><h2>Plan vs Actual — {CURRENT_YEAR}</h2></div>
-          <div className="card card-body" style={{marginBottom:24}}>
+          <div className="flex items-center justify-between mb-3"><h2>Plan vs Actual — {CURRENT_YEAR}</h2></div>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col mb-6">
             <MonthlyChart data={monthlyChartData} />
           </div>
 
           {/* Revenue Mix */}
-          <div className="section-bar" style={{marginBottom:12}}><h2>Revenue Mix — Planned {CURRENT_YEAR}</h2></div>
-          <div className="card card-body" style={{marginBottom:24}}>
+          <div className="flex items-center justify-between mb-3"><h2>Revenue Mix — Planned {CURRENT_YEAR}</h2></div>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col mb-6">
             {revMix.map(s => (
-              <div key={s.label} style={{ display: 'grid', gridTemplateColumns: '120px 100px 1fr 48px', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>{s.label}</span>
-                <span className="text-mono" style={{ fontSize: 13, color: 'var(--c2)', textAlign: 'right' }}>{fmtEur(s.amount)}</span>
+              <div key={s.label} className="grid items-center gap-3 mb-2.5" style={{ gridTemplateColumns: '120px 100px 1fr 48px' }}>
+                <span className="text-[13px] font-semibold">{s.label}</span>
+                <span className="text-[13px] text-[#374151] text-right">{fmtEur(s.amount)}</span>
                 <MiniBar value={s.amount} max={totalInvoicedYTD} color={s.color} />
-                <span style={{ fontSize: 12, color: 'var(--c3)', textAlign: 'right' }}>{s.pct}%</span>
+                <span className="text-xs text-muted-foreground text-right">{s.pct}%</span>
               </div>
             ))}
           </div>
 
           {/* Top 5 clients */}
-          <div className="section-bar" style={{marginBottom:12}}><h2>Top 5 Clients by Invoiced YTD</h2></div>
-          <div className="card" style={{marginBottom:24}}>
+          <div className="flex items-center justify-between mb-3"><h2>Top 5 Clients by Invoiced YTD</h2></div>
+          <Card>
             <table>
               <thead>
                 <tr>
-                  <th style={{width:40}}>RANK</th>
+                  <th className="w-[40px]">RANK</th>
                   <th>CLIENT</th>
-                  <th className="th-right">INVOICED YTD</th>
-                  <th style={{width:160}}>BAR</th>
+                  <th className="text-right">INVOICED YTD</th>
+                  <th className="w-[160px]">BAR</th>
                 </tr>
               </thead>
               <tbody>
                 {top5Clients.map((c, i) => (
                   <tr key={c.name}>
-                    <td className="text-mono" style={{color:'var(--c4)',fontWeight:700}}>#{i+1}</td>
-                    <td style={{fontWeight:600}}>{c.name}</td>
-                    <td className="td-right text-mono" style={{color:'var(--green)',fontWeight:700}}>{fmtEur(c.amount)}</td>
+                    <td className="font-bold text-muted-foreground">#{i+1}</td>
+                    <td className="font-semibold">{c.name}</td>
+                    <td className="text-right font-bold text-[#16a34a]">{fmtEur(c.amount)}</td>
                     <td><MiniBar value={c.amount} max={maxTop5} color="var(--green)" /></td>
                   </tr>
                 ))}
                 {top5Clients.length === 0 && (
-                  <tr><td colSpan={4} style={{textAlign:'center',color:'var(--c4)',padding:'20px'}}>No invoiced revenue yet</td></tr>
+                  <tr><td colSpan={4} className="text-center text-muted-foreground py-5">No invoiced revenue yet</td></tr>
                 )}
               </tbody>
             </table>
-          </div>
+          </Card>
         </div>
       </>
     )
@@ -710,47 +712,47 @@ export function StatisticsView() {
     const totalYTD = clientRanking.reduce((s, c) => s + c.amount, 0) || 1
     return (
       <>
-        <div className="stats-strip">
-          <div className="stat-card" style={{'--left-color':'var(--navy)'} as React.CSSProperties}>
-            <div className="stat-card-label">TOTAL CLIENTS</div>
-            <div className="stat-card-value">{clients.length}</div>
-            <div className="stat-card-sub">in system</div>
+        <div className="grid grid-cols-4 gap-3 mb-4">
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">TOTAL CLIENTS</div>
+            <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{clients.length}</div>
+            <div className="text-xs text-muted-foreground mt-1">in system</div>
           </div>
-          <div className="stat-card" style={{'--left-color':'var(--green)'} as React.CSSProperties}>
-            <div className="stat-card-label">ACTIVE CLIENTS</div>
-            <div className="stat-card-value">{clientsWithActivity}</div>
-            <div className="stat-card-sub">with active project or maintenance</div>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">ACTIVE CLIENTS</div>
+            <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{clientsWithActivity}</div>
+            <div className="text-xs text-muted-foreground mt-1">with active project or maintenance</div>
           </div>
-          <div className="stat-card" style={{'--left-color':'var(--blue)'} as React.CSSProperties}>
-            <div className="stat-card-label">AVG INVOICED / ACTIVE</div>
-            <div className="stat-card-value">{fmtEur(avgInvoicedPerClient)}</div>
-            <div className="stat-card-sub">YTD per active client</div>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">AVG INVOICED / ACTIVE</div>
+            <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{fmtEur(avgInvoicedPerClient)}</div>
+            <div className="text-xs text-muted-foreground mt-1">YTD per active client</div>
           </div>
         </div>
-        <div className="page-content" style={{paddingTop:0}}>
-          <div className="section-bar" style={{marginBottom:12}}><h2>Client Revenue Ranking — YTD</h2></div>
-          <div className="card">
+        <div className="overflow-auto p-6 pt-0">
+          <div className="flex items-center justify-between mb-3"><h2>Client Revenue Ranking — YTD</h2></div>
+          <Card>
             <table>
               <thead>
                 <tr>
-                  <th style={{width:40}}>RANK</th>
+                  <th className="w-[40px]">RANK</th>
                   <th>CLIENT</th>
-                  <th className="th-right">PROJECTS</th>
-                  <th className="th-right">INVOICED YTD</th>
-                  <th className="th-right">% OF TOTAL</th>
-                  <th style={{width:120}}>BAR</th>
+                  <th className="text-right">PROJECTS</th>
+                  <th className="text-right">INVOICED YTD</th>
+                  <th className="text-right">% OF TOTAL</th>
+                  <th className="w-[120px]">BAR</th>
                 </tr>
               </thead>
               <tbody>
                 {clientRanking.map((c, i) => (
-                  <tr key={c.name} style={c.amount === 0 ? {opacity:0.5} : undefined}>
-                    <td className="text-mono" style={{color:'var(--c4)',fontWeight:700}}>#{i+1}</td>
-                    <td style={{fontWeight:600}}>{c.name}</td>
-                    <td className="td-right text-mono">{c.projectCount}</td>
-                    <td className="td-right text-mono" style={{color: c.amount > 0 ? 'var(--green)' : 'var(--c4)',fontWeight: c.amount > 0 ? 700 : 400}}>
+                  <tr key={c.name} className={c.amount === 0 ? 'opacity-50' : undefined}>
+                    <td className="font-bold text-muted-foreground">#{i+1}</td>
+                    <td className="font-semibold">{c.name}</td>
+                    <td className="text-right">{c.projectCount}</td>
+                    <td className={`text-right ${c.amount > 0 ? 'font-bold text-[#16a34a]' : 'text-muted-foreground'}`}>
                       {c.amount > 0 ? fmtEur(c.amount) : '—'}
                     </td>
-                    <td className="td-right text-mono" style={{color:'var(--c3)'}}>
+                    <td className="text-right text-muted-foreground">
                       {c.amount > 0 ? Math.round(c.amount / totalYTD * 100) + '%' : '—'}
                     </td>
                     <td>
@@ -760,7 +762,7 @@ export function StatisticsView() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </Card>
         </div>
       </>
     )
@@ -770,106 +772,106 @@ export function StatisticsView() {
     const maxProjVal = top10Projects[0]?.initial_contract_value ?? 1
     return (
       <>
-        <div className="stats-strip">
-          <div className="stat-card" style={{'--left-color':'var(--blue)'} as React.CSSProperties}>
-            <div className="stat-card-label">ACTIVE PROJECTS</div>
-            <div className="stat-card-value">{activeProjects.length}</div>
-            <div className="stat-card-sub">of {projects.length} total</div>
+        <div className="grid grid-cols-4 gap-3 mb-4">
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">ACTIVE PROJECTS</div>
+            <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{activeProjects.length}</div>
+            <div className="text-xs text-muted-foreground mt-1">of {projects.length} total</div>
           </div>
-          <div className="stat-card" style={{'--left-color':'var(--green)'} as React.CSSProperties}>
-            <div className="stat-card-label">COMPLETED THIS YEAR</div>
-            <div className="stat-card-value">{completedThisYear.length}</div>
-            <div className="stat-card-sub">status = completed</div>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">COMPLETED THIS YEAR</div>
+            <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{completedThisYear.length}</div>
+            <div className="text-xs text-muted-foreground mt-1">status = completed</div>
           </div>
-          <div className="stat-card" style={{'--left-color':'var(--navy)'} as React.CSSProperties}>
-            <div className="stat-card-label">PORTFOLIO VALUE</div>
-            <div className="stat-card-value">{fmtEur(portfolioValue)}</div>
-            <div className="stat-card-sub">sum of active contracts</div>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">PORTFOLIO VALUE</div>
+            <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{fmtEur(portfolioValue)}</div>
+            <div className="text-xs text-muted-foreground mt-1">sum of active contracts</div>
           </div>
-          <div className="stat-card" style={{'--left-color':'var(--amber)'} as React.CSSProperties}>
-            <div className="stat-card-label">AVG PROJECT VALUE</div>
-            <div className="stat-card-value">{fmtEur(avgProjectValue)}</div>
-            <div className="stat-card-sub">active only</div>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">AVG PROJECT VALUE</div>
+            <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{fmtEur(avgProjectValue)}</div>
+            <div className="text-xs text-muted-foreground mt-1">active only</div>
           </div>
         </div>
-        <div className="page-content" style={{paddingTop:0}}>
+        <div className="overflow-auto p-6 pt-0">
           {/* Type breakdown */}
-          <div className="section-bar" style={{marginBottom:12}}><h2>Project Type Breakdown</h2></div>
-          <div className="stats-strip" style={{marginBottom:24}}>
+          <div className="flex items-center justify-between mb-3"><h2>Project Type Breakdown</h2></div>
+          <div className="grid grid-cols-4 gap-3 mb-4">
             {projectsByType.map(t => (
-              <div key={t.label} className="stat-card card-body" style={{'--left-color':'var(--navy)'} as React.CSSProperties}>
-                <div className="stat-card-label">{t.label.toUpperCase()}</div>
-                <div className="stat-card-value">{t.count}</div>
-                <div style={{marginTop:6}}><MiniBar value={t.count} max={activeProjects.length} color="var(--navy)" /></div>
-                <div className="stat-card-sub" style={{marginTop:4}}>{t.pct}%</div>
+              <div key={t.label} className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+                <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">{t.label.toUpperCase()}</div>
+                <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{t.count}</div>
+                <div className="mt-1.5"><MiniBar value={t.count} max={activeProjects.length} color="var(--navy)" /></div>
+                <div className="text-xs text-muted-foreground mt-1">{t.pct}%</div>
               </div>
             ))}
           </div>
 
           {/* Top 10 by value */}
-          <div className="section-bar" style={{marginBottom:12}}><h2>Top 10 Active Projects by Value</h2></div>
-          <div className="card" style={{marginBottom:24}}>
+          <div className="flex items-center justify-between mb-3"><h2>Top 10 Active Projects by Value</h2></div>
+          <Card>
             <table>
               <thead>
                 <tr>
                   <th>PROJECT</th>
                   <th>CLIENT</th>
-                  <th className="th-right">VALUE</th>
-                  <th style={{width:160}}>BAR</th>
+                  <th className="text-right">VALUE</th>
+                  <th className="w-[160px]">BAR</th>
                 </tr>
               </thead>
               <tbody>
                 {top10Projects.map(p => (
                   <tr key={p.id}>
-                    <td><span className="badge badge-gray" style={{marginRight:6}}>{p.pn}</span>{p.name}</td>
-                    <td style={{color:'var(--c3)',fontSize:13}}>{p.client?.name ?? '—'}</td>
-                    <td className="td-right text-mono" style={{fontWeight:700,color:'var(--navy)'}}>{fmtEur(p.initial_contract_value ?? 0)}</td>
+                    <td><Badge variant="gray" className="mr-1.5">{p.pn}</Badge>{p.name}</td>
+                    <td className="text-muted-foreground text-[13px]">{p.client?.name ?? '—'}</td>
+                    <td className="text-right font-bold text-primary">{fmtEur(p.initial_contract_value ?? 0)}</td>
                     <td><MiniBar value={p.initial_contract_value ?? 0} max={maxProjVal} color="var(--navy)" /></td>
                   </tr>
                 ))}
                 {top10Projects.length === 0 && (
-                  <tr><td colSpan={4} style={{textAlign:'center',color:'var(--c4)',padding:'20px'}}>No active projects</td></tr>
+                  <tr><td colSpan={4} className="text-center text-muted-foreground py-5">No active projects</td></tr>
                 )}
               </tbody>
             </table>
-          </div>
+          </Card>
 
           {/* Status overview */}
-          <div className="section-bar" style={{marginBottom:12}}><h2>Status Overview</h2></div>
-          <div className="card" style={{marginBottom:24}}>
+          <div className="flex items-center justify-between mb-3"><h2>Status Overview</h2></div>
+          <Card>
             <table>
-              <thead><tr><th>STATUS</th><th className="th-right">COUNT</th><th className="th-right">%</th></tr></thead>
+              <thead><tr><th>STATUS</th><th className="text-right">COUNT</th><th className="text-right">%</th></tr></thead>
               <tbody>
                 {projectStatusBreakdown.map(s => (
                   <tr key={s.status}>
-                    <td><span className={`badge badge-${s.status === 'active' ? 'green' : s.status === 'completed' ? 'blue' : s.status === 'paused' ? 'amber' : 'gray'}`}>{s.status}</span></td>
-                    <td className="td-right text-mono">{s.count}</td>
-                    <td className="td-right text-mono" style={{color:'var(--c3)'}}>{s.pct}%</td>
+                    <td><Badge variant={s.status === 'active' ? 'green' : s.status === 'completed' ? 'blue' : s.status === 'paused' ? 'amber' : 'gray'}>{s.status}</Badge></td>
+                    <td className="text-right">{s.count}</td>
+                    <td className="text-right text-muted-foreground">{s.pct}%</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
+          </Card>
 
           {/* Ending soon */}
           {projectsEndingSoon.length > 0 && (
             <>
-              <div className="section-bar" style={{marginBottom:12}}><h2>Ending Within 60 Days</h2></div>
-              <div className="card">
+              <div className="flex items-center justify-between mb-3"><h2>Ending Within 60 Days</h2></div>
+              <Card>
                 <table>
-                  <thead><tr><th>PROJECT</th><th>CLIENT</th><th className="th-right">END DATE</th><th className="th-right">DAYS LEFT</th></tr></thead>
+                  <thead><tr><th>PROJECT</th><th>CLIENT</th><th className="text-right">END DATE</th><th className="text-right">DAYS LEFT</th></tr></thead>
                   <tbody>
                     {projectsEndingSoon.map(p => (
                       <tr key={p.id}>
-                        <td><span className="badge badge-gray" style={{marginRight:6}}>{p.pn}</span>{p.name}</td>
-                        <td style={{color:'var(--c3)',fontSize:13}}>{p.client?.name ?? '—'}</td>
-                        <td className="td-right text-mono">{new Date(p.end_date! + 'T00:00:00').toLocaleDateString('sl-SI')}</td>
-                        <td className="td-right"><span className={`badge badge-${p.daysLeft <= 14 ? 'red' : 'amber'}`}>{p.daysLeft}d</span></td>
+                        <td><Badge variant="gray" className="mr-1.5">{p.pn}</Badge>{p.name}</td>
+                        <td className="text-muted-foreground text-[13px]">{p.client?.name ?? '—'}</td>
+                        <td className="text-right">{new Date(p.end_date! + 'T00:00:00').toLocaleDateString('sl-SI')}</td>
+                        <td className="text-right"><Badge variant={p.daysLeft <= 14 ? 'red' : 'amber'}>{p.daysLeft}d</Badge></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </Card>
             </>
           )}
         </div>
@@ -880,44 +882,44 @@ export function StatisticsView() {
   function renderHosting() {
     return (
       <>
-        <div className="stats-strip">
-          <div className="stat-card" style={{'--left-color':'var(--green)'} as React.CSSProperties}>
-            <div className="stat-card-label">ACTIVE HOSTING CLIENTS</div>
-            <div className="stat-card-value">{activeHosting.length}</div>
-            <div className="stat-card-sub">{hosting.filter(h=>h.status==='cancelled').length} cancelled</div>
+        <div className="grid grid-cols-4 gap-3 mb-4">
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">ACTIVE HOSTING CLIENTS</div>
+            <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{activeHosting.length}</div>
+            <div className="text-xs text-muted-foreground mt-1">{hosting.filter(h=>h.status==='cancelled').length} cancelled</div>
           </div>
-          <div className="stat-card" style={{'--left-color':'var(--green)'} as React.CSSProperties}>
-            <div className="stat-card-label">HOSTING REVENUE / YR</div>
-            <div className="stat-card-value">{fmtEur(hostingPerYear)}</div>
-            <div className="stat-card-sub">across all providers</div>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">HOSTING REVENUE / YR</div>
+            <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{fmtEur(hostingPerYear)}</div>
+            <div className="text-xs text-muted-foreground mt-1">across all providers</div>
           </div>
-          <div className="stat-card" style={{'--left-color':'var(--red)'} as React.CSSProperties}>
-            <div className="stat-card-label">HOSTING COST / YR</div>
-            <div className="stat-card-value" style={{color:'var(--red)'}}>{fmtEur(totalHostCost)}</div>
-            <div className="stat-card-sub">active infra costs</div>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">HOSTING COST / YR</div>
+            <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-[#dc2626]">{fmtEur(totalHostCost)}</div>
+            <div className="text-xs text-muted-foreground mt-1">active infra costs</div>
           </div>
-          <div className="stat-card" style={{'--left-color': totalHostMargin >= 0 ? 'var(--green)' : 'var(--red)'} as React.CSSProperties}>
-            <div className="stat-card-label">MARGIN / YR</div>
-            <div className="stat-card-value" style={{color: totalHostMargin >= 0 ? 'var(--green)' : 'var(--red)'}}>{fmtEur(totalHostMargin)}</div>
-            <div className="stat-card-sub">{totalHostRevenue > 0 ? Math.round(totalHostMargin / totalHostRevenue * 100) : 0}% margin</div>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">MARGIN / YR</div>
+            <div className={`text-[28px] font-extrabold tracking-[-0.5px] mb-2 ${totalHostMargin >= 0 ? 'text-[#16a34a]' : 'text-[#dc2626]'}`}>{fmtEur(totalHostMargin)}</div>
+            <div className="text-xs text-muted-foreground mt-1">{totalHostRevenue > 0 ? Math.round(totalHostMargin / totalHostRevenue * 100) : 0}% margin</div>
           </div>
         </div>
 
-        <div className="page-content" style={{paddingTop:0}}>
-          <div className="section-bar" style={{marginBottom:12}}><h2>Hosting Revenue vs Cost by Provider</h2></div>
-          <div className="card" style={{marginBottom:24}}>
+        <div className="overflow-auto p-6 pt-0">
+          <div className="flex items-center justify-between mb-3"><h2>Hosting Revenue vs Cost by Provider</h2></div>
+          <Card>
             {providerStats.length === 0 ? (
-              <div style={{padding:'28px',textAlign:'center',color:'var(--c4)',fontSize:13}}>No hosting data yet.</div>
+              <div className="px-7 py-7 text-center text-muted-foreground text-[13px]">No hosting data yet.</div>
             ) : (
               <table>
                 <thead>
                   <tr>
                     <th>PROVIDER</th>
-                    <th className="th-right">CLIENTS</th>
-                    <th className="th-right">REVENUE / YR</th>
-                    <th className="th-right">COST / YR</th>
-                    <th className="th-right">MARGIN / YR</th>
-                    <th className="th-right">MARGIN %</th>
+                    <th className="text-right">CLIENTS</th>
+                    <th className="text-right">REVENUE / YR</th>
+                    <th className="text-right">COST / YR</th>
+                    <th className="text-right">MARGIN / YR</th>
+                    <th className="text-right">MARGIN %</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -925,88 +927,88 @@ export function StatisticsView() {
                     const marginPct = p.revenue > 0 ? Math.round(p.margin / p.revenue * 100) : 0
                     return (
                       <tr key={p.provider}>
-                        <td style={{fontWeight:700}}>{p.provider}</td>
-                        <td className="td-right text-mono">{p.clients}</td>
-                        <td className="td-right text-mono" style={{color:'var(--green)',fontWeight:600}}>{fmtEur(p.revenue)}</td>
-                        <td className="td-right text-mono" style={{color:'var(--red)'}}>{fmtEur(p.cost)}</td>
-                        <td className="td-right text-mono" style={{color: p.margin >= 0 ? 'var(--green)' : 'var(--red)',fontWeight:600}}>{fmtEur(p.margin)}</td>
-                        <td className="td-right">
-                          <span className={`badge badge-${marginPct >= 50 ? 'green' : marginPct >= 0 ? 'amber' : 'red'}`}>{marginPct}%</span>
+                        <td className="font-bold">{p.provider}</td>
+                        <td className="text-right">{p.clients}</td>
+                        <td className="text-right font-semibold text-[#16a34a]">{fmtEur(p.revenue)}</td>
+                        <td className="text-right text-[#dc2626]">{fmtEur(p.cost)}</td>
+                        <td className={`text-right font-semibold ${p.margin >= 0 ? 'text-[#16a34a]' : 'text-[#dc2626]'}`}>{fmtEur(p.margin)}</td>
+                        <td className="text-right">
+                          <Badge variant={marginPct >= 50 ? 'green' : marginPct >= 0 ? 'amber' : 'red'}>{marginPct}%</Badge>
                         </td>
                       </tr>
                     )
                   })}
                 </tbody>
                 <tfoot>
-                  <tr style={{background:'var(--c6)'}}>
-                    <td style={{fontWeight:700}}>Total</td>
-                    <td className="td-right text-mono" style={{color:'var(--c3)'}}>{activeHosting.length}</td>
-                    <td className="td-right text-mono" style={{color:'var(--green)',fontWeight:800}}>{fmtEur(totalHostRevenue)}</td>
-                    <td className="td-right text-mono" style={{color:'var(--red)',fontWeight:700}}>{fmtEur(totalHostCost)}</td>
-                    <td className="td-right text-mono" style={{color: totalHostMargin >= 0 ? 'var(--green)' : 'var(--red)',fontWeight:800}}>{fmtEur(totalHostMargin)}</td>
-                    <td className="td-right">
-                      <span className={`badge badge-${totalHostRevenue > 0 && Math.round(totalHostMargin/totalHostRevenue*100) >= 50 ? 'green' : totalHostRevenue > 0 && Math.round(totalHostMargin/totalHostRevenue*100) >= 0 ? 'amber' : 'red'}`}>
+                  <tr className="bg-[#f3f4f6]">
+                    <td className="font-bold">Total</td>
+                    <td className="text-right text-muted-foreground">{activeHosting.length}</td>
+                    <td className="text-right font-extrabold text-[#16a34a]">{fmtEur(totalHostRevenue)}</td>
+                    <td className="text-right font-bold text-[#dc2626]">{fmtEur(totalHostCost)}</td>
+                    <td className={`text-right font-extrabold ${totalHostMargin >= 0 ? 'text-[#16a34a]' : 'text-[#dc2626]'}`}>{fmtEur(totalHostMargin)}</td>
+                    <td className="text-right">
+                      <Badge variant={totalHostRevenue > 0 && Math.round(totalHostMargin/totalHostRevenue*100) >= 50 ? 'green' : totalHostRevenue > 0 && Math.round(totalHostMargin/totalHostRevenue*100) >= 0 ? 'amber' : 'red'}>
                         {totalHostRevenue > 0 ? Math.round(totalHostMargin / totalHostRevenue * 100) : 0}%
-                      </span>
+                      </Badge>
                     </td>
                   </tr>
                 </tfoot>
               </table>
             )}
-          </div>
+          </Card>
 
           {/* Domain stats */}
-          <div className="section-bar" style={{marginBottom:12}}><h2>Domain Statistics</h2></div>
-          <div className="stats-strip" style={{marginBottom:24}}>
-            <div className="stat-card" style={{'--left-color':'var(--navy)'} as React.CSSProperties}>
-              <div className="stat-card-label">TOTAL DOMAINS</div>
-              <div className="stat-card-value">{activeDomains.length}</div>
-              <div className="stat-card-sub">{domains.filter(d=>d.archived).length} archived</div>
+          <div className="flex items-center justify-between mb-3"><h2>Domain Statistics</h2></div>
+          <div className="grid grid-cols-4 gap-3 mb-4">
+            <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+              <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">TOTAL DOMAINS</div>
+              <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{activeDomains.length}</div>
+              <div className="text-xs text-muted-foreground mt-1">{domains.filter(d=>d.archived).length} archived</div>
             </div>
-            <div className="stat-card" style={{'--left-color': expiringSoon.length > 0 ? 'var(--amber)' : 'var(--green)'} as React.CSSProperties}>
-              <div className="stat-card-label">EXPIRING SOON</div>
-              <div className="stat-card-value" style={{color: expiringSoon.length > 0 ? 'var(--amber)' : undefined}}>{expiringSoon.length}</div>
-              <div className="stat-card-sub">within 30 days</div>
+            <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+              <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">EXPIRING SOON</div>
+              <div className={`text-[28px] font-extrabold tracking-[-0.5px] mb-2 ${expiringSoon.length > 0 ? 'text-[#d97706]' : 'text-foreground'}`}>{expiringSoon.length}</div>
+              <div className="text-xs text-muted-foreground mt-1">within 30 days</div>
             </div>
-            <div className="stat-card" style={{'--left-color': expiringSoon60.length > 0 ? 'var(--amber)' : 'var(--blue)'} as React.CSSProperties}>
-              <div className="stat-card-label">EXPIRING ≤60 DAYS</div>
-              <div className="stat-card-value" style={{color: expiringSoon60.length > 0 ? 'var(--amber)' : undefined}}>{expiringSoon60.length}</div>
-              <div className="stat-card-sub">{expiringSoon60.filter(d=>d.daysLeft<=7).length} critical (≤7d)</div>
+            <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+              <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">EXPIRING ≤60 DAYS</div>
+              <div className={`text-[28px] font-extrabold tracking-[-0.5px] mb-2 ${expiringSoon60.length > 0 ? 'text-[#d97706]' : 'text-foreground'}`}>{expiringSoon60.length}</div>
+              <div className="text-xs text-muted-foreground mt-1">{expiringSoon60.filter(d=>d.daysLeft<=7).length} critical (≤7d)</div>
             </div>
-            <div className="stat-card" style={{'--left-color':'var(--green)'} as React.CSSProperties}>
-              <div className="stat-card-label">DOMAIN REVENUE / YR</div>
-              <div className="stat-card-value">{fmtEur(domainRevenueYr)}</div>
-              <div className="stat-card-sub">billable domains</div>
+            <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+              <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">DOMAIN REVENUE / YR</div>
+              <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{fmtEur(domainRevenueYr)}</div>
+              <div className="text-xs text-muted-foreground mt-1">billable domains</div>
             </div>
           </div>
 
           {expiringSoon60.length > 0 && (
             <>
-              <div className="section-bar" style={{marginBottom:8}}><h2 style={{fontSize:14}}>Expiring Within 60 Days</h2></div>
-              <div className="card">
+              <div className="flex items-center justify-between mb-3"><h2>Expiring Within 60 Days</h2></div>
+              <Card>
                 <table>
                   <thead>
                     <tr>
                       <th>DOMAIN</th>
                       <th>CLIENT</th>
-                      <th className="th-right">EXPIRY</th>
-                      <th className="th-right">DAYS LEFT</th>
-                      <th className="th-right">AUTO-RENEW</th>
+                      <th className="text-right">EXPIRY</th>
+                      <th className="text-right">DAYS LEFT</th>
+                      <th className="text-right">AUTO-RENEW</th>
                     </tr>
                   </thead>
                   <tbody>
                     {expiringSoon60.map(d => (
                       <tr key={d.id}>
-                        <td style={{fontWeight:600}}>{d.domain_name}</td>
-                        <td style={{color:'var(--c3)'}}>{d.client?.name ?? '—'}</td>
-                        <td className="td-right text-mono">{new Date(d.expiry_date + 'T00:00:00').toLocaleDateString('sl-SI')}</td>
-                        <td className="td-right"><span className={`badge badge-${d.daysLeft <= 7 ? 'red' : d.daysLeft <= 30 ? 'amber' : 'blue'}`}>{d.daysLeft}d</span></td>
-                        <td className="td-right"><span className={`badge badge-${d.auto_renew ? 'green' : 'gray'}`}>{d.auto_renew ? 'Yes' : 'No'}</span></td>
+                        <td className="font-semibold">{d.domain_name}</td>
+                        <td className="text-muted-foreground">{d.client?.name ?? '—'}</td>
+                        <td className="text-right">{new Date(d.expiry_date + 'T00:00:00').toLocaleDateString('sl-SI')}</td>
+                        <td className="text-right"><Badge variant={d.daysLeft <= 7 ? 'red' : d.daysLeft <= 30 ? 'amber' : 'blue'}>{d.daysLeft}d</Badge></td>
+                        <td className="text-right"><Badge variant={d.auto_renew ? 'green' : 'gray'}>{d.auto_renew ? 'Yes' : 'No'}</Badge></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </Card>
             </>
           )}
         </div>
@@ -1017,56 +1019,56 @@ export function StatisticsView() {
   function renderCRs() {
     return (
       <>
-        <div className="stats-strip">
-          <div className="stat-card" style={{'--left-color':'var(--navy)'} as React.CSSProperties}>
-            <div className="stat-card-label">TOTAL APPROVED CRs</div>
-            <div className="stat-card-value">{approvedCRs.length}</div>
-            <div className="stat-card-sub">status = approved</div>
+        <div className="grid grid-cols-4 gap-3 mb-4">
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">TOTAL APPROVED CRs</div>
+            <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{approvedCRs.length}</div>
+            <div className="text-xs text-muted-foreground mt-1">status = approved</div>
           </div>
-          <div className="stat-card" style={{'--left-color':'var(--green)'} as React.CSSProperties}>
-            <div className="stat-card-label">TOTAL CR VALUE</div>
-            <div className="stat-card-value">{fmtEur(totalCRValue)}</div>
-            <div className="stat-card-sub">approved CRs</div>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">TOTAL CR VALUE</div>
+            <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{fmtEur(totalCRValue)}</div>
+            <div className="text-xs text-muted-foreground mt-1">approved CRs</div>
           </div>
-          <div className="stat-card" style={{'--left-color':'var(--blue)'} as React.CSSProperties}>
-            <div className="stat-card-label">AVG CR VALUE</div>
-            <div className="stat-card-value">{fmtEur(avgCRValue)}</div>
-            <div className="stat-card-sub">per approved CR</div>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">AVG CR VALUE</div>
+            <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{fmtEur(avgCRValue)}</div>
+            <div className="text-xs text-muted-foreground mt-1">per approved CR</div>
           </div>
-          <div className="stat-card" style={{'--left-color':'var(--amber)'} as React.CSSProperties}>
-            <div className="stat-card-label">LARGEST CR</div>
-            <div className="stat-card-value">{fmtEur(maxCR)}</div>
-            <div className="stat-card-sub">single CR value</div>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">LARGEST CR</div>
+            <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{fmtEur(maxCR)}</div>
+            <div className="text-xs text-muted-foreground mt-1">single CR value</div>
           </div>
         </div>
-        <div className="page-content" style={{paddingTop:0}}>
-          <div className="section-bar" style={{marginBottom:12}}><h2>CRs by Project / Maintenance</h2></div>
-          <div className="card">
+        <div className="overflow-auto p-6 pt-0">
+          <div className="flex items-center justify-between mb-3"><h2>CRs by Project / Maintenance</h2></div>
+          <Card>
             {crsBySource.length === 0 ? (
-              <div style={{padding:'28px',textAlign:'center',color:'var(--c4)',fontSize:13}}>No approved CRs yet.</div>
+              <div className="px-7 py-7 text-center text-muted-foreground text-[13px]">No approved CRs yet.</div>
             ) : (
               <table>
                 <thead>
                   <tr>
                     <th>SOURCE</th>
-                    <th className="th-right"># CRs</th>
-                    <th className="th-right">TOTAL VALUE</th>
-                    <th className="th-right">AVG VALUE</th>
+                    <th className="text-right"># CRs</th>
+                    <th className="text-right">TOTAL VALUE</th>
+                    <th className="text-right">AVG VALUE</th>
                   </tr>
                 </thead>
                 <tbody>
                   {crsBySource.map(s => (
                     <tr key={s.label}>
-                      <td style={{fontWeight:600}}>{s.label}</td>
-                      <td className="td-right text-mono">{s.count}</td>
-                      <td className="td-right text-mono" style={{color:'var(--green)',fontWeight:700}}>{fmtEur(s.total)}</td>
-                      <td className="td-right text-mono" style={{color:'var(--c3)'}}>{fmtEur(s.count > 0 ? s.total / s.count : 0)}</td>
+                      <td className="font-semibold">{s.label}</td>
+                      <td className="text-right">{s.count}</td>
+                      <td className="text-right font-bold text-[#16a34a]">{fmtEur(s.total)}</td>
+                      <td className="text-right text-muted-foreground">{fmtEur(s.count > 0 ? s.total / s.count : 0)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             )}
-          </div>
+          </Card>
         </div>
       </>
     )
@@ -1077,88 +1079,88 @@ export function StatisticsView() {
     const maxForecast = Math.max(...pipelineForecast.map(m => m.faceValue), 1)
     return (
       <>
-        <div className="stats-strip">
-          <div className="stat-card" style={{'--left-color':'var(--blue)'} as React.CSSProperties}>
-            <div className="stat-card-label">ACTIVE DEALS</div>
-            <div className="stat-card-value">{activeDeals.length}</div>
-            <div className="stat-card-sub">{fmtEur(activeDealsFaceValue)} face value</div>
+        <div className="grid grid-cols-4 gap-3 mb-4">
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">ACTIVE DEALS</div>
+            <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{activeDeals.length}</div>
+            <div className="text-xs text-muted-foreground mt-1">{fmtEur(activeDealsFaceValue)} face value</div>
           </div>
-          <div className="stat-card" style={{'--left-color':'var(--green)'} as React.CSSProperties}>
-            <div className="stat-card-label">WON THIS YEAR</div>
-            <div className="stat-card-value" style={{color:'var(--green)'}}>{wonThisYear.length}</div>
-            <div className="stat-card-sub">{fmtEur(wonThisYear.reduce((s,p) => s + dealTotal(p), 0))}</div>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">WON THIS YEAR</div>
+            <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-[#16a34a]">{wonThisYear.length}</div>
+            <div className="text-xs text-muted-foreground mt-1">{fmtEur(wonThisYear.reduce((s,p) => s + dealTotal(p), 0))}</div>
           </div>
-          <div className="stat-card" style={{'--left-color':'var(--red)'} as React.CSSProperties}>
-            <div className="stat-card-label">LOST THIS YEAR</div>
-            <div className="stat-card-value" style={{color:'var(--red)'}}>{lostThisYear.length}</div>
-            <div className="stat-card-sub">{fmtEur(lostThisYear.reduce((s,p) => s + dealTotal(p), 0))}</div>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">LOST THIS YEAR</div>
+            <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-[#dc2626]">{lostThisYear.length}</div>
+            <div className="text-xs text-muted-foreground mt-1">{fmtEur(lostThisYear.reduce((s,p) => s + dealTotal(p), 0))}</div>
           </div>
-          <div className="stat-card" style={{'--left-color': winRate >= 50 ? 'var(--green)' : 'var(--amber)'} as React.CSSProperties}>
-            <div className="stat-card-label">WIN RATE</div>
-            <div className="stat-card-value" style={{color: winRate >= 50 ? 'var(--green)' : 'var(--amber)'}}>{winRate}%</div>
-            <div className="stat-card-sub">{closedCount} closed deals</div>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">WIN RATE</div>
+            <div className={`text-[28px] font-extrabold tracking-[-0.5px] mb-2 ${winRate >= 50 ? 'text-[#16a34a]' : 'text-[#d97706]'}`}>{winRate}%</div>
+            <div className="text-xs text-muted-foreground mt-1">{closedCount} closed deals</div>
           </div>
         </div>
-        <div className="page-content" style={{paddingTop:0}}>
+        <div className="overflow-auto p-6 pt-0">
           {/* Pipeline by stage */}
-          <div className="section-bar" style={{marginBottom:12}}><h2>Pipeline by Stage</h2></div>
-          <div className="card card-body" style={{marginBottom:24}}>
+          <div className="flex items-center justify-between mb-3"><h2>Pipeline by Stage</h2></div>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col mb-6">
             {dealsByStatus.map(s => (
-              <div key={s.status} style={{ display: 'grid', gridTemplateColumns: '100px 60px 120px 1fr', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-                <span className={`badge badge-${s.status === 'won' ? 'green' : s.status === 'lost' ? 'red' : 'amber'}`}>{s.status}</span>
-                <span className="text-mono" style={{fontSize:13,fontWeight:700}}>{s.count}</span>
-                <span className="text-mono" style={{fontSize:13,color:'var(--c2)'}}>{fmtEur(s.value)}</span>
+              <div key={s.status} className="grid items-center gap-3 mb-2.5" style={{ gridTemplateColumns: '100px 60px 120px 1fr' }}>
+                <Badge variant={s.status === 'won' ? 'green' : s.status === 'lost' ? 'red' : 'amber'}>{s.status}</Badge>
+                <span className="text-[13px] font-bold">{s.count}</span>
+                <span className="text-[13px] text-[#374151]">{fmtEur(s.value)}</span>
                 <MiniBar value={s.count} max={pipeline.length || 1} color={s.status === 'won' ? 'var(--green)' : s.status === 'lost' ? 'var(--red)' : 'var(--amber)'} />
               </div>
             ))}
           </div>
 
           {/* Deal type breakdown */}
-          <div className="section-bar" style={{marginBottom:12}}><h2>Deal Type Breakdown (Active)</h2></div>
-          <div className="stats-strip" style={{marginBottom:24}}>
+          <div className="flex items-center justify-between mb-3"><h2>Deal Type Breakdown (Active)</h2></div>
+          <div className="grid grid-cols-4 gap-3 mb-4">
             {dealsByType.map(t => (
-              <div key={t.label} className="stat-card" style={{'--left-color':'var(--navy)'} as React.CSSProperties}>
-                <div className="stat-card-label">{t.label.toUpperCase()}</div>
-                <div className="stat-card-value">{t.count}</div>
-                <div className="stat-card-sub">{fmtEur(t.value)}</div>
+              <div key={t.label} className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+                <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">{t.label.toUpperCase()}</div>
+                <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{t.count}</div>
+                <div className="text-xs text-muted-foreground mt-1">{fmtEur(t.value)}</div>
               </div>
             ))}
           </div>
 
           {/* Forecast by month */}
-          <div className="section-bar" style={{marginBottom:12}}><h2>Pipeline Forecast — Next 6 Months</h2></div>
-          <div className="card" style={{marginBottom:24}}>
+          <div className="flex items-center justify-between mb-3"><h2>Pipeline Forecast — Next 6 Months</h2></div>
+          <Card>
             <table>
               <thead>
                 <tr>
                   <th>MONTH</th>
-                  <th className="th-right">DEALS</th>
-                  <th className="th-right">FACE VALUE</th>
-                  <th className="th-right">LIKELY (≥50%)</th>
-                  <th className="th-right">HOPEFULLY (≥25%)</th>
-                  <th style={{width:120}}>BAR</th>
+                  <th className="text-right">DEALS</th>
+                  <th className="text-right">FACE VALUE</th>
+                  <th className="text-right">LIKELY (≥50%)</th>
+                  <th className="text-right">HOPEFULLY (≥25%)</th>
+                  <th className="w-[120px]">BAR</th>
                 </tr>
               </thead>
               <tbody>
                 {pipelineForecast.map(m => (
                   <tr key={m.month}>
-                    <td style={{fontWeight:600}}>{fmtMonth(m.month)}</td>
-                    <td className="td-right text-mono">{m.count}</td>
-                    <td className="td-right text-mono" style={{fontWeight:700}}>{m.faceValue > 0 ? fmtEur(m.faceValue) : '—'}</td>
-                    <td className="td-right text-mono" style={{color:'var(--green)'}}>{m.likely > 0 ? fmtEur(m.likely) : '—'}</td>
-                    <td className="td-right text-mono" style={{color:'var(--blue)'}}>{m.hopefully > 0 ? fmtEur(m.hopefully) : '—'}</td>
+                    <td className="font-semibold">{fmtMonth(m.month)}</td>
+                    <td className="text-right">{m.count}</td>
+                    <td className="text-right font-bold">{m.faceValue > 0 ? fmtEur(m.faceValue) : '—'}</td>
+                    <td className="text-right text-[#16a34a]">{m.likely > 0 ? fmtEur(m.likely) : '—'}</td>
+                    <td className="text-right text-[#2563eb]">{m.hopefully > 0 ? fmtEur(m.hopefully) : '—'}</td>
                     <td><MiniBar value={m.faceValue} max={maxForecast} color="var(--navy)" /></td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
+          </Card>
 
           {/* Top deals */}
-          <div className="section-bar" style={{marginBottom:12}}><h2>Top Active Deals</h2></div>
-          <div className="card">
+          <div className="flex items-center justify-between mb-3"><h2>Top Active Deals</h2></div>
+          <Card>
             {topDeals.length === 0 ? (
-              <div style={{padding:'28px',textAlign:'center',color:'var(--c4)',fontSize:13}}>No active deals.</div>
+              <div className="px-7 py-7 text-center text-muted-foreground text-[13px]">No active deals.</div>
             ) : (
               <table>
                 <thead>
@@ -1166,28 +1168,28 @@ export function StatisticsView() {
                     <th>COMPANY</th>
                     <th>TITLE</th>
                     <th>TYPE</th>
-                    <th className="th-right">AMOUNT</th>
-                    <th className="th-right">PROB.</th>
+                    <th className="text-right">AMOUNT</th>
+                    <th className="text-right">PROB.</th>
                     <th>EXPECTED</th>
-                    <th style={{width:100}}>BAR</th>
+                    <th className="w-[100px]">BAR</th>
                   </tr>
                 </thead>
                 <tbody>
                   {topDeals.map(p => (
                     <tr key={p.id}>
-                      <td style={{fontWeight:600}}>{p.company_name ?? p.client?.name ?? '—'}</td>
-                      <td style={{fontSize:13}}>{p.title}</td>
-                      <td><span className="badge badge-gray">{p.deal_type}</span></td>
-                      <td className="td-right text-mono" style={{fontWeight:700}}>{fmtEur(dealTotal(p))}</td>
-                      <td className="td-right"><span className={`badge badge-${p.probability >= 75 ? 'green' : p.probability >= 50 ? 'blue' : p.probability >= 25 ? 'amber' : 'gray'}`}>{p.probability}%</span></td>
-                      <td style={{fontSize:13,color:'var(--c3)'}}>{p.expected_month ? fmtMonth(p.expected_month) : '—'}</td>
+                      <td className="font-semibold">{p.company_name ?? p.client?.name ?? '—'}</td>
+                      <td className="text-[13px]">{p.title}</td>
+                      <td><Badge variant="gray">{p.deal_type}</Badge></td>
+                      <td className="text-right font-bold">{fmtEur(dealTotal(p))}</td>
+                      <td className="text-right"><Badge variant={p.probability >= 75 ? 'green' : p.probability >= 50 ? 'blue' : p.probability >= 25 ? 'amber' : 'gray'}>{p.probability}%</Badge></td>
+                      <td className="text-[13px] text-muted-foreground">{p.expected_month ? fmtMonth(p.expected_month) : '—'}</td>
                       <td><MiniBar value={dealTotal(p)} max={maxDealVal} color="var(--navy)" /></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             )}
-          </div>
+          </Card>
         </div>
       </>
     )
@@ -1197,93 +1199,93 @@ export function StatisticsView() {
     const maxRetainer = maintByClient[0]?.retainer ?? 1
     return (
       <>
-        <div className="stats-strip">
-          <div className="stat-card" style={{'--left-color':'var(--navy)'} as React.CSSProperties}>
-            <div className="stat-card-label">ACTIVE CONTRACTS</div>
-            <div className="stat-card-value">{activeMaintenances.length}</div>
-            <div className="stat-card-sub">of {maintenances.length} total</div>
+        <div className="grid grid-cols-4 gap-3 mb-4">
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">ACTIVE CONTRACTS</div>
+            <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{activeMaintenances.length}</div>
+            <div className="text-xs text-muted-foreground mt-1">of {maintenances.length} total</div>
           </div>
-          <div className="stat-card" style={{'--left-color':'var(--amber)'} as React.CSSProperties}>
-            <div className="stat-card-label">TOTAL MRR</div>
-            <div className="stat-card-value" style={{color:'var(--amber)'}}>{fmtEur(totalMRR)}</div>
-            <div className="stat-card-sub">monthly retainers</div>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">TOTAL MRR</div>
+            <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-[#d97706]">{fmtEur(totalMRR)}</div>
+            <div className="text-xs text-muted-foreground mt-1">monthly retainers</div>
           </div>
-          <div className="stat-card" style={{'--left-color':'var(--green)'} as React.CSSProperties}>
-            <div className="stat-card-label">ANNUAL RETAINER VALUE</div>
-            <div className="stat-card-value">{fmtEur(totalMRR * 12)}</div>
-            <div className="stat-card-sub">if all contracts run full year</div>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">ANNUAL RETAINER VALUE</div>
+            <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{fmtEur(totalMRR * 12)}</div>
+            <div className="text-xs text-muted-foreground mt-1">if all contracts run full year</div>
           </div>
-          <div className="stat-card" style={{'--left-color':'var(--blue)'} as React.CSSProperties}>
-            <div className="stat-card-label">AVG RETAINER</div>
-            <div className="stat-card-value">{fmtEur(avgRetainer)}</div>
-            <div className="stat-card-sub">per active contract / mo</div>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+            <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">AVG RETAINER</div>
+            <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{fmtEur(avgRetainer)}</div>
+            <div className="text-xs text-muted-foreground mt-1">per active contract / mo</div>
           </div>
         </div>
 
         {maintEndingSoon.length > 0 && (
-          <div style={{ padding: '0 0 16px 0' }}>
+          <div className="pb-4">
             {maintEndingSoon.map(m => (
-              <div key={m.id} className="alert alert-amber" style={{ marginBottom: 6 }}>
+              <div key={m.id} className="rounded-lg border border-[#fcd34d] bg-[#fef9ee] px-3 py-2 text-sm text-[#92400e] mb-1.5">
                 <strong>{m.name}</strong> — contract ends in {m.daysLeft} day{m.daysLeft !== 1 ? 's' : ''} ({m.contract_end})
               </div>
             ))}
           </div>
         )}
 
-        <div className="page-content" style={{paddingTop:0}}>
-          <div className="section-bar" style={{marginBottom:12}}><h2>Monthly Maintenance Revenue — {CURRENT_YEAR}</h2></div>
-          <div className="card card-body" style={{marginBottom:24}}>
+        <div className="overflow-auto p-6 pt-0">
+          <div className="flex items-center justify-between mb-3"><h2>Monthly Maintenance Revenue — {CURRENT_YEAR}</h2></div>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col mb-6">
             <MonthlyChart data={maintMonthlyChart} />
           </div>
 
-          <div className="section-bar" style={{marginBottom:12}}><h2>Retainer by Client</h2></div>
-          <div className="card" style={{marginBottom:24}}>
+          <div className="flex items-center justify-between mb-3"><h2>Retainer by Client</h2></div>
+          <Card>
             <table>
               <thead>
                 <tr>
                   <th>CLIENT</th>
-                  <th className="th-right">CONTRACTS</th>
-                  <th className="th-right">MONTHLY RETAINER</th>
-                  <th className="th-right">ANNUAL</th>
-                  <th style={{width:160}}>BAR</th>
+                  <th className="text-right">CONTRACTS</th>
+                  <th className="text-right">MONTHLY RETAINER</th>
+                  <th className="text-right">ANNUAL</th>
+                  <th className="w-[160px]">BAR</th>
                 </tr>
               </thead>
               <tbody>
                 {maintByClient.map(c => (
                   <tr key={c.clientName}>
-                    <td style={{fontWeight:600}}>{c.clientName}</td>
-                    <td className="td-right text-mono">{c.contracts}</td>
-                    <td className="td-right text-mono" style={{color:'var(--amber)',fontWeight:700}}>{fmtEur(c.retainer)}</td>
-                    <td className="td-right text-mono" style={{color:'var(--c2)'}}>{fmtEur(c.retainer * 12)}</td>
+                    <td className="font-semibold">{c.clientName}</td>
+                    <td className="text-right">{c.contracts}</td>
+                    <td className="text-right font-bold text-[#d97706]">{fmtEur(c.retainer)}</td>
+                    <td className="text-right text-[#374151]">{fmtEur(c.retainer * 12)}</td>
                     <td><MiniBar value={c.retainer} max={maxRetainer} color="var(--amber)" /></td>
                   </tr>
                 ))}
                 {maintByClient.length === 0 && (
-                  <tr><td colSpan={5} style={{textAlign:'center',color:'var(--c4)',padding:'20px'}}>No active maintenance contracts</td></tr>
+                  <tr><td colSpan={5} className="text-center text-muted-foreground py-5">No active maintenance contracts</td></tr>
                 )}
               </tbody>
               {maintByClient.length > 0 && (
                 <tfoot>
-                  <tr style={{background:'var(--c7)',borderTop:'2px solid var(--c6)'}}>
-                    <td colSpan={2} style={{fontSize:10,fontWeight:700,color:'var(--c3)',textTransform:'uppercase',letterSpacing:'0.05em'}}>Total</td>
-                    <td className="td-right text-mono" style={{fontWeight:700,color:'var(--amber)'}}>{fmtEur(totalMRR)}</td>
-                    <td className="td-right text-mono" style={{fontWeight:700,color:'var(--c2)'}}>{fmtEur(totalMRR * 12)}</td>
+                  <tr className="bg-[#f9fafb] border-t-2 border-[#e5e7eb]">
+                    <td colSpan={2} className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.05em]">Total</td>
+                    <td className="text-right font-bold text-[#d97706]">{fmtEur(totalMRR)}</td>
+                    <td className="text-right font-bold text-[#374151]">{fmtEur(totalMRR * 12)}</td>
                     <td />
                   </tr>
                 </tfoot>
               )}
             </table>
-          </div>
+          </Card>
 
-          <div className="section-bar" style={{marginBottom:12}}><h2>Active Contracts</h2></div>
-          <div className="card">
+          <div className="flex items-center justify-between mb-3"><h2>Active Contracts</h2></div>
+          <Card>
             <table>
               <thead>
                 <tr>
                   <th>NAME</th>
                   <th>CLIENT</th>
-                  <th className="th-right">RETAINER / MO</th>
-                  <th className="th-right">HRS / MO</th>
+                  <th className="text-right">RETAINER / MO</th>
+                  <th className="text-right">HRS / MO</th>
                   <th>CONTRACT</th>
                   <th>STATUS</th>
                 </tr>
@@ -1295,24 +1297,24 @@ export function StatisticsView() {
                   const daysLeft = m.contract_end ? Math.ceil((new Date(m.contract_end + 'T00:00:00').getTime() - now) / 86_400_000) : null
                   return (
                     <tr key={m.id}>
-                      <td style={{fontWeight:600}}>{m.name}</td>
-                      <td style={{color:'var(--c3)',fontSize:13}}>{clientName}</td>
-                      <td className="td-right text-mono" style={{fontWeight:700,color:'var(--amber)'}}>{fmtEur(m.monthly_retainer)}</td>
-                      <td className="td-right text-mono">{m.hours_included ?? '—'}</td>
-                      <td style={{fontSize:12,color: daysLeft !== null && daysLeft <= 30 ? 'var(--red)' : 'var(--c3)'}}>
+                      <td className="font-semibold">{m.name}</td>
+                      <td className="text-muted-foreground text-[13px]">{clientName}</td>
+                      <td className="text-right font-bold text-[#d97706]">{fmtEur(m.monthly_retainer)}</td>
+                      <td className="text-right">{m.hours_included ?? '—'}</td>
+                      <td className={`text-xs ${daysLeft !== null && daysLeft <= 30 ? 'text-[#dc2626]' : 'text-muted-foreground'}`}>
                         {m.contract_start ? m.contract_start.slice(0,7) : '—'} → {m.contract_end ? m.contract_end.slice(0,7) : '∞'}
-                        {daysLeft !== null && daysLeft <= 60 && <span className="badge badge-amber" style={{marginLeft:6}}>{daysLeft}d left</span>}
+                        {daysLeft !== null && daysLeft <= 60 && <Badge variant="amber" className="ml-1.5">{daysLeft}d left</Badge>}
                       </td>
-                      <td><span className="badge badge-green">Active</span></td>
+                      <td><Badge variant="green">Active</Badge></td>
                     </tr>
                   )
                 })}
                 {activeMaintenances.length === 0 && (
-                  <tr><td colSpan={6} style={{textAlign:'center',color:'var(--c4)',padding:'20px'}}>No active contracts</td></tr>
+                  <tr><td colSpan={6} className="text-center text-muted-foreground py-5">No active contracts</td></tr>
                 )}
               </tbody>
             </table>
-          </div>
+          </Card>
         </div>
       </>
     )
@@ -1320,35 +1322,27 @@ export function StatisticsView() {
 
   return (
     <div>
-      <div className="page-header">
+      <div className="flex items-center justify-between px-6 py-4 bg-background border-b border-border">
         <div>
           <h1>Statistics</h1>
-          <p className="text-sm" style={{color:'var(--c3)',marginTop:2}}>Agency intelligence overview</p>
+          <p className="text-sm text-muted-foreground mt-0.5">Agency intelligence overview</p>
         </div>
       </div>
 
       {/* Tab bar */}
-      <div style={{ borderBottom: '2px solid var(--c6)', display: 'flex', padding: '0 20px', gap: 2, background: '#fff' }}>
+      <div className="border-b-2 border-[#e5e7eb] flex px-5 gap-0.5 bg-white">
         {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} style={{
-            padding: '10px 20px',
-            fontWeight: tab === t.id ? 700 : 500,
-            fontSize: 13,
-            background: tab === t.id ? 'var(--navy)' : 'transparent',
-            border: 'none',
-            borderRadius: '8px 8px 0 0',
-            color: tab === t.id ? '#fff' : 'var(--c3)',
-            cursor: 'pointer',
-            marginBottom: -2,
-            letterSpacing: tab === t.id ? '-0.01em' : undefined,
-            transition: 'background 0.15s, color 0.15s',
-          }}>
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`px-5 py-2.5 text-[13px] rounded-t-lg border-none cursor-pointer transition-colors -mb-0.5 ${tab === t.id ? 'font-bold bg-primary text-white' : 'font-medium bg-transparent text-muted-foreground'}`}
+          >
             {t.label}
           </button>
         ))}
       </div>
 
-      <div style={{paddingTop: 8}}>
+      <div className="px-6 pt-4">
         {tab === 'overview'     && renderOverview()}
         {tab === 'clients'      && renderClients()}
         {tab === 'projects'     && renderProjects()}

@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
 
 interface AgencyBranding {
   name: string
@@ -49,88 +51,86 @@ export function LoginView({ onLogin }: { onLogin: () => void }) {
   }
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily: 'Inter, sans-serif' }}>
+    <div className="flex h-screen overflow-hidden font-[Inter,sans-serif]">
 
       {/* ── LEFT PANEL ── */}
-      <div style={{
-        width: '45%', flexShrink: 0, background: '#fdf6ef',
-        display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-        padding: '52px 56px', position: 'relative', overflow: 'hidden',
-      }}>
-        <div style={{
-          position: 'absolute', inset: 0, pointerEvents: 'none',
-          backgroundImage: 'linear-gradient(#e8d5c0 1px, transparent 1px), linear-gradient(90deg, #e8d5c0 1px, transparent 1px)',
-          backgroundSize: '40px 40px', opacity: 0.5,
-        }} />
+      <div className="flex flex-col justify-between relative overflow-hidden flex-shrink-0 w-[45%] bg-[#fdf6ef] px-14 py-[52px]">
+        <div className="absolute inset-0 pointer-events-none opacity-50"
+          style={{
+            backgroundImage: 'linear-gradient(#e8d5c0 1px, transparent 1px), linear-gradient(90deg, #e8d5c0 1px, transparent 1px)',
+            backgroundSize: '40px 40px',
+          }}
+        />
 
         {/* top: logo */}
-        <div style={{ position: 'relative', zIndex: 1 }}>
+        <div className="relative z-10">
           {branding.logo ? (
-            <img src={branding.logo} alt="Logo" style={{ height: 36, objectFit: 'contain', objectPosition: 'left' }} />
+            <img src={branding.logo} alt="Logo" className="object-contain object-left h-9" />
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 32, height: 32, background: '#0f172a', borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+            <div className="flex items-center gap-[10px]">
+              <div className="w-8 h-8 rounded-[7px] flex items-center justify-center text-white bg-[#0f172a]">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
               </div>
-              <span style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', fontFamily: 'Manrope, sans-serif' }}>{branding.name || 'Agency OS'}</span>
+              <span className="font-extrabold text-[15px] text-[#0f172a] font-[Manrope,sans-serif]">{branding.name || 'Agency OS'}</span>
             </div>
           )}
         </div>
 
         {/* middle: headline + USPs */}
-        <div style={{ position: 'relative', zIndex: 1 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 14 }}>Intelligence Platform</div>
-          <div style={{ fontSize: 32, fontWeight: 800, color: '#0f172a', lineHeight: 1.2, fontFamily: 'Manrope, sans-serif', marginBottom: 14 }}>
+        <div className="relative z-10">
+          <div className="font-bold uppercase mb-[14px] text-[11px] text-[#0f172a] tracking-[0.1em]">Intelligence Platform</div>
+          <div className="font-extrabold mb-[14px] text-[32px] text-[#0f172a] leading-[1.2] font-[Manrope,sans-serif]">
             {branding.name || 'Agency OS'}'s internal<br />command center.
           </div>
-          <div style={{ fontSize: 14, color: '#0f172a', lineHeight: 1.65, marginBottom: 40 }}>
+          <div className="mb-10 text-sm text-[#0f172a] leading-[1.65]">
             Projects, clients, team and revenue — one place for the whole team.
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="flex flex-col gap-3">
             {USPS.map(u => (
-              <div key={u.label} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 30, height: 30, borderRadius: 7, background: 'rgba(255,255,255,0.7)', border: '1px solid #e8d5c0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0f172a', flexShrink: 0 }}>
+              <div key={u.label} className="flex items-center gap-3">
+                <div className="flex items-center justify-center flex-shrink-0 rounded-[7px] w-[30px] h-[30px] text-[#0f172a]"
+                  style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid #e8d5c0' }}>
                   {u.icon}
                 </div>
-                <span style={{ fontSize: 13, color: '#0f172a', fontWeight: 500 }}>{u.label}</span>
+                <span className="font-medium text-[13px] text-[#0f172a]">{u.label}</span>
               </div>
             ))}
           </div>
         </div>
 
         {/* bottom: footer */}
-        <div style={{ position: 'relative', zIndex: 1, fontSize: 11, color: '#0f172a', fontWeight: 500, opacity: 0.4 }}>
+        <div className="relative z-10 font-medium opacity-40 text-[11px] text-[#0f172a]">
           {branding.name || 'Agency OS'} · Internal Platform
         </div>
       </div>
 
       {/* ── RIGHT PANEL ── */}
-      <div style={{ flex: 1, background: '#f0eef2', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 48px' }}>
-        <div style={{ width: '100%', maxWidth: 380 }}>
-          <div style={{ marginBottom: 32 }}>
-            <h1 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', fontFamily: 'Manrope, sans-serif', margin: 0, marginBottom: 6 }}>Welcome back</h1>
-            <p style={{ fontSize: 14, color: '#64748b', margin: 0 }}>Sign in to continue to your workspace.</p>
+      <div className="flex-1 flex items-center justify-center bg-[#f0eef2] px-12 py-10">
+        <div className="w-full max-w-[380px]">
+          <div className="mb-8">
+            <h1 className="font-extrabold m-0 mb-[6px] text-2xl text-[#0f172a] font-[Manrope,sans-serif]">Welcome back</h1>
+            <p className="m-0 text-sm text-[#64748b]">Sign in to continue to your workspace.</p>
           </div>
 
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div className="form-group">
-              <label className="form-label">Email address</label>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-[14px]">
+            <div className="mb-4">
+              <Label>Email address</Label>
               <input type="email" value={email} onChange={e => { setEmail(e.target.value); setError('') }} placeholder="you@agency.com" autoFocus />
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Password</label>
-              <div style={{ position: 'relative' }}>
+            <div className="mb-4">
+              <Label>Password</Label>
+              <div className="relative">
                 <input
                   type={showPw ? 'text' : 'password'}
                   value={password}
                   onChange={e => { setPassword(e.target.value); setError('') }}
                   placeholder="••••••••"
-                  style={{ paddingRight: 44 }}
+                  className="pr-11"
                 />
                 <button type="button" onClick={() => setShowPw(p => !p)}
-                  style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0, display: 'flex' }}>
+                  className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center bg-transparent border-0 cursor-pointer p-0 text-slate-400">
                   {showPw
                     ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
                     : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -139,11 +139,13 @@ export function LoginView({ onLogin }: { onLogin: () => void }) {
               </div>
             </div>
 
-            {error && <div className="alert alert-red">{error}</div>}
+            {error && (
+              <div className="rounded-lg border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-sm text-[#be123c]">{error}</div>
+            )}
 
-            <button type="submit" className="btn btn-primary btn-lg" disabled={loading} style={{ marginTop: 6, width: '100%', justifyContent: 'center' }}>
+            <Button type="submit" size="lg" disabled={loading} className="mt-[6px] w-full justify-center">
               {loading ? 'Signing in…' : 'Sign in →'}
-            </button>
+            </Button>
           </form>
         </div>
       </div>

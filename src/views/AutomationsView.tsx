@@ -4,6 +4,12 @@ import { useAutomationsStore } from '../stores/automations'
 import { useRemindersStore } from '../stores/reminders'
 import { toast } from '../lib/toast'
 import type { Automation, AutomationItem, ReminderRule } from '../lib/types'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
+import { Modal } from '../components/Modal'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { Label } from '@/components/ui/label'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -272,252 +278,221 @@ export function AutomationsView() {
   return (
     <div>
       {/* ── Type picker modal ──────────────────────────────────────────────── */}
-      {showTypePicker && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowTypePicker(false)}>
-          <div className="modal-box" style={{ maxWidth: 520 }}>
-            <div className="modal-header">
-              <h2>New automation</h2>
-              <button className="modal-close" onClick={() => setShowTypePicker(false)}>×</button>
+      <Modal
+        open={showTypePicker}
+        title="New automation"
+        onClose={() => setShowTypePicker(false)}
+        maxWidth={520}
+      >
+        <p className="mb-4 text-sm text-muted-foreground">What type of automation do you want to create?</p>
+        <div className="grid grid-cols-2 gap-3">
+          {/* Invoice Batch */}
+          <button
+            onClick={() => { setShowTypePicker(false); navigate('/automations/new') }}
+            className="bg-[var(--c7)] border-2 border-[var(--c6)] rounded-lg p-5 cursor-pointer text-left transition-colors hover:border-[var(--navy)]"
+          >
+            <div className="mb-2.5">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--navy)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             </div>
-            <div className="modal-body">
-              <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--c3)' }}>What type of automation do you want to create?</p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                {/* Invoice Batch */}
-                <button
-                  onClick={() => { setShowTypePicker(false); navigate('/automations/new') }}
-                  style={{
-                    background: 'var(--c7)', border: '2px solid var(--c6)', borderRadius: 10,
-                    padding: '20px 16px', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.15s',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--navy)')}
-                  onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--c6)')}
-                >
-                  <div style={{ marginBottom: 10 }}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--navy)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                  </div>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--c0)', marginBottom: 4 }}>Invoice Batch</div>
-                  <div style={{ fontSize: 12, color: 'var(--c3)', lineHeight: 1.5 }}>Recurring monthly invoice emails sent automatically to clients</div>
-                </button>
-                {/* Reminder */}
-                <button
-                  onClick={openAddReminder}
-                  style={{
-                    background: 'var(--c7)', border: '2px solid var(--c6)', borderRadius: 10,
-                    padding: '20px 16px', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.15s',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--amber)')}
-                  onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--c6)')}
-                >
-                  <div style={{ marginBottom: 10 }}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-                  </div>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--c0)', marginBottom: 4 }}>Reminder</div>
-                  <div style={{ fontSize: 12, color: 'var(--c3)', lineHeight: 1.5 }}>Alert emails for domain expiries, contract ends, hosting renewals, stale pipeline</div>
-                </button>
-              </div>
+            <div className="font-bold text-sm text-[var(--c0)] mb-1">Invoice Batch</div>
+            <div className="text-xs text-muted-foreground leading-relaxed">Recurring monthly invoice emails sent automatically to clients</div>
+          </button>
+          {/* Reminder */}
+          <button
+            onClick={openAddReminder}
+            className="bg-[var(--c7)] border-2 border-[var(--c6)] rounded-lg p-5 cursor-pointer text-left transition-colors hover:border-[var(--amber)]"
+          >
+            <div className="mb-2.5">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
             </div>
-          </div>
+            <div className="font-bold text-sm text-[var(--c0)] mb-1">Reminder</div>
+            <div className="text-xs text-muted-foreground leading-relaxed">Alert emails for domain expiries, contract ends, hosting renewals, stale pipeline</div>
+          </button>
         </div>
-      )}
+      </Modal>
 
       {/* ── Generate email modal ───────────────────────────────────────────── */}
-      {genAutomation && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setGenAutomation(null)}>
-          <div className="modal-box" style={{ maxWidth: 680 }}>
-            <div className="modal-header">
-              <h2>Preview — {genAutomation.name}</h2>
-              <button className="modal-close" onClick={() => setGenAutomation(null)}>×</button>
-            </div>
-            <div className="modal-body">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label" style={{ marginBottom: 4 }}>Month</label>
-                  <input type="month" value={genMonth} onChange={e => { setGenMonth(e.target.value); refreshGenText(genAutomation, e.target.value) }} style={{ height: 36 }} />
-                </div>
-                <div style={{ marginTop: 18 }}>
-                  <span style={{ fontSize: 12, color: 'var(--c4)' }}>→ {genAutomation.recipient_email}</span>
-                </div>
-              </div>
-              <pre style={{ background: 'var(--c7)', border: '1px solid var(--c6)', borderRadius: 8, padding: '16px', fontSize: 12, lineHeight: 1.7, whiteSpace: 'pre-wrap', fontFamily: 'monospace', maxHeight: 420, overflowY: 'auto', color: 'var(--c1)' }}>
-                {genText}
-              </pre>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary btn-sm" onClick={() => setGenAutomation(null)}>Close</button>
-              <button className="btn btn-secondary btn-sm" onClick={() => { navigator.clipboard.writeText(genText); toast('success', 'Copied') }}>Copy</button>
-              <button className="btn btn-primary btn-sm" onClick={() => handleSendEmail(genAutomation, genMonth)} disabled={sending}>
-                {sending ? <span className="spinner" /> : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>}
-                Send to {genAutomation.recipient_email}
-              </button>
-            </div>
+      <Modal
+        open={!!genAutomation}
+        title={genAutomation ? `Preview — ${genAutomation.name}` : 'Preview'}
+        onClose={() => setGenAutomation(null)}
+        maxWidth={680}
+        footer={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setGenAutomation(null)}>Close</Button>
+            <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(genText); toast('success', 'Copied') }}>Copy</Button>
+            <Button size="sm" onClick={() => genAutomation && handleSendEmail(genAutomation, genMonth)} disabled={sending}>
+              {sending ? <span className="spinner" /> : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>}
+              Send to {genAutomation?.recipient_email}
+            </Button>
+          </>
+        }
+      >
+        <div className="flex items-center gap-3 mb-4">
+          <div className="mb-0">
+            <Label className="mb-1 block">Month</Label>
+            <input type="month" value={genMonth} onChange={e => { setGenMonth(e.target.value); if (genAutomation) refreshGenText(genAutomation, e.target.value) }} style={{ height: 36 }} />
+          </div>
+          <div className="mt-[18px]">
+            <span className="text-xs text-muted-foreground">→ {genAutomation?.recipient_email}</span>
           </div>
         </div>
-      )}
+        <pre className="bg-[var(--c7)] border border-[var(--c6)] rounded-lg p-4 text-xs leading-relaxed whitespace-pre-wrap max-h-[420px] overflow-y-auto text-[var(--c1)]">
+          {genText}
+        </pre>
+      </Modal>
 
       {/* ── Delete batch confirm ───────────────────────────────────────────── */}
-      {deleteTarget && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setDeleteTarget(null)}>
-          <div className="modal-box" style={{ maxWidth: 400 }}>
-            <div className="modal-header"><h2>Delete automation</h2><button className="modal-close" onClick={() => setDeleteTarget(null)}>×</button></div>
-            <div className="modal-body"><p style={{ margin: 0, fontSize: 14 }}>Delete <strong>{deleteTarget.name}</strong> and all its line items?</p></div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary btn-sm" onClick={() => setDeleteTarget(null)}>Cancel</button>
-              <button className="btn btn-sm" style={{ background: 'var(--red)', color: '#fff', borderColor: 'var(--red)' }} onClick={() => handleDelete(deleteTarget)} disabled={deleting}>
-                {deleting ? <span className="spinner" /> : null} Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Delete automation"
+        message={deleteTarget ? `Delete ${deleteTarget.name} and all its line items?` : ''}
+        onConfirm={() => deleteTarget && handleDelete(deleteTarget)}
+        onCancel={() => setDeleteTarget(null)}
+        confirmLabel={deleting ? 'Deleting…' : 'Delete'}
+      />
 
       {/* ── Reminder add/edit modal ────────────────────────────────────────── */}
-      {reminderModal !== null && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setReminderModal(null)}>
-          <div className="modal-box" style={{ maxWidth: 560 }}>
-            <div className="modal-header">
-              <h2>{reminderModal === 'add' ? 'New Reminder' : 'Edit Reminder'}</h2>
-              <button className="modal-close" onClick={() => setReminderModal(null)}>×</button>
+      <Modal
+        open={reminderModal !== null}
+        title={reminderModal === 'add' ? 'New Reminder' : 'Edit Reminder'}
+        onClose={() => setReminderModal(null)}
+        maxWidth={560}
+        footer={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setReminderModal(null)}>Cancel</Button>
+            <Button size="sm" onClick={handleSaveReminder} disabled={reminderSaving}>
+              {reminderSaving ? <span className="spinner" /> : null}
+              {reminderModal === 'add' ? 'Create reminder' : 'Save changes'}
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-3.5">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="mb-4" style={{ flex: 2 }}>
+              <Label>Name *</Label>
+              <input value={rf.name} onChange={e => setReminderForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Domain expiry 30d" autoFocus className="w-full mt-1" />
             </div>
-            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-
-              <div className="form-row">
-                <div className="form-group" style={{ flex: 2 }}>
-                  <label className="form-label">Name *</label>
-                  <input value={rf.name} onChange={e => setReminderForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Domain expiry 30d" autoFocus />
-                </div>
-                <div className="form-group" style={{ flex: 1 }}>
-                  <label className="form-label">Active</label>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                    {[true, false].map(v => (
-                      <button key={String(v)} className={`btn btn-sm ${rf.active === v ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setReminderForm(f => ({ ...f, active: v }))}>
-                        {v ? 'Active' : 'Paused'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+            <div className="mb-4">
+              <Label>Active</Label>
+              <div className="flex gap-2 mt-1">
+                {[true, false].map(v => (
+                  <Button key={String(v)} size="sm" variant={rf.active === v ? 'default' : 'outline'} onClick={() => setReminderForm(f => ({ ...f, active: v }))}>
+                    {v ? 'Active' : 'Paused'}
+                  </Button>
+                ))}
               </div>
-
-              <div className="form-group">
-                <label className="form-label">Trigger type *</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 4 }}>
-                  {TRIGGER_TYPES.map(t => (
-                    <button
-                      key={t.value}
-                      onClick={() => setReminderForm(f => ({ ...f, trigger_type: t.value }))}
-                      style={{
-                        border: `2px solid ${rf.trigger_type === t.value ? t.color : 'var(--c6)'}`,
-                        borderRadius: 8, padding: '10px 12px', cursor: 'pointer', textAlign: 'left',
-                        background: rf.trigger_type === t.value ? `${t.color}12` : 'var(--c7)',
-                        transition: 'all 0.15s',
-                      }}
-                    >
-                      <div style={{ fontSize: 12, fontWeight: 700, color: rf.trigger_type === t.value ? t.color : 'var(--c1)' }}>{t.label}</div>
-                      <div style={{ fontSize: 11, color: 'var(--c3)', marginTop: 2 }}>{t.description}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="form-group" style={{ flex: 1 }}>
-                  <label className="form-label">
-                    {rf.trigger_type === 'pipeline_stale' ? 'Days in pipeline' : 'Days before expiry'}
-                  </label>
-                  <input type="number" min={1} value={rf.days_before} onChange={e => setReminderForm(f => ({ ...f, days_before: parseInt(e.target.value) || 30 }))} />
-                </div>
-                <div className="form-group" style={{ flex: 2 }}>
-                  <label className="form-label">Recipient email *</label>
-                  <input type="email" value={rf.recipient_email} onChange={e => setReminderForm(f => ({ ...f, recipient_email: e.target.value }))} placeholder="you@renderspace.si" />
-                </div>
-              </div>
-
-              {rf.trigger_type === 'domain_expiry' && (
-                <div style={{ background: 'var(--c7)', border: '1px solid var(--c6)', borderRadius: 8, padding: '14px 16px' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--amber)', marginBottom: 12 }}>Invoice generation (optional)</div>
-                  <p style={{ fontSize: 12, color: 'var(--c3)', margin: '0 0 12px', lineHeight: 1.5 }}>If set, also sends an invoice-style email to accounting with all expiring domains as line items.</p>
-                  <div className="form-group" style={{ marginBottom: 10 }}>
-                    <label className="form-label">Accounting email</label>
-                    <input type="email" value={rf.invoice_email ?? ''} onChange={e => setReminderForm(f => ({ ...f, invoice_email: e.target.value || null }))} placeholder="racunovodstvo@firma.si" />
-                  </div>
-                  <div className="form-row">
-                    <div className="form-group" style={{ flex: 1 }}>
-                      <label className="form-label">PN</label>
-                      <input value={rf.invoice_pn ?? '6820'} onChange={e => setReminderForm(f => ({ ...f, invoice_pn: e.target.value }))} placeholder="6820" />
-                    </div>
-                    <div className="form-group" style={{ flex: 1 }}>
-                      <label className="form-label">Price per domain €</label>
-                      <input type="number" min={0} step="0.01" value={rf.invoice_unit_price ?? ''} onChange={e => setReminderForm(f => ({ ...f, invoice_unit_price: parseFloat(e.target.value) || null }))} placeholder="15.00" />
-                    </div>
-                    <div className="form-group" style={{ flex: 1 }}>
-                      <label className="form-label">Due days</label>
-                      <input type="number" min={1} value={rf.invoice_due_days ?? 30} onChange={e => setReminderForm(f => ({ ...f, invoice_due_days: parseInt(e.target.value) || 30 }))} />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Notes <span className="form-hint" style={{ display: 'inline' }}>optional</span></label>
-                <input value={rf.notes ?? ''} onChange={e => setReminderForm(f => ({ ...f, notes: e.target.value || null }))} placeholder="Internal notes…" />
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary btn-sm" onClick={() => setReminderModal(null)}>Cancel</button>
-              <button className="btn btn-primary btn-sm" onClick={handleSaveReminder} disabled={reminderSaving}>
-                {reminderSaving ? <span className="spinner" /> : null}
-                {reminderModal === 'add' ? 'Create reminder' : 'Save changes'}
-              </button>
             </div>
           </div>
+
+          <div className="mb-4">
+            <Label>Trigger type *</Label>
+            <div className="grid grid-cols-2 gap-2 mt-1">
+              {TRIGGER_TYPES.map(t => (
+                <button
+                  key={t.value}
+                  onClick={() => setReminderForm(f => ({ ...f, trigger_type: t.value }))}
+                  style={{
+                    border: `2px solid ${rf.trigger_type === t.value ? t.color : 'var(--c6)'}`,
+                    background: rf.trigger_type === t.value ? `${t.color}12` : 'var(--c7)',
+                  }}
+                  className="rounded-lg px-3 py-2.5 cursor-pointer text-left transition-all"
+                >
+                  <div className="text-xs font-bold" style={{ color: rf.trigger_type === t.value ? t.color : 'var(--c1)' }}>{t.label}</div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">{t.description}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="mb-4">
+              <Label>{rf.trigger_type === 'pipeline_stale' ? 'Days in pipeline' : 'Days before expiry'}</Label>
+              <input type="number" min={1} value={rf.days_before} onChange={e => setReminderForm(f => ({ ...f, days_before: parseInt(e.target.value) || 30 }))} className="w-full mt-1" />
+            </div>
+            <div className="mb-4">
+              <Label>Recipient email *</Label>
+              <input type="email" value={rf.recipient_email} onChange={e => setReminderForm(f => ({ ...f, recipient_email: e.target.value }))} placeholder="you@renderspace.si" className="w-full mt-1" />
+            </div>
+          </div>
+
+          {rf.trigger_type === 'domain_expiry' && (
+            <div className="bg-[var(--c7)] border border-[var(--c6)] rounded-lg px-4 py-3.5">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-[#d97706] mb-3">Invoice generation (optional)</div>
+              <p className="text-xs text-muted-foreground mb-3 leading-relaxed">If set, also sends an invoice-style email to accounting with all expiring domains as line items.</p>
+              <div className="mb-2.5">
+                <Label>Accounting email</Label>
+                <input type="email" value={rf.invoice_email ?? ''} onChange={e => setReminderForm(f => ({ ...f, invoice_email: e.target.value || null }))} placeholder="racunovodstvo@firma.si" className="w-full mt-1" />
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="mb-4">
+                  <Label>PN</Label>
+                  <input value={rf.invoice_pn ?? '6820'} onChange={e => setReminderForm(f => ({ ...f, invoice_pn: e.target.value }))} placeholder="6820" className="w-full mt-1" />
+                </div>
+                <div className="mb-4">
+                  <Label>Price per domain €</Label>
+                  <input type="number" min={0} step="0.01" value={rf.invoice_unit_price ?? ''} onChange={e => setReminderForm(f => ({ ...f, invoice_unit_price: parseFloat(e.target.value) || null }))} placeholder="15.00" className="w-full mt-1" />
+                </div>
+                <div className="mb-4">
+                  <Label>Due days</Label>
+                  <input type="number" min={1} value={rf.invoice_due_days ?? 30} onChange={e => setReminderForm(f => ({ ...f, invoice_due_days: parseInt(e.target.value) || 30 }))} className="w-full mt-1" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="mb-0">
+            <Label>Notes <span className="text-xs text-muted-foreground ml-1">optional</span></Label>
+            <input value={rf.notes ?? ''} onChange={e => setReminderForm(f => ({ ...f, notes: e.target.value || null }))} placeholder="Internal notes…" className="w-full mt-1" />
+          </div>
         </div>
-      )}
+      </Modal>
 
       {/* ── Delete reminder confirm ────────────────────────────────────────── */}
-      {reminderDelTarget && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setReminderDelTarget(null)}>
-          <div className="modal-box" style={{ maxWidth: 400 }}>
-            <div className="modal-header"><h2>Delete reminder</h2><button className="modal-close" onClick={() => setReminderDelTarget(null)}>×</button></div>
-            <div className="modal-body"><p style={{ margin: 0, fontSize: 14 }}>Delete <strong>{reminderDelTarget.name}</strong>?</p></div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary btn-sm" onClick={() => setReminderDelTarget(null)}>Cancel</button>
-              <button className="btn btn-sm" style={{ background: 'var(--red)', color: '#fff', borderColor: 'var(--red)' }} onClick={() => handleDeleteReminder(reminderDelTarget)}>Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={!!reminderDelTarget}
+        title="Delete reminder"
+        message={reminderDelTarget ? `Delete ${reminderDelTarget.name}?` : ''}
+        onConfirm={() => reminderDelTarget && handleDeleteReminder(reminderDelTarget)}
+        onCancel={() => setReminderDelTarget(null)}
+      />
 
       {/* ── Page header ───────────────────────────────────────────────────── */}
-      <div className="page-header">
+      <div className="flex items-center justify-between px-6 py-4 bg-background border-b border-border">
         <div>
           <h1>Automations</h1>
-          <p>Invoice batches, reminders & recurring alerts</p>
+          <p>Invoice batches, reminders &amp; recurring alerts</p>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={() => setShowTypePicker(true)}>
+        <Button size="sm" onClick={() => setShowTypePicker(true)}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           New Automation
-        </button>
+        </Button>
       </div>
 
-      <div className="page-content">
+      <div className="flex-1 overflow-auto p-6">
 
         {/* ── Tabs ──────────────────────────────────────────────────────────── */}
-        <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid var(--c6)', marginBottom: 20 }}>
+        <div className="flex border-b-2 border-[var(--c6)] mb-5">
           {([['batches', 'Invoice Batches', store.automations.length], ['reminders', 'Reminders', rStore.rules.length]] as const).map(([tab, label, count]) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
+              className="bg-transparent border-0 cursor-pointer px-5 py-2.5 font-bold text-sm flex items-center gap-1.5 -mb-0.5 transition-all"
               style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                padding: '10px 20px', fontWeight: 700, fontSize: 13,
                 color: activeTab === tab ? 'var(--navy)' : 'var(--c3)',
                 borderBottom: `2px solid ${activeTab === tab ? 'var(--navy)' : 'transparent'}`,
-                marginBottom: -2, transition: 'all 0.15s',
-                display: 'flex', alignItems: 'center', gap: 6,
               }}
             >
               {label}
               {count > 0 && (
-                <span style={{ fontSize: 10, background: activeTab === tab ? 'var(--navy)' : 'var(--c5)', color: activeTab === tab ? '#fff' : 'var(--c2)', borderRadius: 10, padding: '1px 6px', fontWeight: 700 }}>
+                <span
+                  className="text-[10px] rounded-[10px] px-1.5 py-px font-bold"
+                  style={{
+                    background: activeTab === tab ? 'var(--navy)' : 'var(--c5)',
+                    color: activeTab === tab ? '#fff' : 'var(--c2)',
+                  }}
+                >
                   {count}
                 </span>
               )}
@@ -528,30 +503,30 @@ export function AutomationsView() {
         {/* ── Invoice Batches tab ────────────────────────────────────────────── */}
         {activeTab === 'batches' && (
           store.loading && store.automations.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--c4)' }}>
+            <div className="text-center py-16 text-muted-foreground">
               <span className="spinner" style={{ width: 24, height: 24, borderWidth: 3, display: 'inline-block' }} />
             </div>
           ) : store.automations.length === 0 ? (
-            <div className="card">
-              <div className="card-body" style={{ textAlign: 'center', padding: '60px 20px' }}>
-                <div style={{ marginBottom: 12 }}><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--c5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></div>
-                <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--c2)', marginBottom: 6 }}>No invoice batches yet</div>
-                <div style={{ fontSize: 13, color: 'var(--c4)', marginBottom: 20 }}>Create a batch to auto-generate monthly invoice emails</div>
-                <button className="btn btn-primary btn-sm" onClick={() => navigate('/automations/new')}>New Invoice Batch</button>
-              </div>
-            </div>
+            <Card>
+              <CardContent className="text-center px-5 py-16">
+                <div className="mb-3"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--c5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></div>
+                <div className="font-bold text-[15px] text-[#374151] mb-1.5">No invoice batches yet</div>
+                <div className="text-sm text-muted-foreground mb-5">Create a batch to auto-generate monthly invoice emails</div>
+                <Button size="sm" onClick={() => navigate('/automations/new')}>New Invoice Batch</Button>
+              </CardContent>
+            </Card>
           ) : (
-            <div className="card" style={{ overflow: 'hidden' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <Card className="overflow-hidden">
+              <table className="w-full border-collapse text-[13px]">
                 <thead>
-                  <tr style={{ background: 'var(--c7)', borderBottom: '2px solid var(--c6)' }}>
-                    <th style={{ padding: '10px 20px', textAlign: 'left', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--c3)' }}>Automation</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--c3)' }}>Recipient</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'center', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--c3)', width: 80 }}>Send day</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--c3)' }}>Contents</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'right', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--c3)', width: 90 }}>Monthly €</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--c3)', width: 160, whiteSpace: 'nowrap' }}>Last sent</th>
-                    <th style={{ padding: '10px 20px', width: 260 }}></th>
+                  <tr className="bg-[var(--c7)] border-b-2 border-[var(--c6)]">
+                    <th className="px-5 py-2.5 text-left text-[11px] font-bold uppercase tracking-[0.4px] text-muted-foreground">Automation</th>
+                    <th className="px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-[0.4px] text-muted-foreground">Recipient</th>
+                    <th className="px-3 py-2.5 text-center text-[11px] font-bold uppercase tracking-[0.4px] text-muted-foreground w-20">Send day</th>
+                    <th className="px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-[0.4px] text-muted-foreground">Contents</th>
+                    <th className="px-3 py-2.5 text-right text-[11px] font-bold uppercase tracking-[0.4px] text-muted-foreground w-24">Monthly €</th>
+                    <th className="px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-[0.4px] text-muted-foreground w-40 whitespace-nowrap">Last sent</th>
+                    <th className="px-5 py-2.5 w-64"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -564,44 +539,44 @@ export function AutomationsView() {
                       : null
 
                     return (
-                      <tr key={a.id} style={{ borderBottom: '1px solid var(--c6)' }}>
-                        <td style={{ padding: '14px 20px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--c0)' }}>{a.name}</span>
-                            <span className={`badge ${a.active ? 'badge-green' : 'badge-gray'}`} style={{ fontSize: 10 }}>{a.active ? 'Active' : 'Paused'}</span>
+                      <tr key={a.id} className="border-b border-[var(--c6)]">
+                        <td className="px-5 py-3.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-sm text-[var(--c0)]">{a.name}</span>
+                            <Badge variant={a.active ? 'green' : 'gray'}>{a.active ? 'Active' : 'Paused'}</Badge>
                           </div>
-                          {a.notes && <div style={{ fontSize: 11, color: 'var(--c4)', marginTop: 2 }}>{a.notes}</div>}
+                          {a.notes && <div className="text-[11px] text-muted-foreground mt-0.5">{a.notes}</div>}
                         </td>
-                        <td style={{ padding: '14px 12px', fontSize: 12, color: 'var(--c2)' }}>{a.recipient_email}</td>
-                        <td style={{ padding: '14px 12px', textAlign: 'center', fontSize: 13, color: 'var(--c2)' }}>{ordinal(a.send_day)}</td>
-                        <td style={{ padding: '14px 12px', fontSize: 12, color: 'var(--c3)' }}>
+                        <td className="px-3 py-3.5 text-xs text-[#374151]">{a.recipient_email}</td>
+                        <td className="px-3 py-3.5 text-center text-[13px] text-[#374151]">{ordinal(a.send_day)}</td>
+                        <td className="px-3 py-3.5 text-xs text-muted-foreground">
                           {clientCount} client{clientCount !== 1 ? 's' : ''} · {items.length} line{items.length !== 1 ? 's' : ''}
                         </td>
-                        <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 700, fontSize: 14, color: 'var(--navy)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                        <td className="px-3 py-3.5 text-right font-bold text-sm text-primary whitespace-nowrap">
                           {fmtEuro(total)} €
                         </td>
-                        <td style={{ padding: '14px 12px', whiteSpace: 'nowrap' }}>
+                        <td className="px-3 py-3.5 whitespace-nowrap">
                           {(a.sent_count ?? 0) > 0 ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--navy)', background: 'var(--navy-light)', borderRadius: 6, padding: '2px 7px' }}>{a.sent_count}×</span>
-                              {lastSent && <span style={{ fontSize: 12, color: 'var(--c3)' }}>{lastSent}</span>}
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-primary bg-[var(--navy-light)] rounded px-1.5 py-px">{a.sent_count}×</span>
+                              {lastSent && <span className="text-xs text-muted-foreground">{lastSent}</span>}
                             </div>
                           ) : (
-                            <span style={{ fontSize: 12, color: 'var(--c5)' }}>Never</span>
+                            <span className="text-xs text-[var(--c5)]">Never</span>
                           )}
                         </td>
-                        <td style={{ padding: '14px 20px' }}>
-                          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', alignItems: 'center' }}>
-                            <button className={`btn btn-xs ${a.active ? 'btn-secondary' : 'btn-ghost'}`} onClick={() => handleToggleActive(a)}>{a.active ? 'Pause' : 'Resume'}</button>
-                            <button className="btn btn-secondary btn-xs" onClick={() => navigate(`/automations/${a.id}/edit`)}>Edit</button>
-                            <button className="btn btn-secondary btn-xs" onClick={() => openGenerate(a)} disabled={items.length === 0}>Preview</button>
-                            <button className="btn btn-primary btn-xs" onClick={() => handleSendEmail(a, currentMonthStr())} disabled={items.length === 0 || sending} title={`Send ${currentMonthStr()} to ${a.recipient_email}`}>
+                        <td className="px-5 py-3.5">
+                          <div className="flex gap-1.5 justify-end items-center">
+                            <Button size="xs" variant={a.active ? 'outline' : 'ghost'} onClick={() => handleToggleActive(a)}>{a.active ? 'Pause' : 'Resume'}</Button>
+                            <Button size="xs" variant="outline" onClick={() => navigate(`/automations/${a.id}/edit`)}>Edit</Button>
+                            <Button size="xs" variant="outline" onClick={() => openGenerate(a)} disabled={items.length === 0}>Preview</Button>
+                            <Button size="xs" onClick={() => handleSendEmail(a, currentMonthStr())} disabled={items.length === 0 || sending} title={`Send ${currentMonthStr()} to ${a.recipient_email}`}>
                               {sending ? <span className="spinner" style={{ width: 10, height: 10, borderWidth: 2 }} /> : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>}
                               Test
-                            </button>
-                            <button className="btn btn-ghost btn-xs" onClick={() => setDeleteTarget(a)} style={{ color: 'var(--red)' }} title="Delete">
+                            </Button>
+                            <Button size="xs" variant="ghost" onClick={() => setDeleteTarget(a)} className="text-[#dc2626]" title="Delete">
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                            </button>
+                            </Button>
                           </div>
                         </td>
                       </tr>
@@ -609,36 +584,36 @@ export function AutomationsView() {
                   })}
                 </tbody>
               </table>
-            </div>
+            </Card>
           )
         )}
 
         {/* ── Reminders tab ─────────────────────────────────────────────────── */}
         {activeTab === 'reminders' && (
           rStore.loading && rStore.rules.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--c4)' }}>
+            <div className="text-center py-16 text-muted-foreground">
               <span className="spinner" style={{ width: 24, height: 24, borderWidth: 3, display: 'inline-block' }} />
             </div>
           ) : rStore.rules.length === 0 ? (
-            <div className="card">
-              <div className="card-body" style={{ textAlign: 'center', padding: '60px 20px' }}>
-                <div style={{ marginBottom: 12 }}><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--c5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
-                <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--c2)', marginBottom: 6 }}>No reminders configured</div>
-                <div style={{ fontSize: 13, color: 'var(--c4)', marginBottom: 20 }}>Set up alerts for domain expiries, contract ends, hosting renewals, and stale pipeline deals</div>
-                <button className="btn btn-primary btn-sm" onClick={openAddReminder}>New Reminder</button>
-              </div>
-            </div>
+            <Card>
+              <CardContent className="text-center px-5 py-16">
+                <div className="mb-3"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--c5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
+                <div className="font-bold text-[15px] text-[#374151] mb-1.5">No reminders configured</div>
+                <div className="text-sm text-muted-foreground mb-5">Set up alerts for domain expiries, contract ends, hosting renewals, and stale pipeline deals</div>
+                <Button size="sm" onClick={openAddReminder}>New Reminder</Button>
+              </CardContent>
+            </Card>
           ) : (
-            <div className="card" style={{ overflow: 'hidden' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <Card className="overflow-hidden">
+              <table className="w-full border-collapse text-[13px]">
                 <thead>
-                  <tr style={{ background: 'var(--c7)', borderBottom: '2px solid var(--c6)' }}>
-                    <th style={{ padding: '10px 20px', textAlign: 'left', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--c3)' }}>Reminder</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--c3)', width: 160 }}>Type</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'center', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--c3)', width: 100 }}>Days before</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--c3)' }}>Recipient</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--c3)', width: 140 }}>Last run</th>
-                    <th style={{ padding: '10px 20px', width: 180 }}></th>
+                  <tr className="bg-[var(--c7)] border-b-2 border-[var(--c6)]">
+                    <th className="px-5 py-2.5 text-left text-[11px] font-bold uppercase tracking-[0.4px] text-muted-foreground">Reminder</th>
+                    <th className="px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-[0.4px] text-muted-foreground w-40">Type</th>
+                    <th className="px-3 py-2.5 text-center text-[11px] font-bold uppercase tracking-[0.4px] text-muted-foreground w-24">Days before</th>
+                    <th className="px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-[0.4px] text-muted-foreground">Recipient</th>
+                    <th className="px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-[0.4px] text-muted-foreground w-36">Last run</th>
+                    <th className="px-5 py-2.5 w-44"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -648,40 +623,40 @@ export function AutomationsView() {
                       : null
 
                     return (
-                      <tr key={r.id} style={{ borderBottom: '1px solid var(--c6)' }}>
-                        <td style={{ padding: '14px 20px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--c0)' }}>{r.name}</span>
-                            <span className={`badge ${r.active ? 'badge-green' : 'badge-gray'}`} style={{ fontSize: 10 }}>{r.active ? 'Active' : 'Paused'}</span>
-                            {r.invoice_email && <span className="badge badge-amber" style={{ fontSize: 10 }}>+ Invoice</span>}
+                      <tr key={r.id} className="border-b border-[var(--c6)]">
+                        <td className="px-5 py-3.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-sm text-[var(--c0)]">{r.name}</span>
+                            <Badge variant={r.active ? 'green' : 'gray'}>{r.active ? 'Active' : 'Paused'}</Badge>
+                            {r.invoice_email && <Badge variant="amber">+ Invoice</Badge>}
                           </div>
-                          {r.notes && <div style={{ fontSize: 11, color: 'var(--c4)', marginTop: 2 }}>{r.notes}</div>}
+                          {r.notes && <div className="text-[11px] text-muted-foreground mt-0.5">{r.notes}</div>}
                         </td>
-                        <td style={{ padding: '14px 12px' }}>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: triggerColor(r.trigger_type) }}>{triggerLabel(r.trigger_type)}</span>
+                        <td className="px-3 py-3.5">
+                          <span className="text-xs font-semibold" style={{ color: triggerColor(r.trigger_type) }}>{triggerLabel(r.trigger_type)}</span>
                         </td>
-                        <td style={{ padding: '14px 12px', textAlign: 'center', fontSize: 13, color: 'var(--c2)', fontWeight: 600 }}>
+                        <td className="px-3 py-3.5 text-center text-[13px] text-[#374151] font-semibold">
                           {r.days_before}d
                         </td>
-                        <td style={{ padding: '14px 12px', fontSize: 12, color: 'var(--c2)' }}>{r.recipient_email}</td>
-                        <td style={{ padding: '14px 12px', fontSize: 12, color: 'var(--c3)' }}>
-                          {lastRun ?? <span style={{ color: 'var(--c5)' }}>Never</span>}
+                        <td className="px-3 py-3.5 text-xs text-[#374151]">{r.recipient_email}</td>
+                        <td className="px-3 py-3.5 text-xs text-muted-foreground">
+                          {lastRun ?? <span className="text-[var(--c5)]">Never</span>}
                         </td>
-                        <td style={{ padding: '14px 20px' }}>
-                          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', alignItems: 'center' }}>
-                            <button className="btn btn-secondary btn-xs" onClick={() => openEditReminder(r)}>Edit</button>
-                            <button
-                              className="btn btn-primary btn-xs"
+                        <td className="px-5 py-3.5">
+                          <div className="flex gap-1.5 justify-end items-center">
+                            <Button size="xs" variant="outline" onClick={() => openEditReminder(r)}>Edit</Button>
+                            <Button
+                              size="xs"
                               onClick={() => handleRunReminder(r)}
                               disabled={reminderRunning === r.id}
                               title="Run now"
                             >
                               {reminderRunning === r.id ? <span className="spinner" style={{ width: 10, height: 10, borderWidth: 2 }} /> : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>}
                               Run
-                            </button>
-                            <button className="btn btn-ghost btn-xs" onClick={() => setReminderDelTarget(r)} style={{ color: 'var(--red)' }} title="Delete">
+                            </Button>
+                            <Button size="xs" variant="ghost" onClick={() => setReminderDelTarget(r)} className="text-[#dc2626]" title="Delete">
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                            </button>
+                            </Button>
                           </div>
                         </td>
                       </tr>
@@ -689,7 +664,7 @@ export function AutomationsView() {
                   })}
                 </tbody>
               </table>
-            </div>
+            </Card>
           )
         )}
 

@@ -10,6 +10,9 @@ import { toast } from '../lib/toast'
 import type { RevenuePlanner, HostingClient } from '../lib/types'
 import { hostingActiveInMonth } from '../lib/types'
 import { Select } from '../components/Select'
+import { Modal } from '../components/Modal'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 
 // ── Probability helpers ───────────────────────────────────────────────────────
 
@@ -51,24 +54,24 @@ function fmtEuro(n: number): string {
 type PlannerStatus = RevenuePlanner['status']
 
 function statusBadge(status: PlannerStatus): React.ReactElement {
-  if (status === 'paid') return <span className="badge badge-green">Paid</span>
-  if (status === 'issued') return <span className="badge badge-blue">Issued</span>
-  if (status === 'deferred' || status === 'retainer') return <span className="badge badge-red">Not issued</span>
-  return <span className="badge badge-amber">Not issued</span>
+  if (status === 'paid') return <Badge variant="green">Paid</Badge>
+  if (status === 'issued') return <Badge variant="blue">Issued</Badge>
+  if (status === 'deferred' || status === 'retainer') return <Badge variant="red">Not issued</Badge>
+  return <Badge variant="amber">Not issued</Badge>
 }
 
 // ── Actual amount cell (static display only) ────────────────────────────────
 
 function ActualAmountCell({ row }: { row: RevenuePlanner }) {
   if (row.status === 'planned' || row.status === 'deferred' || row.status === 'retainer') {
-    return <span style={{ fontWeight: 700, color: 'var(--red)', fontVariantNumeric: 'tabular-nums' }}>0 €</span>
+    return <span className="font-bold text-[#dc2626] tabular-nums">0 €</span>
   }
   // issued or paid
   const amount = row.actual_amount ?? row.planned_amount
-  if (!amount) return <span style={{ color: 'var(--c5)' }}>—</span>
-  const color = row.status === 'paid' ? 'var(--green)' : 'var(--blue)'
+  if (!amount) return <span className="text-border">—</span>
+  const colorClass = row.status === 'paid' ? 'text-[#16a34a]' : 'text-[#2563eb]'
   return (
-    <span style={{ fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>
+    <span className={`font-bold tabular-nums ${colorClass}`}>
       {fmtEuro(amount)}
     </span>
   )
@@ -608,311 +611,216 @@ export function ThisMonthView() {
   return (
     <div>
       {/* ── Defer / Not Invoiced modal ─────────────────────────────────────── */}
-      {deferRow && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setDeferRow(null)}>
-          <div className="modal-box" style={{ maxWidth: 440 }}>
-            <div className="modal-header">
-              <h2>Not Invoiced — {deferRow.project?.name}</h2>
-              <button className="modal-close" onClick={() => setDeferRow(null)}>×</button>
-            </div>
-            <div className="modal-body">
-              <div className="form-group" style={{ marginBottom: 14 }}>
-                <label className="form-label">Reason / note <span className="form-hint" style={{ display: 'inline' }}>optional</span></label>
-                <input value={deferNote} onChange={e => setDeferNote(e.target.value)} placeholder="e.g. Client requested delay" autoFocus />
-              </div>
-              {!deferRow.maintenance_id && (
-                <div className="form-group">
-                  <label className="form-label">Move to month <span className="form-hint" style={{ display: 'inline' }}>optional — leave blank to just mark deferred</span></label>
-                  <input type="month" value={deferMonth} onChange={e => setDeferMonth(e.target.value)} />
-                </div>
-              )}
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary btn-sm" onClick={() => setDeferRow(null)}>Cancel</button>
-              <button className="btn btn-primary btn-sm" onClick={handleDeferConfirm} disabled={deferSaving}>
-                {deferSaving ? <span className="spinner" /> : null}
-                {deferMonth ? 'Defer to selected month' : 'Mark not invoiced'}
-              </button>
-            </div>
-          </div>
+      <Modal open={!!deferRow} title={`Not Invoiced — ${deferRow?.project?.name ?? ''}`} maxWidth={440} onClose={() => setDeferRow(null)}
+        footer={<>
+          <Button variant="outline" size="sm" onClick={() => setDeferRow(null)}>Cancel</Button>
+          <Button size="sm" onClick={handleDeferConfirm} disabled={deferSaving}>
+            {deferMonth ? 'Defer to selected month' : 'Mark not invoiced'}
+          </Button>
+        </>}>
+        <div className="mb-4">
+          <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Reason / note <span className="text-xs text-muted-foreground ml-1">optional</span></label>
+          <input value={deferNote} onChange={e => setDeferNote(e.target.value)} placeholder="e.g. Client requested delay" autoFocus />
         </div>
-      )}
+        {!deferRow?.maintenance_id && (
+          <div className="mb-4">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Move to month <span className="text-xs text-muted-foreground ml-1">optional — leave blank to just mark deferred</span></label>
+            <input type="month" value={deferMonth} onChange={e => setDeferMonth(e.target.value)} />
+          </div>
+        )}
+      </Modal>
 
       {/* ── Domain defer modal ──────────────────────────────────────────────── */}
-      {deferDomainGroup && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setDeferDomainGroup(null)}>
-          <div className="modal-box" style={{ maxWidth: 440 }}>
-            <div className="modal-header">
-              <h2>Not Invoiced — {deferDomainGroup.clientName}</h2>
-              <button className="modal-close" onClick={() => setDeferDomainGroup(null)}>×</button>
-            </div>
-            <div className="modal-body">
-              <div className="form-group" style={{ marginBottom: 14 }}>
-                <label className="form-label">Reason / note <span className="form-hint" style={{ display: 'inline' }}>optional</span></label>
-                <input value={deferDomainNote} onChange={e => setDeferDomainNote(e.target.value)} placeholder="e.g. Client requested delay" autoFocus />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Move to month <span className="form-hint" style={{ display: 'inline' }}>optional — leave blank to just mark deferred</span></label>
-                <input type="month" value={deferDomainMonth} onChange={e => setDeferDomainMonth(e.target.value)} />
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary btn-sm" onClick={() => setDeferDomainGroup(null)}>Cancel</button>
-              <button className="btn btn-primary btn-sm" onClick={handleDomainDeferConfirm} disabled={deferDomainSaving}>
-                {deferDomainSaving ? <span className="spinner" /> : null}
-                {deferDomainMonth ? 'Defer to selected month' : 'Mark not invoiced'}
-              </button>
-            </div>
-          </div>
+      <Modal open={!!deferDomainGroup} title={`Not Invoiced — ${deferDomainGroup?.clientName ?? ''}`} maxWidth={440} onClose={() => setDeferDomainGroup(null)}
+        footer={<>
+          <Button variant="outline" size="sm" onClick={() => setDeferDomainGroup(null)}>Cancel</Button>
+          <Button size="sm" onClick={handleDomainDeferConfirm} disabled={deferDomainSaving}>
+            {deferDomainMonth ? 'Defer to selected month' : 'Mark not invoiced'}
+          </Button>
+        </>}>
+        <div className="mb-4">
+          <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Reason / note <span className="text-xs text-muted-foreground ml-1">optional</span></label>
+          <input value={deferDomainNote} onChange={e => setDeferDomainNote(e.target.value)} placeholder="e.g. Client requested delay" autoFocus />
         </div>
-      )}
+        <div className="mb-4">
+          <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Move to month <span className="text-xs text-muted-foreground ml-1">optional — leave blank to just mark deferred</span></label>
+          <input type="month" value={deferDomainMonth} onChange={e => setDeferDomainMonth(e.target.value)} />
+        </div>
+      </Modal>
 
       {/* ── Confirm invoice modal ───────────────────────────────────────────── */}
-      {confirmModal && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setConfirmModal(null)}>
-          <div className="modal-box" style={{ maxWidth: 420 }}>
-            <div className="modal-header">
-              <h2>Confirm Invoice</h2>
-              <button className="modal-close" onClick={() => setConfirmModal(null)}>×</button>
-            </div>
-            <div className="modal-body">
-              <p style={{ margin: '0 0 16px', fontSize: 14, color: 'var(--c2)' }}>
-                <strong>{confirmModal.maintenance?.name ?? confirmModal.project?.name ?? '—'}</strong>
-                {' · '}{fmtMonthLabel(confirmModal.month)}
-                {' · '}planned {fmtEuro(confirmModal.planned_amount ?? 0)}
-              </p>
-              <div className="form-group" style={{ marginBottom: 12 }}>
-                <label className="form-label">Actual amount (€)</label>
-                <input
-                  type="number"
-                  value={confirmActual}
-                  onChange={e => setConfirmActual(e.target.value)}
-                  autoFocus
-                />
-                {parseFloat(confirmActual) > confirmPlannedTotal && (() => {
-                  const extra = parseFloat(confirmActual) - confirmPlannedTotal
-                  return (
-                    <div style={{ marginTop: 8 }}>
-                      <div className="form-hint" style={{ color: 'var(--amber)', fontWeight: 600, marginBottom: 8 }}>
-                        +{fmtEuro(extra)} above planned
-                      </div>
-                      {confirmModal.project_id && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, cursor: 'pointer' }}>
-                            <input type="radio" name="overage" checked={confirmOverageType === 'cr'} onChange={() => setConfirmOverageType('cr')} style={{ marginTop: 2 }} />
+      <Modal open={!!confirmModal} title="Confirm Invoice" maxWidth={420} onClose={() => setConfirmModal(null)}
+        footer={<>
+          <Button variant="outline" size="sm" onClick={() => setConfirmModal(null)}>Cancel</Button>
+          <Button size="sm" onClick={handleConfirmSubmit} disabled={confirmSaving}>Confirm</Button>
+        </>}>
+        {confirmModal && (
+          <>
+            <p className="text-sm text-[#374151] mb-4">
+              <strong>{confirmModal.maintenance?.name ?? confirmModal.project?.name ?? '—'}</strong>
+              {' · '}{fmtMonthLabel(confirmModal.month)}
+              {' · '}planned {fmtEuro(confirmModal.planned_amount ?? 0)}
+            </p>
+            <div className="mb-3">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Actual amount (€)</label>
+              <input
+                type="number"
+                value={confirmActual}
+                onChange={e => setConfirmActual(e.target.value)}
+                autoFocus
+              />
+              {parseFloat(confirmActual) > confirmPlannedTotal && (() => {
+                const extra = parseFloat(confirmActual) - confirmPlannedTotal
+                return (
+                  <div className="mt-2">
+                    <div className="text-xs font-semibold text-[#d97706] mb-2">
+                      +{fmtEuro(extra)} above planned
+                    </div>
+                    {confirmModal.project_id && (
+                        <div className="flex flex-col gap-1.5">
+                          <label className="flex items-start gap-2 text-[13px] cursor-pointer">
+                            <input type="radio" name="overage" checked={confirmOverageType === 'cr'} onChange={() => setConfirmOverageType('cr')} className="mt-0.5" />
                             <span><strong>Change request</strong> — extra work, auto-creates approved CR (+{fmtEuro(extra)})</span>
                           </label>
-                          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, cursor: 'pointer' }}>
-                            <input type="radio" name="overage" checked={confirmOverageType === 'overshoot'} onChange={() => setConfirmOverageType('overshoot')} style={{ marginTop: 2 }} />
+                          <label className="flex items-start gap-2 text-[13px] cursor-pointer">
+                            <input type="radio" name="overage" checked={confirmOverageType === 'overshoot'} onChange={() => setConfirmOverageType('overshoot')} className="mt-0.5" />
                             <span><strong>Overshoot</strong> — invoiced more upfront, will invoice less later</span>
                           </label>
                         </div>
                       )}
                       {!confirmModal.project_id && (
-                        <div className="form-hint">Extra will be recorded on the invoice. Add a change request manually if needed.</div>
+                        <div className="text-xs text-muted-foreground mt-1">Extra will be recorded on the invoice. Add a change request manually if needed.</div>
                       )}
                     </div>
                   )
                 })()}
               </div>
-              <div className="form-group">
-                <label className="form-label">Note <span className="form-hint" style={{ display: 'inline', marginLeft: 4 }}>optional</span></label>
+              <div className="mb-4">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Note <span className="text-xs text-muted-foreground ml-1">optional</span></label>
                 <input value={confirmNote} onChange={e => setConfirmNote(e.target.value)} placeholder="e.g. extra hours, change request…" />
               </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary btn-sm" onClick={() => setConfirmModal(null)}>Cancel</button>
-              <button className="btn btn-primary btn-sm" onClick={handleConfirmSubmit} disabled={confirmSaving}>
-                {confirmSaving ? <span className="spinner" /> : null} Confirm
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
 
       {/* ── Add Cost modal ───────────────────────────────────────────────────── */}
-      {showAddCost && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowAddCost(false)}>
-          <div className="modal-box" style={{ maxWidth: 400 }}>
-            <div className="modal-header">
-              <h2>Add Cost</h2>
-              <button className="modal-close" onClick={() => setShowAddCost(false)}>×</button>
-            </div>
-            <div className="modal-body">
-              <div className="form-group">
-                <label className="form-label">Project</label>
-                <select value={addCostProject} onChange={e => setAddCostProject(e.target.value)} autoFocus>
-                  <option value="">— select project —</option>
-                  {pStore.projects.filter(p => p.status === 'active').map(p => (
-                    <option key={p.id} value={p.id}>{p.name} <span style={{opacity:.6}}>({p.pn})</span></option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Description</label>
-                <input value={addCostDesc} onChange={e => setAddCostDesc(e.target.value)} placeholder="e.g. Subcontractor, license…" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Amount (€)</label>
-                <input type="number" value={addCostAmount} onChange={e => setAddCostAmount(e.target.value)} placeholder="0" />
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary btn-sm" onClick={() => setShowAddCost(false)}>Cancel</button>
-              <button className="btn btn-primary btn-sm" onClick={handleAddCost} disabled={addCostSaving || !addCostProject || !addCostAmount}>
-                {addCostSaving ? <span className="spinner" /> : null} Add Cost
-              </button>
-            </div>
+      <Modal open={showAddCost} title="Add Cost" maxWidth={400} onClose={() => setShowAddCost(false)}
+        footer={<>
+          <Button variant="outline" size="sm" onClick={() => setShowAddCost(false)}>Cancel</Button>
+          <Button size="sm" onClick={handleAddCost} disabled={addCostSaving || !addCostProject || !addCostAmount}>Add Cost</Button>
+        </>}>
+        <>
+          <div className="mb-4">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Project</label>
+            <select value={addCostProject} onChange={e => setAddCostProject(e.target.value)} autoFocus>
+              <option value="">— select project —</option>
+              {pStore.projects.filter(p => p.status === 'active').map(p => (
+                <option key={p.id} value={p.id}>{p.name} ({p.pn})</option>
+              ))}
+            </select>
           </div>
-        </div>
-      )}
+          <div className="mb-4">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Description</label>
+            <input value={addCostDesc} onChange={e => setAddCostDesc(e.target.value)} placeholder="e.g. Subcontractor, license…" />
+          </div>
+          <div className="mb-4">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Amount (€)</label>
+            <input type="number" value={addCostAmount} onChange={e => setAddCostAmount(e.target.value)} placeholder="0" />
+          </div>
+        </>
+      </Modal>
 
       {/* ── Add Invoice modal ─────────────────────────────────────────────────── */}
-      {showAddInvoice && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowAddInvoice(false)}>
-          <div className="modal-box" style={{ maxWidth: 440 }}>
-            <div className="modal-header">
-              <h2>Add One-Time Invoice</h2>
-              <button className="modal-close" onClick={() => setShowAddInvoice(false)}>×</button>
+      <Modal open={showAddInvoice} title="Add One-Time Invoice" maxWidth={440} onClose={() => setShowAddInvoice(false)}
+        footer={<>
+          <Button variant="outline" size="sm" onClick={() => setShowAddInvoice(false)}>Cancel</Button>
+          <Button size="sm" onClick={handleAddInvoice} disabled={addInvSaving || !addInvProject.trim() || !addInvAmount}>Add Invoice</Button>
+        </>}>
+        <>
+          <div className="mb-4">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Client</label>
+            <Select
+              value={addInvClient}
+              onChange={v => setAddInvClient(v)}
+              placeholder="— select client —"
+              options={[
+                ...cStore.clients.map(c => ({ value: c.id, label: c.name })),
+                { value: '__new__', label: '+ New client…' },
+              ]}
+            />
+          </div>
+          {addInvClient === '__new__' && (
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">New client name</label>
+              <input value={addInvNewClient} onChange={e => setAddInvNewClient(e.target.value)} placeholder="Client name" />
             </div>
-            <div className="modal-body">
-              <div className="form-group">
-                <label className="form-label">Client</label>
-                <Select
-                  value={addInvClient}
-                  onChange={v => setAddInvClient(v)}
-                  placeholder="— select client —"
-                  options={[
-                    ...cStore.clients.map(c => ({ value: c.id, label: c.name })),
-                    { value: '__new__', label: '+ New client…' },
-                  ]}
-                />
-              </div>
-              {addInvClient === '__new__' && (
-                <div className="form-group">
-                  <label className="form-label">New client name</label>
-                  <input value={addInvNewClient} onChange={e => setAddInvNewClient(e.target.value)} placeholder="Client name" />
-                </div>
-              )}
-              <div className="form-row">
-                <div className="form-group" style={{ flex: 2 }}>
-                  <label className="form-label">Project / description</label>
-                  <input value={addInvProject} onChange={e => setAddInvProject(e.target.value)} placeholder="e.g. Website redesign" />
-                </div>
-                <div className="form-group" style={{ flex: 1 }}>
-                  <label className="form-label">Project № <span className="form-hint" style={{ display: 'inline' }}>optional</span></label>
-                  <input value={addInvPN} onChange={e => setAddInvPN(e.target.value)} placeholder="RS-2026-…" />
-                </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Revenue (€)</label>
-                <input type="number" value={addInvAmount} onChange={e => setAddInvAmount(e.target.value)} placeholder="0" />
-              </div>
-              <p className="form-hint" style={{ marginTop: 8 }}>Creates a project and marks the invoice as issued for {monthLabel}.</p>
+          )}
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="mb-4 col-span-2 sm:col-span-1 flex-[2]">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Project / description</label>
+              <input value={addInvProject} onChange={e => setAddInvProject(e.target.value)} placeholder="e.g. Website redesign" />
             </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary btn-sm" onClick={() => setShowAddInvoice(false)}>Cancel</button>
-              <button className="btn btn-primary btn-sm" onClick={handleAddInvoice} disabled={addInvSaving || !addInvProject.trim() || !addInvAmount}>
-                {addInvSaving ? <span className="spinner" /> : null} Add Invoice
-              </button>
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Project № <span className="text-xs text-muted-foreground ml-1">optional</span></label>
+              <input value={addInvPN} onChange={e => setAddInvPN(e.target.value)} placeholder="RS-2026-…" />
             </div>
           </div>
-        </div>
-      )}
+          <div className="mb-4">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Revenue (€)</label>
+            <input type="number" value={addInvAmount} onChange={e => setAddInvAmount(e.target.value)} placeholder="0" />
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">Creates a project and marks the invoice as issued for {monthLabel}.</p>
+        </>
+      </Modal>
 
       {/* ── Hosting confirm modal ────────────────────────────────────────────── */}
-      {hostingConfirmModal && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setHostingConfirmModal(null)}>
-          <div className="modal-box" style={{ maxWidth: 360 }}>
-            <div className="modal-header">
-              <h2>Confirm Hosting Invoice</h2>
-              <button className="modal-close" onClick={() => setHostingConfirmModal(null)}>×</button>
-            </div>
-            <div className="modal-body">
-              <p style={{ margin: '0 0 4px', fontSize: 14 }}>
-                <strong>{hostingConfirmModal.clientName}</strong>
-              </p>
-              <p style={{ margin: 0, fontSize: 14, color: 'var(--c2)' }}>
-                Amount: <strong>{fmtEuro(hostingConfirmModal.amount)}</strong>
-              </p>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary btn-sm" onClick={() => setHostingConfirmModal(null)}>Cancel</button>
-              <button
-                className="btn btn-primary btn-sm"
-                disabled={hostingConfirming === hostingConfirmModal.id}
-                onClick={async () => {
-                  await confirmHosting(hostingConfirmModal.id, hostingConfirmModal.amount)
-                  setHostingConfirmModal(null)
-                }}
-              >
-                {hostingConfirming === hostingConfirmModal.id ? <span className="spinner" /> : null} Confirm
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal open={!!hostingConfirmModal} title="Confirm Hosting Invoice" maxWidth={360} onClose={() => setHostingConfirmModal(null)}
+        footer={<>
+          <Button variant="outline" size="sm" onClick={() => setHostingConfirmModal(null)}>Cancel</Button>
+          <Button
+            size="sm"
+            disabled={!!(hostingConfirmModal && hostingConfirming === hostingConfirmModal.id)}
+            onClick={async () => {
+              if (!hostingConfirmModal) return
+              await confirmHosting(hostingConfirmModal.id, hostingConfirmModal.amount)
+              setHostingConfirmModal(null)
+            }}
+          >
+            Confirm
+          </Button>
+        </>}>
+        {hostingConfirmModal && (
+          <>
+            <p className="text-sm font-bold mb-1"><strong>{hostingConfirmModal.clientName}</strong></p>
+            <p className="text-sm text-[#374151]">Amount: <strong>{fmtEuro(hostingConfirmModal.amount)}</strong></p>
+          </>
+        )}
+      </Modal>
 
       {/* ── Page header ─────────────────────────────────────────────────────── */}
-      <div className="page-header">
+      <div className="flex items-center justify-between px-6 py-4 bg-background border-b border-border">
         <div>
           <h1>{monthLabel} — Invoices</h1>
           <p>Confirm or defer planned invoices</p>
         </div>
 
         {/* Month navigation */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={() => setMonthOffset(o => o - 1)}
-            style={{ padding: '0 12px' }}
-            aria-label="Previous month"
-          >
-            &#8249;
-          </button>
-          <span style={{
-            fontWeight: 700,
-            fontSize: 14,
-            color: 'var(--c1)',
-            minWidth: 120,
-            textAlign: 'center',
-          }}>
-            {monthLabel}
-          </span>
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={() => setMonthOffset(o => o + 1)}
-            style={{ padding: '0 12px' }}
-            aria-label="Next month"
-          >
-            &#8250;
-          </button>
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={() => rStore.fetchByMonths([currentMonth])}
-            disabled={rStore.loading}
-            style={{ marginLeft: 8 }}
-          >
-            {rStore.loading ? (
-              <span className="spinner" style={{ width: 13, height: 13, borderWidth: 2, borderTopColor: 'var(--c3)', borderColor: 'var(--c5)' }} />
-            ) : (
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="23 4 23 10 17 10" />
-                <polyline points="1 20 1 14 7 14" />
-                <path d="M3.51 9a9 9 0 0114.13-3.36L23 10M1 14l5.36 4.36A9 9 0 0020.49 15" />
-              </svg>
-            )}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Button variant="outline" size="sm" onClick={() => setMonthOffset(o => o - 1)} aria-label="Previous month">&#8249;</Button>
+          <span className="font-bold text-sm min-w-[120px] text-center">{monthLabel}</span>
+          <Button variant="outline" size="sm" onClick={() => setMonthOffset(o => o + 1)} aria-label="Next month">&#8250;</Button>
+          <Button variant="outline" size="sm" onClick={() => rStore.fetchByMonths([currentMonth])} disabled={rStore.loading} className="ml-2">
             Refresh
-          </button>
-          <button className="btn btn-secondary btn-sm" style={{ marginLeft: 8 }} onClick={() => setShowAddCost(true)}>+ Add Cost</button>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowAddInvoice(true)}>+ Add Invoice</button>
+          </Button>
+          <Button variant="outline" size="sm" className="ml-2" onClick={() => setShowAddCost(true)}>+ Add Cost</Button>
+          <Button size="sm" onClick={() => setShowAddInvoice(true)}>+ Add Invoice</Button>
         </div>
       </div>
 
       {/* ── Error banners ────────────────────────────────────────────────────── */}
       {(rStore.error || pStore.error) && (
-        <div className="alert alert-red" style={{ margin: '16px 28px 0' }}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+        <div className="rounded-lg border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-sm text-[#be123c] mx-7 mt-4 flex items-center gap-2">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
             <circle cx="12" cy="12" r="10" />
             <line x1="12" y1="8" x2="12" y2="12" />
             <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -922,60 +830,53 @@ export function ThisMonthView() {
       )}
 
       {/* ── Stats strip ─────────────────────────────────────────────────────── */}
-      <div className="stats-strip">
-        <div className="stat-card" style={{ '--left-color': 'var(--c5)' } as React.CSSProperties}>
-          <div className="stat-card-label">Planned this month</div>
-          <div className="stat-card-value text-mono">{fmtEuro(plannedTotal)}</div>
-          <div className="stat-card-sub">{invoiceRows.length + maintenanceRows.length + domainRows.length} invoice{invoiceRows.length + maintenanceRows.length + domainRows.length !== 1 ? 's' : ''} planned</div>
+      <div className="grid grid-cols-4 gap-3 mb-4 px-6 pt-5">
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Planned this month</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{fmtEuro(plannedTotal)}</div>
+          <div className="text-xs text-muted-foreground mt-1">{invoiceRows.length + maintenanceRows.length + domainRows.length} invoice{invoiceRows.length + maintenanceRows.length + domainRows.length !== 1 ? 's' : ''} planned</div>
         </div>
 
-        <div className="stat-card" style={{ '--left-color': 'var(--navy)' } as React.CSSProperties}>
-          <div className="stat-card-label">Issued</div>
-          <div className="stat-card-value text-mono" style={{ color: 'var(--navy)' }}>
-            {fmtEuro(issuedTotal)}
-          </div>
-          <div className="stat-card-sub">{issuedRows.length} invoice{issuedRows.length !== 1 ? 's' : ''}</div>
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Issued</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-primary">{fmtEuro(issuedTotal)}</div>
+          <div className="text-xs text-muted-foreground mt-1">{issuedRows.length} invoice{issuedRows.length !== 1 ? 's' : ''}</div>
         </div>
 
-        <div className="stat-card" style={{ '--left-color': 'var(--amber)' } as React.CSSProperties}>
-          <div className="stat-card-label">Not yet issued</div>
-          <div className="stat-card-value text-mono" style={{ color: 'var(--amber)' }}>
-            {fmtEuro(notYetIssuedTotal)}
-          </div>
-          <div className="stat-card-sub">{notYetIssuedRows.length} pending</div>
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Not yet issued</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-[#d97706]">{fmtEuro(notYetIssuedTotal)}</div>
+          <div className="text-xs text-muted-foreground mt-1">{notYetIssuedRows.length} pending</div>
         </div>
 
-        <div className="stat-card" style={{ '--left-color': '#7c3aed' } as React.CSSProperties}>
-          <div className="stat-card-label">Delta plan vs actual</div>
-          <div
-            className="stat-card-value text-mono"
-            style={{ color: delta >= 0 ? 'var(--navy)' : 'var(--red)' }}
-          >
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Delta plan vs actual</div>
+          <div className={`text-[28px] font-extrabold tracking-[-0.5px] mb-2 ${delta >= 0 ? 'text-primary' : 'text-[#dc2626]'}`}>
             {delta >= 0 ? '+' : ''}{fmtEuro(delta)}
           </div>
-          <div className="stat-card-sub">issued minus planned</div>
+          <div className="text-xs text-muted-foreground mt-1">issued minus planned</div>
         </div>
       </div>
 
       {/* ── Main content ─────────────────────────────────────────────────────── */}
-      <div className="page-content" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <div className="flex-1 overflow-auto p-6 flex flex-col gap-6">
 
         {/* ── Invoice table ─────────────────────────────────────────────────── */}
         <div>
-          <div className="section-bar">
+          <div className="flex items-center justify-between mb-3">
             <h2>Planned invoices — {monthLabel}</h2>
           </div>
 
           <div className="card">
             {isLoading ? (
-              <div className="card-body" style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--c4)' }}>
+              <div className="text-center px-5 py-12 text-muted-foreground">
                 <span className="spinner" style={{ width: 26, height: 26, borderWidth: 3, borderTopColor: 'var(--navy)', borderColor: 'var(--c5)', display: 'inline-block', marginBottom: 12 }} />
-                <div style={{ fontWeight: 600, marginTop: 12 }}>Loading invoices…</div>
+                <div className="font-semibold mt-3">Loading invoices…</div>
               </div>
             ) : invoiceRows.length === 0 && maintenanceCRRows.length === 0 ? (
-              <div className="card-body" style={{ textAlign: 'center', padding: '48px 20px' }}>
-                <div style={{ fontSize: 28, marginBottom: 10 }}>🗂</div>
-                <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--c2)', marginBottom: 5 }}>
+              <div className="text-center px-5 py-12">
+                <div className="text-[28px] mb-2.5">🗂</div>
+                <div className="font-bold text-[15px] text-[#374151] mb-1">
                   No planned invoices for {monthLabel}
                 </div>
                 <div className="text-sm">Plan an invoice for a project below to get started.</div>
@@ -986,11 +887,11 @@ export function ThisMonthView() {
                   <tr>
                     <th>Project</th>
                     <th>Description</th>
-                    <th className="th-right">Planned</th>
-                    <th className="th-right">Actual Amount</th>
+                    <th className="text-right">Planned</th>
+                    <th className="text-right">Actual Amount</th>
                     <th>Status</th>
                     <th>Probability</th>
-                    <th className="th-right">Actions</th>
+                    <th className="text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1009,32 +910,32 @@ export function ThisMonthView() {
                     return (
                       <tr key={row.id} style={isDeferred ? { background: 'rgba(239,68,68,0.04)' } : undefined}>
                         <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <div style={{ fontWeight: 700, color: 'var(--c0)', fontSize: 14 }} className="table-link">
+                          <div className="flex items-center gap-1.5">
+                            <div className="font-medium text-primary hover:underline cursor-pointer font-bold">
                               {displayName}
                             </div>
-                            {isCRRow && <span className="badge badge-navy" style={{ fontSize: 10 }}>CR</span>}
+                            {isCRRow && <Badge variant="navy" className="text-[10px]">CR</Badge>}
                           </div>
                           {displaySub && (
-                            <div style={{ fontSize: 11, color: 'var(--c4)', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
+                            <div className="text-[11px] text-muted-foreground mt-0.5 tabular-nums">
                               {displaySub}
                             </div>
                           )}
                         </td>
 
                         <td>
-                          <span style={{ fontSize: 12, color: 'var(--c3)' }}>
+                          <span className="text-xs text-muted-foreground">
                             {crTitle ?? row.notes ?? '—'}
                           </span>
                         </td>
 
-                        <td className="td-right">
-                          <span className="text-muted text-mono">
+                        <td className="text-right">
+                          <span className="text-muted-foreground">
                             {row.planned_amount != null ? fmtEuro(row.planned_amount) : '—'}
                           </span>
                         </td>
 
-                        <td className="td-right">
+                        <td className="text-right">
                           <ActualAmountCell row={row} />
                         </td>
 
@@ -1043,9 +944,7 @@ export function ThisMonthView() {
                         {/* Probability */}
                         <td>
                           {(row.probability != null && row.probability !== 100) ? (
-                            <span style={{
-                              display: 'inline-block',
-                              fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 20,
+                            <span className="inline-block text-[11px] font-bold px-2 py-0.5 rounded-full" style={{
                               background: probColors(row.probability).bg,
                               color: probColors(row.probability).text,
                               border: `1px solid ${probColors(row.probability).border}`,
@@ -1053,32 +952,33 @@ export function ThisMonthView() {
                               {row.probability}% · {probLabel(row.probability)}
                             </span>
                           ) : (
-                            <span style={{ fontSize: 11, color: '#9ca3af' }}>—</span>
+                            <span className="text-[11px] text-muted-foreground">—</span>
                           )}
                         </td>
 
-                        <td className="td-right">
-                          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', alignItems: 'center' }}>
+                        <td className="text-right">
+                          <div className="flex gap-1.5 justify-end items-center">
                             {isPending && (
                               <>
-                                <button
-                                  className="btn btn-primary btn-xs"
+                                <Button
+                                  size="xs"
                                   onClick={() => openConfirmModal(row)}
                                   disabled={isUpdating}
                                 >
                                   Confirm
-                                </button>
-                                <button
-                                  className="btn btn-secondary btn-xs"
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="xs"
                                   onClick={() => handleNotInvoiced(row)}
                                   disabled={isUpdating}
                                 >
                                   Not Invoiced
-                                </button>
+                                </Button>
                               </>
                             )}
                             {!isPending && (
-                              <span style={{ fontSize: 12, color: 'var(--c4)', fontStyle: 'italic' }}>
+                              <span className="text-xs text-muted-foreground italic">
                                 {row.status === 'paid' ? 'Paid' : (row.status === 'deferred' || row.status === 'retainer') ? 'Not issued' : 'Issued'}
                               </span>
                             )}
@@ -1096,7 +996,7 @@ export function ThisMonthView() {
         {/* ── Maintenance invoices this month ──────────────────────────────── */}
         {maintenanceRows.length > 0 && (
           <div>
-            <div className="section-bar">
+            <div className="flex items-center justify-between mb-3">
               <h2>Maintenance Invoices — {monthLabel}</h2>
             </div>
             <div className="card">
@@ -1105,10 +1005,10 @@ export function ThisMonthView() {
                   <tr>
                     <th>Contract</th>
                     <th>Client</th>
-                    <th className="th-right">Retainer</th>
-                    <th className="th-right">Actual</th>
+                    <th className="text-right">Retainer</th>
+                    <th className="text-right">Actual</th>
                     <th>Status</th>
-                    <th className="th-right">Actions</th>
+                    <th className="text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1116,36 +1016,36 @@ export function ThisMonthView() {
                     const isPending = row.status === 'planned'
                     return (
                       <tr key={row.id}>
-                        <td style={{ fontWeight: 700, fontSize: 14 }}>{row.maintenance?.name ?? '—'}</td>
-                        <td style={{ fontSize: 13, color: 'var(--c2)' }}>{row.maintenance?.client?.name ?? '—'}</td>
-                        <td className="td-right text-mono">
+                        <td className="font-bold text-sm">{row.maintenance?.name ?? '—'}</td>
+                        <td className="text-[13px] text-[#374151]">{row.maintenance?.client?.name ?? '—'}</td>
+                        <td className="text-right">
                           {(() => {
                             const linkedHosting = infraStore.hostingClients.find(h => h.maintenance_id === row.maintenance_id && h.cycle === 'monthly' && hostingActiveInMonth(h, currentMonth))
                             const total = (row.planned_amount ?? 0) + (linkedHosting?.amount ?? 0)
                             return <>
                               {fmtEuro(total)}
                               {linkedHosting && (
-                                <div style={{ fontSize: 10, color: 'var(--c4)', fontWeight: 400 }}>
+                                <div className="text-[10px] text-muted-foreground font-normal">
                                   {fmtEuro(row.planned_amount ?? 0)} + {fmtEuro(linkedHosting.amount)}
                                 </div>
                               )}
                             </>
                           })()}
                         </td>
-                        <td className="td-right">
+                        <td className="text-right">
                           <ActualAmountCell row={row} />
                         </td>
                         <td>{statusBadge(row.status)}</td>
-                        <td className="td-right">
-                          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                        <td className="text-right">
+                          <div className="flex gap-1.5 justify-end">
                             {isPending && (
                               <>
-                                <button className="btn btn-primary btn-xs" onClick={() => openConfirmModal(row)}>Confirm</button>
-                                <button className="btn btn-secondary btn-xs" onClick={() => handleNotInvoiced(row)}>Not Invoiced</button>
+                                <Button size="xs" onClick={() => openConfirmModal(row)}>Confirm</Button>
+                                <Button variant="outline" size="xs" onClick={() => handleNotInvoiced(row)}>Not Invoiced</Button>
                               </>
                             )}
                             {!isPending && (
-                              <span style={{ fontSize: 12, color: 'var(--c4)', fontStyle: 'italic' }}>
+                              <span className="text-xs text-muted-foreground italic">
                                 {row.status === 'paid' ? 'Paid' : 'Issued'}
                               </span>
                             )}
@@ -1163,28 +1063,27 @@ export function ThisMonthView() {
         {/* ── Hosting revenue this month ────────────────────────────────────── */}
         {(monthlyHosting.length > 0 || yearlyHostingItems.length > 0 || yearlyHostingDue.length > 0) && (
           <div>
-            <div className="section-bar">
+            <div className="flex items-center justify-between mb-3">
               <h2>Hosting Revenue — {monthLabel}</h2>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div className="flex gap-2 items-center">
                 {batchSelectedHosting.size > 0 && (
-                  <button
-                    className="btn btn-primary btn-sm"
+                  <Button
+                    size="sm"
                     onClick={() => confirmHostingBatch([...batchSelectedHosting])}
                     disabled={batchConfirmingHosting}
                   >
-                    {batchConfirmingHosting ? <span className="spinner" style={{ width: 12, height: 12, borderWidth: 1.5 }} /> : null}
                     Confirm selected ({batchSelectedHosting.size})
-                  </button>
+                  </Button>
                 )}
                 {unconfirmedMonthlyHosting.length > 1 && (
-                  <button
-                    className="btn btn-secondary btn-sm"
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => confirmHostingBatch(unconfirmedMonthlyHosting.map(h => h.id))}
                     disabled={batchConfirmingHosting}
                   >
-                    {batchConfirmingHosting ? <span className="spinner" style={{ width: 12, height: 12, borderWidth: 1.5 }} /> : null}
                     Confirm all ({unconfirmedMonthlyHosting.length})
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>
@@ -1196,7 +1095,7 @@ export function ThisMonthView() {
                     <th style={{ width: 32 }}></th>
                     <th>Client</th>
                     <th>Description</th>
-                    <th className="th-right">Amount</th>
+                    <th className="text-right">Amount</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -1206,7 +1105,7 @@ export function ThisMonthView() {
                     const selected = batchSelectedHosting.has(h.id)
                     return (
                       <tr key={h.id}>
-                        <td style={{ paddingLeft: 12 }}>
+                        <td className="pl-3">
                           {!confirmed && (
                             <input
                               type="checkbox"
@@ -1219,35 +1118,35 @@ export function ThisMonthView() {
                                   return next
                                 })
                               }}
-                              style={{ cursor: 'pointer', width: 14, height: 14 }}
+                              className="cursor-pointer w-3.5 h-3.5"
                             />
                           )}
                         </td>
                         <td>
-                          <div style={{ fontWeight: 700, color: 'var(--c0)', fontSize: 14 }}>
+                          <div className="font-bold text-sm">
                             {h.client?.name ?? '—'}
                           </div>
                         </td>
                         <td>
-                          <span style={{ fontSize: 13, color: 'var(--c3)' }}>
+                          <span className="text-[13px] text-muted-foreground">
                             {h.description ?? '—'}
                           </span>
                         </td>
-                        <td className="td-right">
-                          <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--c1)' }}>
-                            {h.amount.toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €<span style={{ fontWeight: 400, color: 'var(--c4)', fontSize: 12 }}>/mo</span>
+                        <td className="text-right">
+                          <span className="font-bold tabular-nums">
+                            {h.amount.toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €<span className="font-normal text-muted-foreground text-xs">/mo</span>
                           </span>
                         </td>
-                        <td style={{ textAlign: 'right' }}>
+                        <td className="text-right">
                           {confirmed ? (
-                            <span className="badge badge-green">Issued</span>
+                            <Badge variant="green">Issued</Badge>
                           ) : (
-                            <button
-                              className="btn btn-primary btn-xs"
+                            <Button
+                              size="xs"
                               onClick={() => setHostingConfirmModal({ id: h.id, clientName: h.client?.name ?? '—', amount: h.amount })}
                             >
                               Confirm
-                            </button>
+                            </Button>
                           )}
                         </td>
                       </tr>
@@ -1259,30 +1158,30 @@ export function ThisMonthView() {
                       <tr key={h.id}>
                         <td></td>
                         <td>
-                          <div style={{ fontWeight: 700, color: 'var(--c0)', fontSize: 14 }}>
+                          <div className="font-bold text-sm">
                             {h.client?.name ?? '—'}
                           </div>
                         </td>
                         <td>
-                          <span style={{ fontSize: 13, color: 'var(--c3)' }}>
-                            {h.description ?? '—'}<span style={{ marginLeft: 6, fontSize: 11, color: 'var(--c4)' }}>yearly</span>
+                          <span className="text-[13px] text-muted-foreground">
+                            {h.description ?? '—'}<span className="ml-1.5 text-[11px] text-muted-foreground">yearly</span>
                           </span>
                         </td>
-                        <td className="td-right">
-                          <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--c1)' }}>
-                            {(row.planned_amount ?? h.amount).toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €<span style={{ fontWeight: 400, color: 'var(--c4)', fontSize: 12 }}>/yr</span>
+                        <td className="text-right">
+                          <span className="font-bold tabular-nums">
+                            {(row.planned_amount ?? h.amount).toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €<span className="font-normal text-muted-foreground text-xs">/yr</span>
                           </span>
                         </td>
-                        <td style={{ textAlign: 'right' }}>
+                        <td className="text-right">
                           {confirmed ? (
-                            <span className="badge badge-green">Issued</span>
+                            <Badge variant="green">Issued</Badge>
                           ) : (
-                            <button
-                              className="btn btn-primary btn-xs"
+                            <Button
+                              size="xs"
                               onClick={() => setHostingConfirmModal({ id: h.id, clientName: h.client?.name ?? '—', amount: row.planned_amount ?? h.amount })}
                             >
                               Confirm
-                            </button>
+                            </Button>
                           )}
                         </td>
                       </tr>
@@ -1291,17 +1190,17 @@ export function ThisMonthView() {
                   {yearlyHostingDue.map(h => (
                     <tr key={h.id}>
                       <td></td>
-                      <td><div style={{ fontWeight: 700, color: 'var(--c0)', fontSize: 14 }}>{h.client?.name ?? '—'}</div></td>
-                      <td><span style={{ fontSize: 13, color: 'var(--c3)' }}>{h.description ?? '—'}<span style={{ marginLeft: 6, fontSize: 11, color: 'var(--c4)' }}>yearly</span></span></td>
-                      <td className="td-right">
-                        <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--c1)' }}>
-                          {h.amount.toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €<span style={{ fontWeight: 400, color: 'var(--c4)', fontSize: 12 }}>/yr</span>
+                      <td><div className="font-bold text-sm">{h.client?.name ?? '—'}</div></td>
+                      <td><span className="text-[13px] text-muted-foreground">{h.description ?? '—'}<span className="ml-1.5 text-[11px] text-muted-foreground">yearly</span></span></td>
+                      <td className="text-right">
+                        <span className="font-bold tabular-nums">
+                          {h.amount.toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €<span className="font-normal text-muted-foreground text-xs">/yr</span>
                         </span>
                       </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <button className="btn btn-primary btn-xs" onClick={() => setHostingConfirmModal({ id: h.id, clientName: h.client?.name ?? '—', amount: h.amount })}>
+                      <td className="text-right">
+                        <Button size="xs" onClick={() => setHostingConfirmModal({ id: h.id, clientName: h.client?.name ?? '—', amount: h.amount })}>
                           Confirm
-                        </button>
+                        </Button>
                       </td>
                     </tr>
                   ))}
@@ -1314,7 +1213,7 @@ export function ThisMonthView() {
         {/* ── Domain renewals this month ────────────────────────────────────── */}
         {(domainRows.length > 0 || domainsDue.length > 0) && (
           <div>
-            <div className="section-bar">
+            <div className="flex items-center justify-between mb-3">
               <h2>Domain Renewals — {monthLabel}</h2>
             </div>
 
@@ -1324,7 +1223,7 @@ export function ThisMonthView() {
                   <tr>
                     <th>Client</th>
                     <th>Domains</th>
-                    <th className="th-right">Total</th>
+                    <th className="text-right">Total</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -1332,34 +1231,30 @@ export function ThisMonthView() {
                   {domainsDue.map(d => (
                     <tr key={`due-${d.id}`}>
                       <td>
-                        <div style={{ fontWeight: 700, color: 'var(--c0)', fontSize: 14 }}>
+                        <div className="font-bold text-sm">
                           {d.client?.name ?? '—'}
                         </div>
                       </td>
                       <td>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                          <span style={{
-                            fontSize: 12, color: 'var(--c2)', background: 'var(--c7)',
-                            border: '1px solid var(--c6)', borderRadius: 4, padding: '2px 7px',
-                            fontFamily: 'monospace',
-                          }}>
+                        <div className="flex flex-wrap gap-1">
+                          <span className="text-xs text-[#374151] bg-gray-50 border border-border rounded px-[7px] py-0.5">
                             {d.domain_name}
                           </span>
                         </div>
                       </td>
-                      <td className="td-right">
-                        <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--c1)' }}>
+                      <td className="text-right">
+                        <span className="font-bold tabular-nums">
                           {fmtEuro(d.yearly_amount ?? 0)}
                         </span>
                       </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <button
-                          className="btn btn-primary btn-xs"
+                      <td className="text-right">
+                        <Button
+                          size="xs"
                           onClick={() => confirmDomainDue(d.id, d.yearly_amount ?? 0)}
                           disabled={domainConfirming === d.id}
                         >
                           {domainConfirming === d.id ? 'Saving…' : 'Confirm'}
-                        </button>
+                        </Button>
                       </td>
                     </tr>
                   ))}
@@ -1379,35 +1274,31 @@ export function ThisMonthView() {
                       return (
                         <tr key={key}>
                           <td>
-                            <div style={{ fontWeight: 700, color: 'var(--c0)', fontSize: 14 }}>
+                            <div className="font-bold text-sm">
                               {group.clientName}
                             </div>
                           </td>
                           <td>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                            <div className="flex flex-wrap gap-1">
                               {group.rows.map(r => (
-                                <span key={r.id} style={{
-                                  fontSize: 12, color: 'var(--c2)', background: 'var(--c7)',
-                                  border: '1px solid var(--c6)', borderRadius: 4, padding: '2px 7px',
-                                  fontFamily: 'monospace',
-                                }}>
+                                <span key={r.id} className="text-xs text-[#374151] bg-gray-50 border border-border rounded px-[7px] py-0.5">
                                   {r.domain?.domain_name ?? '—'}
                                 </span>
                               ))}
                             </div>
                           </td>
-                          <td className="td-right">
-                            <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--c1)' }}>
+                          <td className="text-right">
+                            <span className="font-bold tabular-nums">
                               {fmtEuro(total)}
                             </span>
                           </td>
-                          <td style={{ textAlign: 'right' }}>
+                          <td className="text-right">
                             {allIssued ? (
-                              <span className="badge badge-green">Issued</span>
+                              <Badge variant="green">Issued</Badge>
                             ) : (
-                              <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                                <button
-                                  className="btn btn-primary btn-xs"
+                              <div className="flex gap-1.5 justify-end">
+                                <Button
+                                  size="xs"
                                   onClick={async () => {
                                     for (const r of group.rows.filter(r => r.status === 'planned')) {
                                       await handleConfirm(r)
@@ -1416,9 +1307,10 @@ export function ThisMonthView() {
                                   disabled={anyUpdating}
                                 >
                                   {anyUpdating ? 'Saving…' : 'Confirm'}
-                                </button>
-                                <button
-                                  className="btn btn-secondary btn-xs"
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="xs"
                                   onClick={() => {
                                     setDeferDomainGroup(group)
                                     setDeferDomainNote('')
@@ -1427,7 +1319,7 @@ export function ThisMonthView() {
                                   disabled={anyUpdating}
                                 >
                                   Not Invoiced
-                                </button>
+                                </Button>
                               </div>
                             )}
                           </td>
@@ -1443,13 +1335,13 @@ export function ThisMonthView() {
 
         {/* ── Costs this month ─────────────────────────────────────────────── */}
         <div>
-          <div className="section-bar">
+          <div className="flex items-center justify-between mb-3">
             <h2>Costs this month</h2>
           </div>
 
           <div className="card">
             {costRows.length === 0 ? (
-              <div style={{ padding: '28px 20px', textAlign: 'center', color: 'var(--c4)', fontSize: 13 }}>
+              <div className="px-5 py-7 text-center text-muted-foreground text-[13px]">
                 No costs recorded this month.
               </div>
             ) : (
@@ -1458,7 +1350,7 @@ export function ThisMonthView() {
                   <tr>
                     <th>PROJECT</th>
                     <th>DESCRIPTION</th>
-                    <th className="th-right">AMOUNT</th>
+                    <th className="text-right">AMOUNT</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1467,21 +1359,21 @@ export function ThisMonthView() {
                     const maint = r.maintenance_id ? maintenanceRows.find(m => m.maintenance_id === r.maintenance_id) : null
                     return (
                       <tr key={r.id}>
-                        <td style={{ fontSize: 13, color: 'var(--c2)' }}>
-                          {proj?.name ?? (maint ? 'Maintenance' : <span className="text-muted">—</span>)}
+                        <td className="text-[13px] text-[#374151]">
+                          {proj?.name ?? (maint ? 'Maintenance' : <span className="text-muted-foreground">—</span>)}
                         </td>
-                        <td style={{ fontSize: 13, color: 'var(--c1)' }}>
-                          {r.notes ?? <span className="text-muted">—</span>}
+                        <td className="text-[13px]">
+                          {r.notes ?? <span className="text-muted-foreground">—</span>}
                         </td>
-                        <td className="td-right text-mono" style={{ fontWeight: 600, color: 'var(--red)', fontSize: 13 }}>
-                          {r.actual_amount != null ? fmtEuro(r.actual_amount) : <span className="text-muted">—</span>}
+                        <td className="text-right font-semibold text-[#dc2626] text-[13px]">
+                          {r.actual_amount != null ? fmtEuro(r.actual_amount) : <span className="text-muted-foreground">—</span>}
                         </td>
                       </tr>
                     )
                   })}
-                  <tr style={{ background: 'var(--c7)', borderTop: '2px solid var(--c6)' }}>
-                    <td colSpan={2} style={{ fontWeight: 700, fontSize: 12, color: 'var(--c3)', letterSpacing: '0.05em' }}>TOTAL COSTS</td>
-                    <td className="td-right text-mono" style={{ fontWeight: 700, color: 'var(--red)', fontSize: 14 }}>
+                  <tr className="bg-gray-50 border-t-2 border-border">
+                    <td colSpan={2} className="font-bold text-xs text-muted-foreground tracking-[0.05em]">TOTAL COSTS</td>
+                    <td className="text-right font-bold text-[#dc2626] text-sm">
                       {fmtEuro(costRows.reduce((s, r) => s + (r.actual_amount ?? 0), 0))}
                     </td>
                   </tr>

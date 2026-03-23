@@ -3,6 +3,8 @@ import { useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import type { TeamMember, ResourceAllocation, AllocationCategory } from '../lib/types'
+import { Button } from '@/components/ui/button'
+import { Modal } from '../components/Modal'
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -115,45 +117,35 @@ function SickLeaveModal({ days, member, onClose, onSaved }: {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <span style={{ fontWeight: 800 }}>Report Sick Leave</span>
-          <button className="modal-close" onClick={onClose}>✕</button>
-        </div>
-        <div className="modal-body">
-          <div style={{ fontSize: 13, color: 'var(--c2)', marginBottom: 16 }}>Select the days you were sick.</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {days.map(d => {
-              const active = sel.includes(d)
-              return (
-                <button key={d}
-                  onClick={() => setSel(p => p.includes(d) ? p.filter(x => x !== d) : [...p, d])}
-                  style={{
-                    padding: '10px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer',
-                    border: active ? '2px solid var(--red)' : '2px solid var(--c5)',
-                    background: active ? 'var(--red-bg)' : '#fff',
-                    color: active ? 'var(--red)' : 'var(--c1)',
-                  }}>
-                  {fmtDayShort(d)} {new Date(d + 'T00:00:00').getDate()}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>Cancel</button>
-          <button onClick={save} disabled={sel.length === 0 || saving}
-            style={{
-              padding: '8px 18px', borderRadius: 8, fontSize: 13, fontWeight: 700,
-              border: 'none', cursor: sel.length === 0 ? 'default' : 'pointer',
-              background: 'var(--red)', color: '#fff', opacity: sel.length === 0 ? 0.5 : 1,
-            }}>
+    <Modal title="Report Sick Leave" onClose={onClose} maxWidth={400}
+      footer={
+        <>
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button variant="destructive" size="sm" onClick={save} disabled={sel.length === 0 || saving}>
             {saving ? '…' : `Report ${sel.length} day${sel.length !== 1 ? 's' : ''}`}
-          </button>
-        </div>
+          </Button>
+        </>
+      }
+    >
+      <p className="text-[13px] text-[var(--c2)] mb-4">Select the days you were sick.</p>
+      <div className="flex gap-2 flex-wrap">
+        {days.map(d => {
+          const active = sel.includes(d)
+          return (
+            <button key={d}
+              onClick={() => setSel(p => p.includes(d) ? p.filter(x => x !== d) : [...p, d])}
+              className={`px-4 py-[10px] rounded-lg text-[13px] font-bold cursor-pointer transition-all ${
+                active
+                  ? 'border-2 border-[var(--red)] bg-[var(--red-bg)] text-[var(--red)]'
+                  : 'border-2 border-[var(--c5)] bg-white text-[var(--c1)]'
+              }`}
+            >
+              {fmtDayShort(d)} {new Date(d + 'T00:00:00').getDate()}
+            </button>
+          )
+        })}
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -166,9 +158,9 @@ function UnplannedModal({ member, days, projects, onClose, onSaved }: {
   onClose: () => void
   onSaved: () => void
 }) {
-  const today = localDate(new Date())
+  const todayStr = localDate(new Date())
   const [form, setForm] = useState({
-    date: days.includes(today) ? today : days[0],
+    date: days.includes(todayStr) ? todayStr : days[0],
     projectId: '',
     category: 'project' as AllocationCategory,
     label: '',
@@ -199,75 +191,73 @@ function UnplannedModal({ member, days, projects, onClose, onSaved }: {
   const CATS: AllocationCategory[] = ['project', 'maintenance', 'internal', 'meeting', 'admin']
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <span style={{ fontWeight: 800 }}>Log Unplanned Work</span>
-          <button className="modal-close" onClick={onClose}>✕</button>
-        </div>
-        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div>
-            <div className="form-label" style={{ marginBottom: 6 }}>Day</div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              {days.map(d => (
-                <button key={d} onClick={() => setForm(f => ({ ...f, date: d }))}
-                  style={{
-                    flex: 1, padding: '7px 4px', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                    border: form.date === d ? '2px solid var(--navy)' : '2px solid var(--c5)',
-                    background: form.date === d ? 'var(--navy)' : '#fff',
-                    color: form.date === d ? '#fff' : 'var(--c1)',
-                  }}>
-                  {fmtDayShort(d)}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <div className="form-label" style={{ marginBottom: 6 }}>Category</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {CATS.map(c => (
-                <button key={c} onClick={() => setForm(f => ({ ...f, category: c }))}
-                  style={{
-                    padding: '4px 12px', borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                    border: form.category === c ? `2px solid ${CAT_STYLE[c].color}` : '2px solid var(--c5)',
-                    background: form.category === c ? CAT_STYLE[c].bg : '#fff',
-                    color: form.category === c ? CAT_STYLE[c].color : 'var(--c3)',
-                  }}>
-                  {CAT_STYLE[c].label}
-                </button>
-              ))}
-            </div>
-          </div>
-          {(form.category === 'project' || form.category === 'maintenance') && (
-            <div className="form-group">
-              <label className="form-label">Project</label>
-              <select value={form.projectId} onChange={e => setForm(f => ({ ...f, projectId: e.target.value }))}>
-                <option value="">— Select project —</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.pn} · {p.name}</option>)}
-              </select>
-            </div>
-          )}
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Label (optional)</label>
-              <input placeholder="e.g. Bug fix, Client call…" value={form.label}
-                onChange={e => setForm(f => ({ ...f, label: e.target.value }))} />
-            </div>
-            <div className="form-group" style={{ flex: '0 0 100px' }}>
-              <label className="form-label">Hours</label>
-              <input type="number" min={0.5} step={0.5} value={form.hours}
-                onChange={e => setForm(f => ({ ...f, hours: Number(e.target.value) }))} />
-            </div>
-          </div>
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary btn-sm" disabled={saving} onClick={save}>
+    <Modal title="Log Unplanned Work" onClose={onClose} maxWidth={480}
+      footer={
+        <>
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" disabled={saving} onClick={save}>
             {saving ? '…' : 'Add Entry'}
-          </button>
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-[14px]">
+        <div>
+          <div className="text-xs uppercase tracking-wide text-muted-foreground font-medium mb-[6px]">Day</div>
+          <div className="flex gap-[6px]">
+            {days.map(d => (
+              <button key={d} onClick={() => setForm(f => ({ ...f, date: d }))}
+                className={`flex-1 py-[7px] px-1 rounded-lg text-[11px] font-bold cursor-pointer transition-all ${
+                  form.date === d
+                    ? 'border-2 border-[var(--navy)] bg-[var(--navy)] text-white'
+                    : 'border-2 border-[var(--c5)] bg-white text-[var(--c1)]'
+                }`}
+              >
+                {fmtDayShort(d)}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs uppercase tracking-wide text-muted-foreground font-medium mb-[6px]">Category</div>
+          <div className="flex gap-[6px] flex-wrap">
+            {CATS.map(c => (
+              <button key={c} onClick={() => setForm(f => ({ ...f, category: c }))}
+                className="px-3 py-1 rounded-full text-[11px] font-bold cursor-pointer transition-all"
+                style={{
+                  border: form.category === c ? `2px solid ${CAT_STYLE[c].color}` : '2px solid var(--c5)',
+                  background: form.category === c ? CAT_STYLE[c].bg : '#fff',
+                  color: form.category === c ? CAT_STYLE[c].color : 'var(--c3)',
+                }}
+              >
+                {CAT_STYLE[c].label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {(form.category === 'project' || form.category === 'maintenance') && (
+          <div className="mb-4">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Project</label>
+            <select value={form.projectId} onChange={e => setForm(f => ({ ...f, projectId: e.target.value }))}>
+              <option value="">— Select project —</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.pn} · {p.name}</option>)}
+            </select>
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="mb-4">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Label (optional)</label>
+            <input placeholder="e.g. Bug fix, Client call…" value={form.label}
+              onChange={e => setForm(f => ({ ...f, label: e.target.value }))} />
+          </div>
+          <div className="mb-4">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Hours</label>
+            <input type="number" min={0.5} step={0.5} value={form.hours}
+              onChange={e => setForm(f => ({ ...f, hours: Number(e.target.value) }))} />
+          </div>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -290,39 +280,39 @@ function ReportDelayModal({ projects, onClose }: {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <span style={{ fontWeight: 800 }}>Report Delay</span>
-          <button className="modal-close" onClick={onClose}>✕</button>
-        </div>
-        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div className="form-group">
-            <label className="form-label">Project</label>
-            <select value={projectId} onChange={e => setProjectId(e.target.value)}>
-              <option value="">— Select project —</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.pn} · {p.name}</option>)}
-            </select>
-          </div>
-          <div className="form-group">
-            <label className="form-label">What's delayed? (optional)</label>
-            <textarea rows={3} placeholder="Briefly describe the delay…"
-              value={note} onChange={e => setNote(e.target.value)} style={{ resize: 'vertical' }} />
-          </div>
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>Cancel</button>
-          <button onClick={save} disabled={saving}
-            style={{
-              padding: '8px 18px', borderRadius: 8, fontSize: 13, fontWeight: 700,
-              border: 'none', cursor: saving ? 'default' : 'pointer',
-              background: 'var(--amber)', color: '#fff',
-            }}>
+    <Modal
+      title="Report Delay"
+      onClose={onClose}
+      maxWidth={440}
+      footer={
+        <>
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button
+            size="sm"
+            disabled={saving}
+            className="bg-[#d97706] hover:bg-[#b45309] text-white"
+            onClick={save}
+          >
             {saving ? '…' : 'Report Delay'}
-          </button>
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-[14px]">
+        <div className="mb-4">
+          <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Project</label>
+          <select value={projectId} onChange={e => setProjectId(e.target.value)}>
+            <option value="">— Select project —</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.pn} · {p.name}</option>)}
+          </select>
+        </div>
+        <div className="mb-4">
+          <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">What's delayed? (optional)</label>
+          <textarea rows={3} placeholder="Briefly describe the delay…"
+            value={note} onChange={e => setNote(e.target.value)} className="resize-y" />
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -532,18 +522,18 @@ export function MemberDashboardView() {
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
-        <div style={{ color: 'var(--c3)' }}>Loading…</div>
+      <div className="min-h-screen flex items-center justify-center bg-[var(--bg)]">
+        <div className="text-muted-foreground">Loading…</div>
       </div>
     )
   }
   if (!member) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 32, marginBottom: 12 }}>🔒</div>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>Invalid or expired link</div>
-          <div style={{ fontSize: 13, color: 'var(--c2)', marginTop: 6 }}>Ask your team lead for a new link.</div>
+      <div className="min-h-screen flex items-center justify-center bg-[var(--bg)]">
+        <div className="text-center">
+          <div className="text-[32px] mb-3">🔒</div>
+          <div className="text-base font-bold">Invalid or expired link</div>
+          <div className="text-[13px] text-[var(--c2)] mt-[6px]">Ask your team lead for a new link.</div>
         </div>
       </div>
     )
@@ -553,10 +543,10 @@ export function MemberDashboardView() {
   const teamName = (member.team as { name?: string } | null)?.name ?? ''
 
   const NAV: Array<{ id: ActiveView; label: string; icon: React.ReactNode }> = [
-    { id: 'dashboard', label: 'Dashboard',  icon: <IconGrid /> },
-    { id: 'plan',      label: 'Weekly Plan', icon: <IconCalendar /> },
-    { id: 'stats',     label: 'Statistics',  icon: <IconBarChart /> },
-    { id: 'timesheets',label: 'Timesheets',  icon: <IconClock /> },
+    { id: 'dashboard', label: 'Dashboard',   icon: <IconGrid /> },
+    { id: 'plan',      label: 'Weekly Plan',  icon: <IconCalendar /> },
+    { id: 'stats',     label: 'Statistics',   icon: <IconBarChart /> },
+    { id: 'timesheets',label: 'Timesheets',   icon: <IconClock /> },
   ]
 
   // ── Project row component ─────────────────────────────────────────────────────
@@ -573,43 +563,52 @@ export function MemberDashboardView() {
 
     return (
       <div style={{ borderBottom: last ? 'none' : isMaint ? '1px solid #fed7aa' : '1px solid var(--c5)', background: isMaint ? '#fffbf7' : '#fff' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 14, padding: isMobile ? '12px 16px 12px' : '14px 24px 14px' }}>
+        <div className={`flex items-center ${isMobile ? 'gap-[10px] px-4 py-3' : 'gap-[14px] px-6 py-[14px]'}`}>
           {/* Icon */}
-          <div style={{
-            width: 38, height: 38, borderRadius: 10, flexShrink: 0,
-            background: isMaint ? '#fff7ed' : cat.bg,
-            border: isMaint ? '1px solid #fed7aa' : 'none',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: isMaint ? '#c2410c' : cat.color, fontSize: 12, fontWeight: 800,
-          }}>
+          <div
+            className="w-[38px] h-[38px] rounded-[10px] flex-shrink-0 flex items-center justify-center text-xs font-extrabold"
+            style={{
+              background: isMaint ? '#fff7ed' : cat.bg,
+              border: isMaint ? '1px solid #fed7aa' : 'none',
+              color: isMaint ? '#c2410c' : cat.color,
+            }}
+          >
             {isMaint ? <IconWrench /> : g.label.charAt(0).toUpperCase()}
           </div>
           {/* Info */}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: isMaint ? '#92400e' : 'var(--c0)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: isMobile ? 160 : 'none' }}>{g.label}</span>
-              {g.priority === 'urgent' && <span style={{ padding: '1px 7px', borderRadius: 4, fontSize: 9, fontWeight: 700, background: 'var(--red-bg)', color: 'var(--red)', textTransform: 'uppercase', flexShrink: 0 }}>URGENT</span>}
-              {g.priority === 'high' && <span style={{ padding: '1px 7px', borderRadius: 4, fontSize: 9, fontWeight: 700, background: '#fffbeb', color: '#d97706', textTransform: 'uppercase', flexShrink: 0 }}>HIGH</span>}
+          <div className="flex-1 min-w-0">
+            <div className={`flex items-center gap-[6px] mb-[2px] flex-wrap`}>
+              <span
+                className={`text-sm font-bold overflow-hidden text-ellipsis whitespace-nowrap ${isMobile ? 'max-w-[160px]' : ''}`}
+                style={{ color: isMaint ? '#92400e' : 'var(--c0)' }}
+              >{g.label}</span>
+              {g.priority === 'urgent' && <span className="px-[7px] py-[1px] rounded text-[9px] font-bold bg-[var(--red-bg)] text-[var(--red)] uppercase flex-shrink-0">URGENT</span>}
+              {g.priority === 'high' && <span className="px-[7px] py-[1px] rounded text-[9px] font-bold bg-[#fffbeb] text-[#d97706] uppercase flex-shrink-0">HIGH</span>}
             </div>
-            {g.note && <div style={{ fontSize: 12, color: 'var(--c2)', fontStyle: 'italic', marginBottom: 4 }}>"{g.note}"</div>}
+            {g.note && <div className="text-xs text-[var(--c2)] italic mb-1">"{g.note}"</div>}
             {!isMobile && (
-              <div style={{ display: 'flex', gap: 4 }}>
-                {!isMaint && <span style={{ padding: '1px 7px', borderRadius: 4, fontSize: 9, fontWeight: 700, background: cat.bg, color: cat.color, textTransform: 'uppercase' }}>{cat.label}</span>}
+              <div className="flex gap-1">
+                {!isMaint && <span className="px-[7px] py-[1px] rounded text-[9px] font-bold uppercase" style={{ background: cat.bg, color: cat.color }}>{cat.label}</span>}
                 {g.dates.sort().map(d => (
-                  <span key={d} style={{ padding: '1px 6px', borderRadius: 4, fontSize: 9, fontWeight: 700, background: isMaint ? '#fed7aa' : 'var(--c7)', color: isMaint ? '#c2410c' : 'var(--c2)' }}>{fmtDayShort(d)}</span>
+                  <span key={d} className="px-[6px] py-[1px] rounded text-[9px] font-bold" style={{ background: isMaint ? '#fed7aa' : 'var(--c7)', color: isMaint ? '#c2410c' : 'var(--c2)' }}>{fmtDayShort(d)}</span>
                 ))}
               </div>
             )}
           </div>
           {/* ALLOCATED */}
-          <div style={{ textAlign: 'center', minWidth: isMobile ? 54 : 76, flexShrink: 0 }}>
-            {!isMobile && <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 3 }}>Allocated</div>}
-            <div style={{ fontSize: isMobile ? 15 : 18, fontWeight: 800, color: isMaint ? '#c2410c' : 'var(--navy)', fontFamily: 'Manrope, sans-serif' }}>{fmt(g.allocated)}h</div>
+          <div className={`text-center flex-shrink-0 ${isMobile ? 'min-w-[54px]' : 'min-w-[76px]'}`}>
+            {!isMobile && <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-[0.07em] mb-[3px]">Allocated</div>}
+            <div
+              className={`font-extrabold ${isMobile ? 'text-[15px]' : 'text-lg'}`}
+              style={{ color: isMaint ? '#c2410c' : 'var(--navy)', fontFamily: 'Manrope, sans-serif' }}
+            >{fmt(g.allocated)}h</div>
           </div>
           {/* REMAINING */}
-          <div style={{ textAlign: 'center', minWidth: isMobile ? 54 : 76, flexShrink: 0 }}>
-            {!isMobile && <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 3 }}>Remaining</div>}
-            <div style={{ fontSize: isMobile ? 15 : 18, fontWeight: 800, color: remColor, fontFamily: 'Manrope, sans-serif' }}>{done ? '✓' : `${fmt(remaining)}h`}</div>
+          <div className={`text-center flex-shrink-0 ${isMobile ? 'min-w-[54px]' : 'min-w-[76px]'}`}>
+            {!isMobile && <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-[0.07em] mb-[3px]">Remaining</div>}
+            <div className={`font-extrabold ${isMobile ? 'text-[15px]' : 'text-lg'}`} style={{ color: remColor, fontFamily: 'Manrope, sans-serif' }}>
+              {done ? '✓' : `${fmt(remaining)}h`}
+            </div>
           </div>
         </div>
         {/* Full-width progress bar */}
@@ -623,36 +622,32 @@ export function MemberDashboardView() {
   // ── render ────────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)' }}>
+    <div className="flex min-h-screen bg-[var(--bg)]">
 
       {/* ── Desktop Sidebar ── */}
       {!isMobile && (
-        <div style={{
-          width: 220, flexShrink: 0, background: '#fff', borderRight: '1px solid var(--c5)',
-          display: 'flex', flexDirection: 'column', position: 'fixed', top: 0, bottom: 0, left: 0, zIndex: 40,
-        }}>
-          <div style={{ padding: '18px 20px 14px', borderBottom: '1px solid var(--c6)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ width: 28, height: 28, borderRadius: 7, background: 'var(--navy)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <span style={{ color: '#fff', fontSize: 12, fontWeight: 900, fontFamily: 'Manrope, sans-serif' }}>R</span>
+        <div className="w-[220px] flex-shrink-0 bg-white border-r border-[var(--c5)] flex flex-col fixed top-0 bottom-0 left-0 z-40">
+          <div className="px-5 py-[18px] pb-[14px] border-b border-[var(--c6)]">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-[7px] bg-primary flex items-center justify-center flex-shrink-0">
+                <span className="text-white text-xs font-black" style={{ fontFamily: 'Manrope, sans-serif' }}>R</span>
               </div>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--c0)', fontFamily: 'Manrope, sans-serif', lineHeight: 1.1 }}>Agency OS</div>
-                <div style={{ fontSize: 10, color: 'var(--c2)' }}>Member Portal</div>
+                <div className="text-[13px] font-extrabold text-foreground leading-tight" style={{ fontFamily: 'Manrope, sans-serif' }}>Agency OS</div>
+                <div className="text-[10px] text-[var(--c2)]">Member Portal</div>
               </div>
             </div>
           </div>
-          <nav style={{ flex: 1, padding: '10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <nav className="flex-1 p-[10px] flex flex-col gap-[2px]">
             {NAV.map(item => {
               const active = activeView === item.id
               return (
                 <button key={item.id} onClick={() => setActiveView(item.id)}
+                  className="flex items-center gap-[9px] w-full px-3 py-[9px] rounded-lg border-none cursor-pointer text-left text-[13px]"
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 9, width: '100%',
-                    padding: '9px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', textAlign: 'left',
                     background: active ? 'var(--navy-light)' : 'transparent',
                     color: active ? 'var(--navy)' : 'var(--c2)',
-                    fontWeight: active ? 700 : 500, fontSize: 13,
+                    fontWeight: active ? 700 : 500,
                   }}>
                   <span style={{ color: active ? 'var(--navy)' : 'var(--c3)', display: 'flex' }}>{item.icon}</span>
                   {item.label}
@@ -660,31 +655,37 @@ export function MemberDashboardView() {
               )
             })}
           </nav>
-          <div style={{ padding: '14px 16px', borderTop: '1px solid var(--c6)', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0, background: teamColor + '22', color: teamColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800 }}>
+          <div className="px-4 py-[14px] border-t border-[var(--c6)] flex items-center gap-[10px]">
+            <div
+              className="w-[34px] h-[34px] rounded-full flex-shrink-0 flex items-center justify-center text-[13px] font-extrabold"
+              style={{ background: teamColor + '22', color: teamColor }}
+            >
               {member.name.charAt(0)}
             </div>
-            <div style={{ overflow: 'hidden' }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--c0)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{member.name}</div>
-              <div style={{ fontSize: 11, color: 'var(--c2)' }}>{member.role ?? teamName}</div>
+            <div className="overflow-hidden">
+              <div className="text-[13px] font-bold text-foreground truncate">{member.name}</div>
+              <div className="text-[11px] text-[var(--c2)]">{member.role ?? teamName}</div>
             </div>
           </div>
         </div>
       )}
 
       {/* ── Main ── */}
-      <div style={{ marginLeft: isMobile ? 0 : 220, flex: 1, minHeight: '100vh', paddingBottom: isMobile ? 72 : 0 }}>
+      <div className={`flex-1 min-h-screen ${isMobile ? 'ml-0 pb-[72px]' : 'ml-[220px]'}`}>
 
         {/* Mobile top bar */}
         {isMobile && (
-          <div style={{ background: '#fff', borderBottom: '1px solid var(--c5)', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 30 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ width: 24, height: 24, borderRadius: 6, background: 'var(--navy)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ color: '#fff', fontSize: 11, fontWeight: 900 }}>R</span>
+          <div className="bg-white border-b border-[var(--c5)] px-4 py-3 flex items-center justify-between sticky top-0 z-[30]">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded bg-primary flex items-center justify-center">
+                <span className="text-white text-[11px] font-black">R</span>
               </div>
-              <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--c0)', fontFamily: 'Manrope, sans-serif' }}>Agency OS</span>
+              <span className="text-[13px] font-extrabold text-foreground" style={{ fontFamily: 'Manrope, sans-serif' }}>Agency OS</span>
             </div>
-            <div style={{ width: 30, height: 30, borderRadius: '50%', background: teamColor + '22', color: teamColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800 }}>
+            <div
+              className="w-[30px] h-[30px] rounded-full flex items-center justify-center text-xs font-extrabold"
+              style={{ background: teamColor + '22', color: teamColor }}
+            >
               {member.name.charAt(0)}
             </div>
           </div>
@@ -692,41 +693,49 @@ export function MemberDashboardView() {
 
         {/* ════ DASHBOARD ════ */}
         {activeView === 'dashboard' && (
-          <div style={{ padding: isMobile ? '16px 16px 24px' : '28px 32px 56px' }}>
+          <div className={isMobile ? 'px-4 pt-4 pb-6' : 'px-8 pt-7 pb-14'}>
             {/* Outer 2-col: left content + right priorities */}
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 272px', gap: 20, alignItems: 'start', maxWidth: 1100 }}>
+            <div
+              className={`gap-5 items-start max-w-[1100px] ${isMobile ? 'flex flex-col' : 'grid'}`}
+              style={!isMobile ? { gridTemplateColumns: '1fr 272px' } : undefined}
+            >
 
               {/* ── LEFT COLUMN ── */}
-              <div style={{ minWidth: 0 }}>
+              <div className="min-w-0">
 
                 {/* Welcome */}
-                <div style={{ background: '#fff', borderRadius: 12, border: '1px solid var(--c5)', padding: isMobile ? '16px' : '20px 28px', marginBottom: 16 }}>
-                  <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'space-between', gap: 12, flexDirection: isMobile ? 'column' : 'row' }}>
+                <div
+                  className={`bg-white rounded-xl border border-[var(--c5)] mb-4 ${isMobile ? 'p-4' : 'px-7 py-5'}`}
+                >
+                  <div className={`flex justify-between gap-3 ${isMobile ? 'flex-col items-start' : 'flex-row items-center'}`}>
                     <div>
-                      <div style={{ fontSize: isMobile ? 20 : 24, fontWeight: 800, color: 'var(--c0)', fontFamily: 'Manrope, sans-serif' }}>
+                      <div
+                        className={`font-extrabold text-foreground ${isMobile ? 'text-xl' : 'text-2xl'}`}
+                        style={{ fontFamily: 'Manrope, sans-serif' }}
+                      >
                         {greeting}, {member.name.split(' ')[0]}.
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-                        <span style={{ padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: teamColor + '18', color: teamColor }}>
+                      <div className="flex items-center gap-2 mt-[6px] flex-wrap">
+                        <span className="px-[10px] py-[2px] rounded-[20px] text-[11px] font-bold" style={{ background: teamColor + '18', color: teamColor }}>
                           {member.role ?? teamName}
                         </span>
-                        <span style={{ fontSize: 12, color: 'var(--c2)' }}>
+                        <span className="text-xs text-[var(--c2)]">
                           {fmtWeekRange(weekStart)}
                           {isCurrentWeek && confirmedDayCount > 0 && <span> · {confirmedDayCount}/5 confirmed</span>}
                         </span>
                       </div>
                     </div>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <div className="flex gap-2 flex-wrap">
                       <button onClick={() => setShowSickLeave(true)}
-                        style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, padding: '8px 12px', borderRadius: 8, border: '1px solid var(--red-border)', background: 'var(--red-bg)', color: 'var(--red)', cursor: 'pointer' }}>
+                        className="flex items-center gap-[5px] text-xs font-bold px-3 py-2 rounded-lg cursor-pointer border border-[var(--red-border)] bg-[var(--red-bg)] text-[var(--red)]">
                         <IconHome /> Sick Leave
                       </button>
                       <button onClick={() => setShowDelay(true)}
-                        style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, padding: '8px 12px', borderRadius: 8, border: '1px solid #fcd34d', background: '#fffbeb', color: '#d97706', cursor: 'pointer' }}>
+                        className="flex items-center gap-[5px] text-xs font-bold px-3 py-2 rounded-lg cursor-pointer border border-[#fcd34d] bg-[#fffbeb] text-[#d97706]">
                         <IconAlertTriangle /> {isMobile ? 'Delay' : 'Report Delay'}
                       </button>
                       <button onClick={() => setShowUnplanned(true)}
-                        style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, padding: '8px 12px', borderRadius: 8, border: '1px solid var(--c5)', background: '#fff', color: 'var(--c1)', cursor: 'pointer' }}>
+                        className="flex items-center gap-[5px] text-xs font-bold px-3 py-2 rounded-lg cursor-pointer border border-[var(--c5)] bg-white text-[var(--c1)]">
                         <IconPlus /> Unplanned
                       </button>
                     </div>
@@ -734,31 +743,31 @@ export function MemberDashboardView() {
                 </div>
 
                 {/* 3 stat cards */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: isMobile ? 8 : 12, marginBottom: 16 }}>
+                <div className={`grid grid-cols-3 mb-4 ${isMobile ? 'gap-2' : 'gap-3'}`}>
                   {[
                     { label: 'TOTAL CAPACITY', value: fmt(weekCapacity), unit: 'hrs', sub: 'Standard week', color: 'var(--c0)' },
                     { label: 'ALLOCATED', value: fmt(totalAllocated), unit: 'hrs', sub: `${utilization}% utilization`, color: totalAllocated > weekCapacity ? 'var(--red)' : 'var(--navy)' },
                     { label: 'LOGGED', value: fmt(totalLogged), unit: 'hrs', sub: `${fmt(Math.max(0, totalAllocated - totalLogged))}h remaining`, color: totalLogged > 0 ? 'var(--green)' : 'var(--c3)' },
                   ].map(s => (
-                    <div key={s.label} style={{ background: '#fff', border: '1px solid var(--c5)', borderRadius: 12, padding: isMobile ? '14px 12px' : '20px 20px' }}>
-                      <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>{s.label}</div>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 2, marginBottom: 4 }}>
-                        <span style={{ fontSize: isMobile ? 22 : 28, fontWeight: 900, color: s.color, fontFamily: 'Manrope, sans-serif', lineHeight: 1 }}>{s.value}</span>
-                        <span style={{ fontSize: isMobile ? 11 : 13, fontWeight: 600, color: s.color }}>{s.unit}</span>
+                    <div key={s.label} className={`bg-white border border-[var(--c5)] rounded-xl ${isMobile ? 'p-[14px] px-3' : 'p-5'}`}>
+                      <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-[0.08em] mb-2">{s.label}</div>
+                      <div className="flex items-baseline gap-[2px] mb-1">
+                        <span className={`font-black leading-none ${isMobile ? 'text-[22px]' : 'text-[28px]'}`} style={{ color: s.color, fontFamily: 'Manrope, sans-serif' }}>{s.value}</span>
+                        <span className={`font-semibold ${isMobile ? 'text-[11px]' : 'text-[13px]'}`} style={{ color: s.color }}>{s.unit}</span>
                       </div>
-                      <div style={{ fontSize: isMobile ? 10 : 11, color: 'var(--c2)' }}>{s.sub}</div>
+                      <div className={`text-[var(--c2)] ${isMobile ? 'text-[10px]' : 'text-[11px]'}`}>{s.sub}</div>
                     </div>
                   ))}
                 </div>
 
                 {/* Assigned Projects */}
-                <div style={{ background: '#fff', borderRadius: 12, border: '1px solid var(--c5)', marginBottom: 16, overflow: 'hidden' }}>
-                  <div style={{ padding: isMobile ? '12px 16px' : '14px 24px', borderBottom: '1px solid var(--c5)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--c0)', fontFamily: 'Manrope, sans-serif' }}>Assigned Projects</div>
-                    <div style={{ fontSize: 12, color: 'var(--c2)', fontWeight: 600 }}>{projectGroups.length + maintenanceGroups.length} active this week</div>
+                <div className="bg-white rounded-xl border border-[var(--c5)] mb-4 overflow-hidden">
+                  <div className={`${isMobile ? 'px-4 py-3' : 'px-6 py-[14px]'} border-b border-[var(--c5)] flex items-center justify-between`}>
+                    <div className="text-[15px] font-extrabold text-foreground" style={{ fontFamily: 'Manrope, sans-serif' }}>Assigned Projects</div>
+                    <div className="text-xs text-[var(--c2)] font-semibold">{projectGroups.length + maintenanceGroups.length} active this week</div>
                   </div>
                   {projectGroups.length === 0 && maintenanceGroups.length === 0 ? (
-                    <div style={{ padding: '32px 24px', textAlign: 'center', color: 'var(--c3)', fontSize: 13 }}>No work allocated this week.</div>
+                    <div className="px-6 py-8 text-center text-muted-foreground text-[13px]">No work allocated this week.</div>
                   ) : (
                     <>
                       {projectGroups.map((g, i) => (
@@ -766,9 +775,9 @@ export function MemberDashboardView() {
                       ))}
                       {maintenanceGroups.length > 0 && (
                         <>
-                          <div style={{ padding: '6px 24px', background: '#fff7ed', borderTop: projectGroups.length > 0 ? '2px solid #fed7aa' : undefined, borderBottom: '1px solid #fed7aa', display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span style={{ color: '#c2410c', display: 'flex' }}><IconWrench /></span>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: '#c2410c', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Maintenance</span>
+                          <div className="px-6 py-[6px] bg-[#fff7ed] flex items-center gap-[6px]" style={{ borderTop: projectGroups.length > 0 ? '2px solid #fed7aa' : undefined, borderBottom: '1px solid #fed7aa' }}>
+                            <span className="flex text-[#c2410c]"><IconWrench /></span>
+                            <span className="text-[11px] font-bold text-[#c2410c] uppercase tracking-[0.05em]">Maintenance</span>
                           </div>
                           {maintenanceGroups.map((g, i) => (
                             <ProjectRow key={g.key} g={g} last={i === maintenanceGroups.length - 1} isMaint={true} />
@@ -781,49 +790,49 @@ export function MemberDashboardView() {
 
                 {/* Daily Confirmation */}
                 {isCurrentWeek && (
-                  <div style={{ background: '#fff', borderRadius: 12, border: '1px solid var(--c5)', overflow: 'hidden' }}>
-                    <div style={{ padding: isMobile ? '12px 16px' : '14px 24px', borderBottom: '1px solid var(--c5)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                  <div className="bg-white rounded-xl border border-[var(--c5)] overflow-hidden">
+                    <div className={`${isMobile ? 'px-4 py-3' : 'px-6 py-[14px]'} border-b border-[var(--c5)] flex items-center justify-between flex-wrap gap-2`}>
                       <div>
-                        <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--c0)', fontFamily: 'Manrope, sans-serif' }}>Daily Confirmation</div>
-                        <div style={{ fontSize: 12, color: 'var(--c2)', marginTop: 2 }}>Log hours worked on this day.</div>
+                        <div className="text-[15px] font-extrabold text-foreground" style={{ fontFamily: 'Manrope, sans-serif' }}>Daily Confirmation</div>
+                        <div className="text-xs text-[var(--c2)] mt-[2px]">Log hours worked on this day.</div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <div className="flex items-center gap-1">
                         <button
                           onClick={() => confirmDayIdx > 0 && setConfirmDay(days[confirmDayIdx - 1])}
                           disabled={confirmDayIdx <= 0}
-                          style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid var(--c5)', background: '#fff', color: confirmDayIdx <= 0 ? 'var(--c5)' : 'var(--c1)', cursor: confirmDayIdx <= 0 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700 }}>
-                          ‹
-                        </button>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--c2)', background: 'var(--c7)', padding: '5px 12px', borderRadius: 20, minWidth: 160, textAlign: 'center' }}>
+                          className="w-7 h-7 rounded border border-[var(--c5)] bg-white flex items-center justify-center text-sm font-bold"
+                          style={{ color: confirmDayIdx <= 0 ? 'var(--c5)' : 'var(--c1)', cursor: confirmDayIdx <= 0 ? 'default' : 'pointer' }}
+                        >‹</button>
+                        <div className="text-xs font-semibold text-[var(--c2)] bg-[var(--c7)] px-3 py-[5px] rounded-[20px] min-w-[160px] text-center">
                           {fmtDateMedium(confirmDay)}
-                          {confirmDay === today && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: 'var(--navy)', background: 'var(--navy-light)', padding: '1px 6px', borderRadius: 10 }}>TODAY</span>}
+                          {confirmDay === today && <span className="ml-[6px] text-[10px] font-bold text-primary bg-[var(--navy-light)] px-[6px] py-[1px] rounded-[10px]">TODAY</span>}
                         </div>
                         <button
                           onClick={() => confirmDayIdx < days.length - 1 && setConfirmDay(days[confirmDayIdx + 1])}
                           disabled={confirmDayIdx >= days.length - 1}
-                          style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid var(--c5)', background: '#fff', color: confirmDayIdx >= days.length - 1 ? 'var(--c5)' : 'var(--c1)', cursor: confirmDayIdx >= days.length - 1 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700 }}>
-                          ›
-                        </button>
+                          className="w-7 h-7 rounded border border-[var(--c5)] bg-white flex items-center justify-center text-sm font-bold"
+                          style={{ color: confirmDayIdx >= days.length - 1 ? 'var(--c5)' : 'var(--c1)', cursor: confirmDayIdx >= days.length - 1 ? 'default' : 'pointer' }}
+                        >›</button>
                       </div>
                     </div>
 
                     {confirmDayLeave.length > 0 && (
-                      <div style={{ padding: '12px 24px', background: 'var(--red-bg)', borderBottom: '1px solid var(--red-border)', fontSize: 13, color: 'var(--red)', fontWeight: 600 }}>
+                      <div className="px-6 py-3 bg-[var(--red-bg)] border-b border-[var(--red-border)] text-[13px] text-[var(--red)] font-semibold">
                         {confirmDayLeave[0].label ?? 'Leave'} — marked as off this day
                       </div>
                     )}
 
                     {confirmDayAllocs.length === 0 && confirmDayLeave.length === 0 ? (
-                      <div style={{ padding: '32px 24px', textAlign: 'center', color: 'var(--c3)', fontSize: 13 }}>
+                      <div className="px-6 py-8 text-center text-muted-foreground text-[13px]">
                         No tasks planned for this day.
-                        <span style={{ color: 'var(--navy)', fontWeight: 600, marginLeft: 6, cursor: 'pointer' }} onClick={() => setShowUnplanned(true)}>+ Log unplanned work</span>
+                        <span className="text-primary font-semibold ml-[6px] cursor-pointer" onClick={() => setShowUnplanned(true)}>+ Log unplanned work</span>
                       </div>
                     ) : (
                       <>
                         {!isMobile && (
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 210px', padding: '8px 24px', background: 'var(--c8)', borderBottom: '1px solid var(--c5)' }}>
-                            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Project</div>
-                            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c2)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Hours Worked</div>
+                          <div className="grid px-6 py-2 bg-[var(--c8)] border-b border-[var(--c5)]" style={{ gridTemplateColumns: '1fr 210px' }}>
+                            <div className="text-[11px] font-bold text-[var(--c2)] uppercase tracking-[0.05em]">Project</div>
+                            <div className="text-[11px] font-bold text-[var(--c2)] uppercase tracking-[0.05em] text-right">Hours Worked</div>
                           </div>
                         )}
                         {confirmDayAllocs.map((a, i) => {
@@ -835,44 +844,45 @@ export function MemberDashboardView() {
                           const existingLogged = actuals[a.id] ?? 0
                           const isSaving = loggingId === a.id
                           return (
-                            <div key={a.id} style={{
-                              display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 210px',
-                              padding: isMobile ? '12px 16px' : '14px 24px',
-                              borderBottom: i < confirmDayAllocs.length - 1 ? '1px solid var(--c5)' : 'none',
-                              gap: isMobile ? 10 : 0, alignItems: 'center',
-                            }}>
+                            <div
+                              key={a.id}
+                              className={`${isMobile ? 'px-4 py-3 flex flex-col gap-[10px]' : 'px-6 py-[14px] grid items-center'}`}
+                              style={!isMobile ? { gridTemplateColumns: '1fr 210px', borderBottom: i < confirmDayAllocs.length - 1 ? '1px solid var(--c5)' : 'none' } : { borderBottom: i < confirmDayAllocs.length - 1 ? '1px solid var(--c5)' : 'none' }}
+                            >
                               <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
-                                  <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', background: cat.bg, color: cat.color }}>{cat.label}</span>
-                                  {pri === 'urgent' && <span style={{ padding: '2px 7px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: 'var(--red-bg)', color: 'var(--red)' }}>URGENT</span>}
-                                  {pri === 'high' && <span style={{ padding: '2px 7px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: '#fff8e1', color: '#e65100' }}>HIGH</span>}
+                                <div className="flex items-center gap-[5px] mb-[3px]">
+                                  <span className="px-2 py-[2px] rounded text-[10px] font-bold uppercase" style={{ background: cat.bg, color: cat.color }}>{cat.label}</span>
+                                  {pri === 'urgent' && <span className="px-[7px] py-[2px] rounded text-[10px] font-bold bg-[var(--red-bg)] text-[var(--red)]">URGENT</span>}
+                                  {pri === 'high' && <span className="px-[7px] py-[2px] rounded text-[10px] font-bold bg-[#fff8e1] text-[#e65100]">HIGH</span>}
                                 </div>
-                                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--c0)' }}>{projName}</div>
-                                {note && <div style={{ fontSize: 12, color: 'var(--c2)', fontStyle: 'italic', marginTop: 1 }}>"{note}"</div>}
+                                <div className="text-sm font-bold text-foreground">{projName}</div>
+                                {note && <div className="text-xs text-[var(--c2)] italic mt-[1px]">"{note}"</div>}
                                 {existingLogged > 0 && (
-                                  <div style={{ fontSize: 11, color: 'var(--green)', fontWeight: 600, marginTop: 3 }}>✓ {fmt(existingLogged)}h logged today</div>
+                                  <div className="text-[11px] text-[#16a34a] font-semibold mt-[3px]">✓ {fmt(existingLogged)}h logged today</div>
                                 )}
                               </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: isMobile ? 'flex-start' : 'flex-end' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--c5)', borderRadius: 8, overflow: 'hidden' }}>
+                              <div className={`flex items-center gap-2 ${isMobile ? 'justify-start' : 'justify-end'}`}>
+                                <div className="flex items-center border border-[var(--c5)] rounded-lg overflow-hidden">
                                   <input
                                     type="number" min={0} step={0.5}
                                     value={val}
                                     placeholder="0.0"
                                     onChange={e => setTodayLog(prev => ({ ...prev, [a.id]: e.target.value }))}
                                     onKeyDown={e => { if (e.key === 'Enter') logHours(a.id) }}
-                                    style={{ width: 70, padding: '8px 10px', border: 'none', fontSize: 14, fontWeight: 700, textAlign: 'center', outline: 'none', color: 'var(--c0)' }}
+                                    className="w-[70px] px-[10px] py-2 border-none text-sm font-bold text-center outline-none text-foreground"
                                   />
-                                  <div style={{ padding: '8px 6px', fontSize: 13, color: 'var(--c2)', borderLeft: '1px solid var(--c5)', background: 'var(--c7)' }}>h</div>
+                                  <div className="px-[6px] py-2 text-[13px] text-[var(--c2)] border-l border-[var(--c5)] bg-[var(--c7)]">h</div>
                                 </div>
                                 <button
                                   onClick={() => logHours(a.id)}
                                   disabled={isSaving || val === '' || isNaN(parseFloat(val))}
+                                  className="px-4 py-2 rounded-lg text-[13px] font-bold border-none"
                                   style={{
-                                    padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700,
-                                    border: 'none', cursor: isSaving ? 'default' : 'pointer',
-                                    background: isSaving ? 'var(--c5)' : 'var(--navy)', color: isSaving ? 'var(--c3)' : '#fff',
-                                  }}>
+                                    background: isSaving ? 'var(--c5)' : 'var(--navy)',
+                                    color: isSaving ? 'var(--c3)' : '#fff',
+                                    cursor: isSaving ? 'default' : 'pointer',
+                                  }}
+                                >
                                   {isSaving ? '…' : 'Log'}
                                 </button>
                               </div>
@@ -887,33 +897,36 @@ export function MemberDashboardView() {
 
               {/* ── RIGHT COLUMN: Priorities ── */}
               {!isMobile && (
-                <div style={{ position: 'sticky', top: 28 }}>
-                  <div style={{ background: 'var(--navy)', borderRadius: 12, padding: '18px 20px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 14 }}>
-                      <span style={{ color: '#94a3b8', display: 'flex' }}><IconZap /></span>
-                      <span style={{ fontSize: 13, fontWeight: 800, color: '#fff', fontFamily: 'Manrope, sans-serif' }}>Priorities</span>
+                <div className="sticky top-7">
+                  <div className="bg-primary rounded-xl px-5 py-[18px]">
+                    <div className="flex items-center gap-[7px] mb-[14px]">
+                      <span className="flex text-[#94a3b8]"><IconZap /></span>
+                      <span className="text-[13px] font-extrabold text-white" style={{ fontFamily: 'Manrope, sans-serif' }}>Priorities</span>
                     </div>
                     {allGroupsSorted.length === 0 ? (
-                      <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>No work planned this week.</div>
+                      <div className="text-xs text-[#64748b] leading-relaxed">No work planned this week.</div>
                     ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div className="flex flex-col gap-[6px]">
                         {allGroupsSorted.map(g => (
-                          <div key={g.key} style={{
-                            padding: '9px 12px', borderRadius: 8,
-                            background: g.priority === 'urgent' ? 'rgba(239,68,68,0.15)' : g.priority === 'high' ? 'rgba(251,191,36,0.1)' : 'rgba(255,255,255,0.07)',
-                            border: `1px solid ${g.priority === 'urgent' ? 'rgba(239,68,68,0.3)' : g.priority === 'high' ? 'rgba(251,191,36,0.2)' : 'rgba(255,255,255,0.09)'}`,
-                          }}>
+                          <div
+                            key={g.key}
+                            className="px-3 py-[9px] rounded-lg"
+                            style={{
+                              background: g.priority === 'urgent' ? 'rgba(239,68,68,0.15)' : g.priority === 'high' ? 'rgba(251,191,36,0.1)' : 'rgba(255,255,255,0.07)',
+                              border: `1px solid ${g.priority === 'urgent' ? 'rgba(239,68,68,0.3)' : g.priority === 'high' ? 'rgba(251,191,36,0.2)' : 'rgba(255,255,255,0.09)'}`,
+                            }}
+                          >
                             {g.priority !== 'none' && (
-                              <div style={{ marginBottom: 4 }}>
-                                <span style={{
-                                  padding: '1px 7px', borderRadius: 4, fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
-                                  background: g.priority === 'urgent' ? 'rgba(239,68,68,0.8)' : 'rgba(217,119,6,0.8)', color: '#fff',
-                                }}>{g.priority}</span>
+                              <div className="mb-1">
+                                <span
+                                  className="px-[7px] py-[1px] rounded text-[9px] font-bold uppercase text-white"
+                                  style={{ background: g.priority === 'urgent' ? 'rgba(239,68,68,0.8)' : 'rgba(217,119,6,0.8)' }}
+                                >{g.priority}</span>
                               </div>
                             )}
-                            <div style={{ fontSize: 12, fontWeight: 700, color: '#f1f5f9', lineHeight: 1.3 }}>{g.label}</div>
-                            {g.note && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3, lineHeight: 1.4 }}>{g.note}</div>}
-                            <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>{fmt(g.allocated)}h allocated</div>
+                            <div className="text-xs font-bold text-[#f1f5f9] leading-tight">{g.label}</div>
+                            {g.note && <div className="text-[11px] text-[#94a3b8] mt-[3px] leading-snug">{g.note}</div>}
+                            <div className="text-[11px] text-[#475569] mt-1">{fmt(g.allocated)}h allocated</div>
                           </div>
                         ))}
                       </div>
@@ -928,37 +941,37 @@ export function MemberDashboardView() {
 
         {/* ════ WEEKLY PLAN ════ */}
         {activeView === 'plan' && (
-          <div style={{ padding: isMobile ? '16px 16px 24px' : '28px 32px 56px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+          <div className={isMobile ? 'px-4 pt-4 pb-6' : 'px-8 pt-7 pb-14'}>
+            <div className="flex items-center gap-2 mb-5 flex-wrap">
               <button onClick={() => setWeekStart(shiftWeek(weekStart, -1))}
-                style={{ border: '1px solid var(--c5)', background: '#fff', cursor: 'pointer', color: 'var(--c2)', borderRadius: 6, padding: '5px 12px', fontSize: 14 }}>‹</button>
-              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--c1)', minWidth: isMobile ? 0 : 200, textAlign: 'center' }}>{fmtWeekRange(weekStart)}</span>
+                className="border border-[var(--c5)] bg-white cursor-pointer text-[var(--c2)] rounded px-3 py-[5px] text-sm">‹</button>
+              <span className={`text-[13px] font-bold text-[var(--c1)] text-center ${!isMobile ? 'min-w-[200px]' : ''}`}>{fmtWeekRange(weekStart)}</span>
               <button onClick={() => setWeekStart(shiftWeek(weekStart, 1))}
-                style={{ border: '1px solid var(--c5)', background: '#fff', cursor: 'pointer', color: 'var(--c2)', borderRadius: 6, padding: '5px 12px', fontSize: 14 }}>›</button>
+                className="border border-[var(--c5)] bg-white cursor-pointer text-[var(--c2)] rounded px-3 py-[5px] text-sm">›</button>
               {!isCurrentWeek && (
                 <button onClick={() => setWeekStart(getMonday(new Date()))}
-                  style={{ fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 6, background: 'var(--navy)', color: '#fff', border: 'none', cursor: 'pointer' }}>
+                  className="text-xs font-bold px-3 py-[5px] rounded-md bg-primary text-white border-none cursor-pointer">
                   Today
                 </button>
               )}
             </div>
 
-            <div style={{ background: '#fff', borderRadius: 12, border: '1px solid var(--c5)', overflow: 'hidden', marginBottom: 16 }}>
-              <div style={{ padding: isMobile ? '12px 16px' : '14px 24px', borderBottom: '1px solid var(--c5)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--c0)', fontFamily: 'Manrope, sans-serif' }}>Weekly Project Plan</div>
-                <div style={{ fontSize: 12, color: 'var(--c2)', fontWeight: 600 }}>{fmtWeekRange(weekStart)}</div>
+            <div className="bg-white rounded-xl border border-[var(--c5)] overflow-hidden mb-4">
+              <div className={`${isMobile ? 'px-4 py-3' : 'px-6 py-[14px]'} border-b border-[var(--c5)] flex items-center justify-between`}>
+                <div className="text-[15px] font-extrabold text-foreground" style={{ fontFamily: 'Manrope, sans-serif' }}>Weekly Project Plan</div>
+                <div className="text-xs text-[var(--c2)] font-semibold">{fmtWeekRange(weekStart)}</div>
               </div>
               {projectGroups.length === 0 && maintenanceGroups.length === 0 && (
-                <div style={{ padding: '32px 24px', textAlign: 'center', color: 'var(--c3)', fontSize: 13 }}>No work allocated this week.</div>
+                <div className="px-6 py-8 text-center text-muted-foreground text-[13px]">No work allocated this week.</div>
               )}
               {projectGroups.map((g, i) => (
                 <ProjectRow key={g.key} g={g} last={i === projectGroups.length - 1 && maintenanceGroups.length === 0} isMaint={false} />
               ))}
               {maintenanceGroups.length > 0 && (
                 <>
-                  <div style={{ padding: '6px 24px', background: '#fff7ed', borderTop: projectGroups.length > 0 ? '2px solid #fed7aa' : undefined, borderBottom: '1px solid #fed7aa', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ color: '#c2410c', display: 'flex' }}><IconWrench /></span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#c2410c', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Maintenance</span>
+                  <div className="px-6 py-[6px] bg-[#fff7ed] flex items-center gap-[6px]" style={{ borderTop: projectGroups.length > 0 ? '2px solid #fed7aa' : undefined, borderBottom: '1px solid #fed7aa' }}>
+                    <span className="flex text-[#c2410c]"><IconWrench /></span>
+                    <span className="text-[11px] font-bold text-[#c2410c] uppercase tracking-[0.05em]">Maintenance</span>
                   </div>
                   {maintenanceGroups.map((g, i) => (
                     <ProjectRow key={g.key} g={g} last={i === maintenanceGroups.length - 1} isMaint={true} />
@@ -968,9 +981,9 @@ export function MemberDashboardView() {
             </div>
 
             {/* Week at a Glance */}
-            <div style={{ background: '#fff', borderRadius: 12, border: '1px solid var(--c5)', padding: isMobile ? '14px 16px' : '16px 24px' }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--c0)', fontFamily: 'Manrope, sans-serif', marginBottom: 14 }}>Week at a Glance</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: isMobile ? 6 : 12 }}>
+            <div className={`bg-white rounded-xl border border-[var(--c5)] ${isMobile ? 'px-4 py-[14px]' : 'px-6 py-4'}`}>
+              <div className="text-[13px] font-extrabold text-foreground mb-[14px]" style={{ fontFamily: 'Manrope, sans-serif' }}>Week at a Glance</div>
+              <div className={`grid grid-cols-5 ${isMobile ? 'gap-[6px]' : 'gap-3'}`}>
                 {days.map(d => {
                   const dAllocs = allocs.filter(a => a.date === d && a.category !== 'leave')
                   const dLeave = allocs.some(a => a.date === d && a.category === 'leave')
@@ -981,20 +994,26 @@ export function MemberDashboardView() {
                   const cap = member.hours_per_day ?? 8
                   const pct = cap > 0 ? Math.min(1, dHrs / cap) : 0
                   return (
-                    <div key={d} style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: 11, fontWeight: isToday ? 800 : 600, color: isToday ? 'var(--navy)' : 'var(--c2)', marginBottom: 6 }}>
+                    <div key={d} className="text-center">
+                      <div className={`text-[11px] mb-[6px] ${isToday ? 'font-extrabold text-primary' : 'font-semibold text-[var(--c2)]'}`}>
                         {fmtDayShort(d)} {new Date(d + 'T00:00:00').getDate()}
                       </div>
-                      <div style={{ height: 48, background: 'var(--c7)', borderRadius: 6, overflow: 'hidden', position: 'relative', marginBottom: 4 }}>
-                        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: `${pct * 100}%`, background: dLeave ? 'var(--red)' : isConf ? 'var(--green)' : 'var(--navy)', opacity: 0.8 }} />
+                      <div className="h-12 bg-[var(--c7)] rounded overflow-hidden relative mb-1">
+                        <div
+                          className="absolute bottom-0 left-0 right-0 opacity-80"
+                          style={{ height: `${pct * 100}%`, background: dLeave ? 'var(--red)' : isConf ? 'var(--green)' : 'var(--navy)' }}
+                        />
                         {dLogged > 0 && (
-                          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: `${Math.min(1, dLogged / cap) * 100}%`, background: 'var(--green)' }} />
+                          <div
+                            className="absolute bottom-0 left-0 right-0"
+                            style={{ height: `${Math.min(1, dLogged / cap) * 100}%`, background: 'var(--green)' }}
+                          />
                         )}
                       </div>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: dLeave ? 'var(--red)' : 'var(--c1)' }}>
+                      <div className={`text-[11px] font-bold ${dLeave ? 'text-[var(--red)]' : 'text-[var(--c1)]'}`}>
                         {dLeave ? 'Off' : dHrs > 0 ? `${fmt(dHrs)}h` : '–'}
                       </div>
-                      {isConf && <div style={{ fontSize: 9, color: 'var(--green)', fontWeight: 700 }}>✓</div>}
+                      {isConf && <div className="text-[9px] text-[#16a34a] font-bold">✓</div>}
                     </div>
                   )
                 })}
@@ -1005,20 +1024,20 @@ export function MemberDashboardView() {
 
         {/* ════ STATISTICS ════ */}
         {activeView === 'stats' && (
-          <div style={{ padding: isMobile ? '16px' : '28px 32px 56px' }}>
-            <div style={{ background: '#fff', borderRadius: 12, border: '1px solid var(--c5)', padding: '48px', textAlign: 'center', color: 'var(--c3)' }}>
-              <div style={{ fontWeight: 700, color: 'var(--c1)', marginBottom: 6 }}>Statistics coming soon</div>
-              <div style={{ fontSize: 13 }}>Detailed utilization and trend reports will appear here.</div>
+          <div className={isMobile ? 'p-4' : 'px-8 pt-7 pb-14'}>
+            <div className="bg-white rounded-xl border border-[var(--c5)] p-12 text-center text-muted-foreground">
+              <div className="font-bold text-foreground mb-[6px]">Statistics coming soon</div>
+              <div className="text-[13px]">Detailed utilization and trend reports will appear here.</div>
             </div>
           </div>
         )}
 
         {/* ════ TIMESHEETS ════ */}
         {activeView === 'timesheets' && (
-          <div style={{ padding: isMobile ? '16px' : '28px 32px 56px' }}>
-            <div style={{ background: '#fff', borderRadius: 12, border: '1px solid var(--c5)', padding: '48px', textAlign: 'center', color: 'var(--c3)' }}>
-              <div style={{ fontWeight: 700, color: 'var(--c1)', marginBottom: 6 }}>Timesheets coming soon</div>
-              <div style={{ fontSize: 13 }}>Your full logged hours history will appear here.</div>
+          <div className={isMobile ? 'p-4' : 'px-8 pt-7 pb-14'}>
+            <div className="bg-white rounded-xl border border-[var(--c5)] p-12 text-center text-muted-foreground">
+              <div className="font-bold text-foreground mb-[6px]">Timesheets coming soon</div>
+              <div className="text-[13px]">Your full logged hours history will appear here.</div>
             </div>
           </div>
         )}
@@ -1027,22 +1046,15 @@ export function MemberDashboardView() {
 
       {/* ── Mobile Bottom Nav ── */}
       {isMobile && (
-        <div style={{
-          position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 40,
-          background: '#fff', borderTop: '1px solid var(--c5)',
-          display: 'flex', paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-        }}>
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-[var(--c5)] flex" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
           {NAV.map(item => {
             const active = activeView === item.id
             return (
               <button key={item.id} onClick={() => setActiveView(item.id)}
-                style={{
-                  flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-                  padding: '10px 4px', border: 'none', background: 'transparent', cursor: 'pointer',
-                  color: active ? 'var(--navy)' : 'var(--c3)',
-                }}>
-                <span style={{ display: 'flex' }}>{item.icon}</span>
-                <span style={{ fontSize: 10, fontWeight: active ? 700 : 400 }}>{item.label}</span>
+                className="flex-1 flex flex-col items-center gap-[3px] py-[10px] px-1 border-none bg-transparent cursor-pointer"
+                style={{ color: active ? 'var(--navy)' : 'var(--c3)' }}>
+                <span className="flex">{item.icon}</span>
+                <span className={`text-[10px] ${active ? 'font-bold' : 'font-normal'}`}>{item.label}</span>
               </button>
             )
           })}

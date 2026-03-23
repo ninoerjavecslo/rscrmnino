@@ -15,6 +15,7 @@ import { MaintenanceDetailView } from './views/MaintenanceDetailView'
 import { RevenuePlannerView } from './views/RevenuePlannerView'
 import { ToolsView } from './views/ToolsView'
 import { InfrastructureView } from './views/InfrastructureView'
+import { InternalView } from './views/InternalView'
 import { DomainsView } from './views/DomainsView'
 import { TimesheetView } from './views/TimesheetView'
 import { ThisMonthView } from './views/ThisMonthView'
@@ -34,6 +35,10 @@ import { TeamMemberDetailView } from './views/TeamMemberDetailView'
 import { MyWeekView } from './views/MyWeekView'
 import { MemberDashboardView } from './views/MemberDashboardView'
 import { ProfileView } from './views/ProfileView'
+import { ReportsView } from './views/ReportsView'
+import { PipelineImpactView } from './views/reports/PipelineImpactView'
+import { DelayImpactView } from './views/reports/DelayImpactView'
+import { MonthlyDigestView } from './views/reports/MonthlyDigestView'
 import { Toaster } from './components/Toaster'
 import { Topbar } from './components/layout/Topbar'
 
@@ -104,6 +109,7 @@ function App() {
                 <Route path="/clients/:id"     element={<ClientDetailView />} />
                 <Route path="/projects"        element={<ProjectsView />} />
                 <Route path="/projects/:id"    element={<ProjectDetailView />} />
+                <Route path="/internal"        element={<InternalView />} />
                 <Route path="/maintenances"    element={<MaintenancesView />} />
                 <Route path="/maintenances/:id" element={<MaintenanceDetailView />} />
                 <Route path="/sales"           element={<SalesView />} />
@@ -114,6 +120,10 @@ function App() {
                 <Route path="/tools/timesheet" element={<TimesheetView />} />
                 <Route path="/resource-planning" element={<ResourcePlanningView />} />
                 <Route path="/resource-reports" element={<ResourceReportsView />} />
+                <Route path="/reports" element={<ReportsView />} />
+                <Route path="/reports/pipeline-impact" element={<PipelineImpactView />} />
+                <Route path="/reports/delay-impact" element={<DelayImpactView />} />
+                <Route path="/reports/monthly-digest" element={<MonthlyDigestView />} />
                 <Route path="/resource-yearly" element={<ResourceYearlyView />} />
                 <Route path="/resource-monthly" element={<ResourceMonthlyView />} />
                 <Route path="/resource-by-project" element={<ResourceByProjectView />} />

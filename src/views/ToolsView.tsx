@@ -1,4 +1,7 @@
 import { useNavigate } from 'react-router-dom'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
 
 // ── SVG Icons ─────────────────────────────────────────────────────────────────
 
@@ -66,77 +69,50 @@ function ToolCardItem({ tool }: { tool: ToolCard }) {
   }
 
   return (
-    <div
-      className="card"
+    <Card
       onClick={handleClick}
-      style={{
-        padding: 20,
-        cursor: tool.available ? 'pointer' : 'default',
-        transition: 'box-shadow 0.12s',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 12,
-      }}
-      onMouseEnter={e => {
-        if (tool.available) {
-          (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'
-        }
-      }}
-      onMouseLeave={e => {
-        (e.currentTarget as HTMLDivElement).style.boxShadow = ''
-      }}
+      className={`p-5 flex flex-col gap-3 transition-shadow ${tool.available ? 'cursor-pointer hover:shadow-md' : 'cursor-default'}`}
     >
       {/* Icon + badge row */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+      <div className="flex items-start justify-between">
         <div
-          style={{
-            width: 48,
-            height: 48,
-            borderRadius: 'var(--r)',
-            background: tool.available ? 'var(--navy-light, #eef2f9)' : 'var(--c7, #f5f5f5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: tool.available ? 'var(--navy, #1a3a6c)' : 'var(--c4, #aaa)',
-            flexShrink: 0,
-          }}
+          className={`flex items-center justify-center flex-shrink-0 rounded-lg w-12 h-12 ${tool.available ? 'bg-[#eef2f9] text-[#1a3a6c]' : 'bg-[#f5f5f5] text-[#aaa]'}`}
         >
           {tool.icon}
         </div>
-        <span className={`badge ${tool.available ? 'badge-green' : 'badge-gray'}`}>
+        <Badge variant={tool.available ? 'green' : 'gray'}>
           {tool.available ? 'Available' : 'Coming soon'}
-        </span>
+        </Badge>
       </div>
 
       {/* Name + description */}
-      <div style={{ flex: 1 }}>
-        <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--c1, #111)', marginBottom: 4 }}>
+      <div className="flex-1">
+        <div className="font-bold text-base mb-1 text-foreground">
           {tool.name}
         </div>
-        <div className="text-muted" style={{ fontSize: 13, lineHeight: 1.5 }}>
+        <div className="text-muted-foreground text-[13px] leading-[1.5]">
           {tool.description}
         </div>
       </div>
 
       {/* Action button */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+      <div className="flex justify-end">
         {tool.available ? (
-          <button
-            className="btn btn-primary btn-sm"
+          <Button size="sm"
             onClick={e => {
               e.stopPropagation()
               if (tool.path) navigate(tool.path)
             }}
           >
             Open
-          </button>
+          </Button>
         ) : (
-          <button className="btn btn-secondary btn-sm" disabled style={{ opacity: 0.5, cursor: 'not-allowed' }}>
+          <Button variant="outline" size="sm" disabled className="opacity-50 cursor-not-allowed">
             Coming soon
-          </button>
+          </Button>
         )}
       </div>
-    </div>
+    </Card>
   )
 }
 
@@ -145,15 +121,15 @@ function ToolCardItem({ tool }: { tool: ToolCard }) {
 export function ToolsView() {
   return (
     <div>
-      <div className="page-header">
+      <div className="flex items-center justify-between px-6 py-4 bg-background border-b border-border">
         <div>
           <h1>Tools</h1>
           <p>Studio utilities and generators</p>
         </div>
       </div>
 
-      <div className="page-content">
-        <div className="grid-2">
+      <div className="flex-1 overflow-auto p-6">
+        <div className="grid grid-cols-2 gap-4">
           {TOOLS.map(tool => (
             <ToolCardItem key={tool.id} tool={tool} />
           ))}

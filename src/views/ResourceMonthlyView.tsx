@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useResourceStore } from '../stores/resource'
 import { useHolidayStore } from '../stores/holidays'
 import { workDaysInRange, holidayWorkDays } from '../lib/capacityUtils'
+import { Button } from '@/components/ui/button'
 import type { ResourceAllocation, CompanyHoliday } from '../lib/types'
 
 /* ── helpers ──────────────────────────────────────────────────── */
@@ -124,7 +125,6 @@ export function ResourceMonthlyView() {
     return allocations.filter(a => a.member_id === memberId).reduce((s, a) => s + a.hours, 0)
   }
 
-  // Group allocations by week then by project/label key
   function memberWeekGroups(memberId: string, monday: string): { key: string; label: string; category: string; hours: number }[] {
     const allDays = weekDatesOf(monday)
     const weekAllocs = allocations.filter(a =>
@@ -149,62 +149,65 @@ export function ResourceMonthlyView() {
   const sortedMembers = [...activeMembers].sort((a, b) => memberMonthTotal(b.id) - memberMonthTotal(a.id))
 
   return (
-    <div className="page-content">
-      <div className="page-header">
+    <div className="flex-1 overflow-auto p-6">
+      <div className="flex items-center justify-between px-6 py-4 bg-background border-b border-border -mx-6 -mt-6 mb-6">
         <div>
           <h1>Monthly Overview</h1>
-          <p style={{ color: 'var(--c3)', fontSize: 13, margin: 0 }}>Team utilization by week</p>
+          <p className="text-muted-foreground text-[13px] m-0">Team utilization by week</p>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button className="btn btn-ghost btn-sm" onClick={() => setMonthOffset(o => o - 1)}>← Prev</button>
-          <span style={{ fontWeight: 600, minWidth: 140, textAlign: 'center' }}>{monthLabel}</span>
-          <button className="btn btn-ghost btn-sm" onClick={() => setMonthOffset(o => o + 1)} disabled={monthOffset >= 0}>Next →</button>
+        <div className="flex gap-2 items-center">
+          <Button variant="ghost" size="sm" onClick={() => setMonthOffset(o => o - 1)}>← Prev</Button>
+          <span className="font-semibold min-w-[140px] text-center">{monthLabel}</span>
+          <Button variant="ghost" size="sm" onClick={() => setMonthOffset(o => o + 1)} disabled={monthOffset >= 0}>Next →</Button>
         </div>
       </div>
 
       {/* Stats */}
-      <div className="stats-strip">
-        <div className="stat-card">
-          <div className="stat-card-label">Active</div>
-          <div className="stat-card-value">{activeMembers.length}</div>
-          <div className="stat-card-sub">members</div>
+      <div className="grid grid-cols-4 gap-3 mb-4">
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Active</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{activeMembers.length}</div>
+          <div className="text-xs text-muted-foreground mt-1">members</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-card-label">Total Hours</div>
-          <div className="stat-card-value">{totalHours}h</div>
-          <div className="stat-card-sub">{monthLabel}</div>
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Total Hours</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{totalHours}h</div>
+          <div className="text-xs text-muted-foreground mt-1">{monthLabel}</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-card-label">Weeks</div>
-          <div className="stat-card-value">{weeks.length}</div>
-          <div className="stat-card-sub">in month</div>
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Weeks</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{weeks.length}</div>
+          <div className="text-xs text-muted-foreground mt-1">in month</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-card-label">Avg / Member</div>
-          <div className="stat-card-value">{activeMembers.length > 0 ? Math.round(totalHours / activeMembers.length) : 0}h</div>
-          <div className="stat-card-sub">this month</div>
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Avg / Member</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{activeMembers.length > 0 ? Math.round(totalHours / activeMembers.length) : 0}h</div>
+          <div className="text-xs text-muted-foreground mt-1">this month</div>
         </div>
       </div>
 
       {loading ? (
-        <p style={{ color: 'var(--c3)', padding: '8px 0' }}>Loading...</p>
+        <p className="text-muted-foreground py-2">Loading...</p>
       ) : (
         <>
           {/* Table */}
-          <div className="card" style={{ overflow: 'hidden' }}>
+          <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
             {/* Header row */}
-            <div style={{ display: 'grid', gridTemplateColumns: `24px 1fr 140px 80px ${weeks.map(() => '72px').join(' ')}`, gap: 0, padding: '10px 16px', borderBottom: '2px solid var(--c6)', background: 'var(--c7)' }}>
+            <div
+              className="gap-0 px-4 py-[10px] border-b-2 border-border bg-[var(--c7)] grid"
+              style={{ gridTemplateColumns: `24px 1fr 140px 80px ${weeks.map(() => '72px').join(' ')}` }}
+            >
               <div />
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '.5px' }}>Member</div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '.5px' }}>Progress</div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '.5px', textAlign: 'center' }}>Total</div>
+              <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-[.5px]">Member</div>
+              <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-[.5px]">Progress</div>
+              <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-[.5px] text-center">Total</div>
               {weeks.map((w, i) => (
-                <div key={w} style={{ fontSize: 12, fontWeight: 700, color: 'var(--c2)', textAlign: 'center' }}>W{i + 1}</div>
+                <div key={w} className="text-xs font-bold text-[var(--c2)] text-center">W{i + 1}</div>
               ))}
             </div>
 
             {sortedMembers.length === 0 && (
-              <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--c4)' }}>No active team members.</div>
+              <div className="px-4 py-8 text-center text-muted-foreground">No active team members.</div>
             )}
 
             {sortedMembers.map((member, idx) => {
@@ -218,42 +221,52 @@ export function ResourceMonthlyView() {
               const isLast = idx === sortedMembers.length - 1
 
               return (
-                <div key={member.id} style={{ borderBottom: isLast && !expanded ? 'none' : '1px solid var(--c6)' }}>
+                <div key={member.id} className={isLast && !expanded ? '' : 'border-b border-[var(--c6)]'}>
                   {/* Summary row */}
                   <div
-                    style={{ display: 'grid', gridTemplateColumns: `24px 1fr 140px 80px ${weeks.map(() => '72px').join(' ')}`, gap: 0, padding: '12px 16px', cursor: 'pointer', alignItems: 'center' }}
+                    className="gap-0 px-4 py-3 cursor-pointer items-center grid"
+                    style={{ gridTemplateColumns: `24px 1fr 140px 80px ${weeks.map(() => '72px').join(' ')}` }}
                     onClick={() => setExpandedIds(prev => { const n = new Set(prev); n.has(member.id) ? n.delete(member.id) : n.add(member.id); return n })}
                   >
-                    <span style={{ color: 'var(--c4)', fontSize: 11 }}>{expanded ? '▼' : '▶'}</span>
+                    <span className="text-muted-foreground text-[11px]">{expanded ? '▼' : '▶'}</span>
 
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontWeight: 700, fontSize: 15 }}>{member.name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-[15px]">{member.name}</span>
                         {member.team && (
-                          <span style={{ fontSize: 11, fontWeight: 600, color: member.team.color, background: `${member.team.color}20`, padding: '2px 7px', borderRadius: 4 }}>
+                          <span
+                            className="text-[11px] font-semibold px-[7px] py-[2px] rounded"
+                            style={{ color: member.team.color, background: `${member.team.color}20` }}
+                          >
                             {member.team.name}
                           </span>
                         )}
                       </div>
-                      {member.role && <div style={{ fontSize: 12, color: 'var(--c4)', marginTop: 1 }}>{member.role}</div>}
+                      {member.role && <div className="text-xs text-muted-foreground mt-[1px]">{member.role}</div>}
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ flex: 1, height: 6, background: 'var(--c6)', borderRadius: 3, overflow: 'hidden' }}>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-[6px] bg-[var(--c6)] rounded-[3px] overflow-hidden">
                         <div style={{ width: `${Math.min(utilPct, 100)}%`, height: '100%', background: utilPct > 100 ? 'var(--red)' : utilPct >= 80 ? 'var(--green)' : 'var(--amber)', borderRadius: 3 }} />
                       </div>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: utilPct > 100 ? 'var(--red)' : utilPct >= 80 ? 'var(--green)' : 'var(--amber)', minWidth: 36 }}>{utilPct}%</span>
+                      <span
+                        className="text-xs font-bold min-w-[36px]"
+                        style={{ color: utilPct > 100 ? 'var(--red)' : utilPct >= 80 ? 'var(--green)' : 'var(--amber)' }}
+                      >{utilPct}%</span>
                     </div>
 
-                    <div style={{ textAlign: 'center', fontWeight: 800, fontSize: 15 }}>{totalHrs}h</div>
+                    <div className="text-center font-extrabold text-[15px]">{totalHrs}h</div>
 
                     {weeks.map(w => {
                       const wHours = memberWeekHours(member.id, w)
                       const wCap = weekWorkDays(w) * (member.hours_per_day ?? 8)
                       const cs = weekCellStyle(wHours, wCap)
                       return (
-                        <div key={w} style={{ display: 'flex', justifyContent: 'center' }}>
-                          <div style={{ width: 58, height: 32, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, background: cs.background, color: cs.color }}>
+                        <div key={w} className="flex justify-center">
+                          <div
+                            className="w-[58px] h-8 rounded flex items-center justify-center text-[13px] font-bold"
+                            style={{ background: cs.background, color: cs.color }}
+                          >
                             {wHours === 0 ? '—' : `${wHours}h`}
                           </div>
                         </div>
@@ -263,7 +276,7 @@ export function ResourceMonthlyView() {
 
                   {/* Expanded — week breakdown */}
                   {expanded && (
-                    <div style={{ borderTop: '1px solid var(--c6)', background: 'var(--c7)' }}>
+                    <div className="border-t border-border bg-[var(--c7)]">
                       {weeks.map((w, wi) => {
                         const groups = memberWeekGroups(member.id, w)
                         const wTotal = memberWeekHours(member.id, w)
@@ -272,19 +285,22 @@ export function ResourceMonthlyView() {
                         const wFriday = new Date(wStart.getFullYear(), wStart.getMonth(), wStart.getDate() + 4)
                         const wLabel = `W${wi + 1} — ${wStart.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${wFriday.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`
                         return (
-                          <div key={w} style={{ padding: '12px 16px 12px 40px', borderBottom: '1px solid var(--c6)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--c2)' }}>{wLabel}</span>
-                              <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--c0)' }}>{wTotal}h</span>
+                          <div key={w} className="px-4 py-3 pl-10 border-b border-border">
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="text-xs font-bold text-[var(--c2)]">{wLabel}</span>
+                              <span className="text-[13px] font-extrabold text-[var(--c0)]">{wTotal}h</span>
                             </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <div className="flex flex-col gap-1">
                               {groups.map(g => (
-                                <div key={g.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                  <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 7px', borderRadius: 4, background: CAT_BG[g.category] ?? 'var(--c7)', color: CAT_COLOR[g.category] ?? 'var(--c2)', textTransform: 'capitalize', whiteSpace: 'nowrap' }}>
+                                <div key={g.key} className="flex items-center gap-[10px]">
+                                  <span
+                                    className="text-[11px] font-semibold px-[7px] py-[2px] rounded capitalize whitespace-nowrap"
+                                    style={{ background: CAT_BG[g.category] ?? 'var(--c7)', color: CAT_COLOR[g.category] ?? 'var(--c2)' }}
+                                  >
                                     {g.category}
                                   </span>
-                                  <span style={{ fontSize: 13, color: 'var(--c1)', flex: 1 }}>{g.label}</span>
-                                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--c0)' }}>{g.hours}h</span>
+                                  <span className="text-[13px] text-[var(--c1)] flex-1">{g.label}</span>
+                                  <span className="text-[13px] font-bold text-[var(--c0)]">{g.hours}h</span>
                                 </div>
                               ))}
                             </div>
@@ -299,8 +315,8 @@ export function ResourceMonthlyView() {
           </div>
 
           {/* Legend */}
-          <div style={{ marginTop: 12, display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', padding: '6px 4px' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '.5px' }}>Week capacity:</span>
+          <div className="mt-3 flex gap-[14px] flex-wrap items-center px-1 py-[6px]">
+            <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-[.5px]">Week capacity:</span>
             {[
               { label: '0h', bg: 'var(--c6)', color: 'var(--c4)' },
               { label: '<40%', bg: 'var(--c7)', color: 'var(--c3)' },
@@ -308,9 +324,9 @@ export function ResourceMonthlyView() {
               { label: '80–100%', bg: '#c8e6c9', color: 'var(--green)' },
               { label: '>100%', bg: '#ffcdd2', color: 'var(--red)' },
             ].map(item => (
-              <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <div style={{ width: 14, height: 14, borderRadius: 3, background: item.bg, border: '1px solid var(--c5)' }} />
-                <span style={{ fontSize: 11, color: item.color, fontWeight: 600 }}>{item.label}</span>
+              <div key={item.label} className="flex items-center gap-[5px]">
+                <div className="w-[14px] h-[14px] rounded-[3px] border border-border" style={{ background: item.bg }} />
+                <span className="text-[11px] font-semibold" style={{ color: item.color }}>{item.label}</span>
               </div>
             ))}
           </div>

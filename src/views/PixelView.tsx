@@ -4,6 +4,7 @@ import DOMPurify from 'dompurify'
 import { usePixelStore } from '../stores/pixel'
 import type { PixelState } from '../stores/pixel'
 import type { PixelMessage } from '../lib/types'
+import { Button } from '@/components/ui/button'
 
 type ModelChoice = 'auto' | 'claude' | 'gpt4o'
 
@@ -58,14 +59,14 @@ function MarkdownContent({ content }: { content: string }) {
 
 function ThinkingDots() {
   return (
-    <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center', padding: '2px 0' }}>
+    <span className="inline-flex gap-[3px] items-center py-[2px]">
       {[0, 1, 2].map(i => (
-        <span key={i} style={{
-          width: 6, height: 6, borderRadius: '50%',
-          background: 'var(--c4)', display: 'inline-block',
-          animation: 'pixelDot 1.2s ease-in-out infinite',
-          animationDelay: `${i * 0.2}s`,
-        }} />
+        <span key={i} className="inline-block rounded-full w-[6px] h-[6px] bg-muted-foreground"
+          style={{
+            animation: 'pixelDot 1.2s ease-in-out infinite',
+            animationDelay: `${i * 0.2}s`,
+          }}
+        />
       ))}
     </span>
   )
@@ -77,14 +78,7 @@ function ModelBadge({ model }: { model: PixelMessage['model'] }) {
   if (!model) return null
   const isClaude = model === 'claude'
   return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center',
-      fontSize: 9, fontWeight: 700, letterSpacing: '0.03em',
-      padding: '2px 6px', borderRadius: 3,
-      background: isClaude ? '#fef3c7' : '#dcfce7',
-      color: isClaude ? '#92400e' : '#14532d',
-      marginLeft: 8, verticalAlign: 'middle', textTransform: 'uppercase',
-    }}>
+    <span className={`inline-flex items-center font-bold uppercase ml-2 align-middle rounded-[3px] px-[6px] py-[2px] text-[9px] tracking-[0.03em] ${isClaude ? 'bg-[#fef3c7] text-[#92400e]' : 'bg-[#dcfce7] text-[#14532d]'}`}>
       {isClaude ? 'Claude' : 'GPT-4o'}
     </span>
   )
@@ -94,11 +88,8 @@ function ModelBadge({ model }: { model: PixelMessage['model'] }) {
 
 function AIAvatar({ size = 30 }: { size?: number }) {
   return (
-    <div style={{
-      width: size, height: size, background: 'var(--navy)',
-      borderRadius: 6, display: 'flex', alignItems: 'center',
-      justifyContent: 'center', flexShrink: 0,
-    }}>
+    <div className="flex items-center justify-center flex-shrink-0 rounded-[6px] bg-primary"
+      style={{ width: size, height: size }}>
       <SparkleIcon size={Math.round(size * 0.55)} color="#fff" />
     </div>
   )
@@ -106,12 +97,11 @@ function AIAvatar({ size = 30 }: { size?: number }) {
 
 function UserAvatar({ size = 30 }: { size?: number }) {
   return (
-    <div style={{
-      width: size, height: size, borderRadius: '50%', flexShrink: 0,
-      background: 'var(--navy-light)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: Math.round(size * 0.37), fontWeight: 700, color: 'var(--navy)',
-    }}>N</div>
+    <div className="rounded-full flex-shrink-0 flex items-center justify-center font-bold bg-[#eef2f9] text-primary"
+      style={{
+        width: size, height: size,
+        fontSize: Math.round(size * 0.37),
+      }}>N</div>
   )
 }
 
@@ -120,15 +110,11 @@ function UserAvatar({ size = 30 }: { size?: number }) {
 function MessageBubble({ msg }: { msg: PixelMessage }) {
   const isUser = msg.role === 'user'
   return (
-    <div style={{
-      display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start',
-      alignItems: 'flex-end', gap: 10, marginBottom: 20,
-    }}>
+    <div className={`flex items-end gap-[10px] mb-5 ${isUser ? 'justify-end' : 'justify-start'}`}>
       {!isUser && <AIAvatar size={30} />}
       <div style={{ maxWidth: isUser ? '72%' : '82%' }}>
-        <div style={{
-          fontSize: 13, lineHeight: 1.65, wordBreak: 'break-word',
-          ...(isUser ? {
+        <div className="text-[13px] leading-[1.65] break-words"
+          style={isUser ? {
             padding: '11px 16px', whiteSpace: 'pre-wrap',
             background: 'var(--navy)', color: '#fff',
             borderRadius: '12px 12px 3px 12px',
@@ -136,8 +122,7 @@ function MessageBubble({ msg }: { msg: PixelMessage }) {
             padding: '12px 16px', background: '#fff', color: 'var(--c1)',
             borderRadius: '3px 12px 12px 12px',
             boxShadow: '0 1px 4px rgba(0,0,0,0.07), 0 0 0 1px rgba(0,0,0,0.05)',
-          }),
-        }}>
+          }}>
           {isUser ? msg.content : <><MarkdownContent content={msg.content} /><ModelBadge model={msg.model} /></>}
         </div>
       </div>
@@ -154,38 +139,44 @@ function HistoryControls({ store, showHistory, setShowHistory }: {
   setShowHistory: (v: boolean) => void
 }) {
   return (
-    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+    <div className="flex gap-[6px] items-center">
       {store.activeConversationId && (
-        <button className="btn btn-ghost btn-sm" onClick={store.newConversation} style={{ color: 'var(--c3)' }}>
+        <Button variant="ghost" size="sm" onClick={store.newConversation} className="text-muted-foreground">
           + New chat
-        </button>
+        </Button>
       )}
-      <div style={{ position: 'relative' }}>
-        <button className="btn btn-ghost btn-sm" onClick={() => setShowHistory(!showHistory)} style={{ color: 'var(--c3)', gap: 4 }}>
+      <div className="relative">
+        <Button variant="ghost" size="sm" onClick={() => setShowHistory(!showHistory)} className="text-muted-foreground gap-1">
           History
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </button>
+        </Button>
         {showHistory && (
           <>
-            <div style={{ position: 'fixed', inset: 0, zIndex: 99 }} onClick={() => setShowHistory(false)} />
-            <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', background: '#fff', border: '1px solid var(--c6)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.10)', minWidth: 260, zIndex: 100, overflow: 'hidden' }}>
-              <div style={{ padding: '8px 8px 4px', borderBottom: '1px solid var(--c6)' }}>
-                <button className="btn btn-ghost btn-xs" style={{ width: '100%', justifyContent: 'flex-start', gap: 6, color: 'var(--c2)', fontWeight: 600 }}
+            <div className="fixed inset-0 z-[99]" onClick={() => setShowHistory(false)} />
+            <div className="absolute right-0 bg-white rounded-[10px] overflow-hidden z-[100] border border-border shadow-lg min-w-[260px]"
+              style={{ top: 'calc(100% + 6px)' }}>
+              <div className="px-2 pt-2 pb-1 border-b border-border">
+                <Button variant="ghost" size="xs" className="w-full justify-start gap-[6px] font-semibold text-[#374151]"
                   onClick={() => { store.newConversation(); setShowHistory(false) }}>
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
                   New conversation
-                </button>
+                </Button>
               </div>
-              <div style={{ maxHeight: 280, overflowY: 'auto', padding: '4px 8px 8px' }}>
+              <div className="overflow-y-auto px-2 pb-2 pt-1 max-h-[280px]">
                 {store.conversations.length === 0 && (
-                  <div style={{ fontSize: 11, color: 'var(--c4)', padding: '8px 6px' }}>No conversations yet</div>
+                  <div className="text-[11px] text-muted-foreground px-[6px] py-2">No conversations yet</div>
                 )}
                 {store.conversations.map(c => (
-                  <button key={c.id} className="btn btn-ghost btn-xs"
-                    style={{ width: '100%', justifyContent: 'flex-start', fontWeight: store.activeConversationId === c.id ? 600 : 400, color: store.activeConversationId === c.id ? 'var(--navy)' : 'var(--c2)', background: store.activeConversationId === c.id ? 'var(--navy-light)' : 'transparent', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  <Button key={c.id} variant="ghost" size="xs"
+                    className="w-full justify-start truncate"
+                    style={{
+                      fontWeight: store.activeConversationId === c.id ? 600 : 400,
+                      color: store.activeConversationId === c.id ? 'var(--navy)' : 'var(--c2)',
+                      background: store.activeConversationId === c.id ? 'var(--navy-light)' : 'transparent',
+                    }}
                     onClick={() => { store.loadConversation(c.id); setShowHistory(false) }}>
                     {c.title ?? 'Untitled'}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -207,7 +198,7 @@ export function PixelView() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => { store.fetchConversations() }, [])
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [store.messages])
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [store.messages, store.streamingContent])
 
   function handleSend() {
     const text = input.trim()
@@ -228,83 +219,88 @@ export function PixelView() {
     ta.style.height = Math.min(ta.scrollHeight, 120) + 'px'
   }
 
-  const isEmpty = store.messages.length === 0
+  const isEmpty = store.messages.length === 0 && store.streamingContent === null
   const canSend = input.trim().length > 0 && !store.sending
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100vh - 52px)', paddingBottom: 120 }}>
+    <div className="flex flex-col pb-[120px]" style={{ minHeight: 'calc(100vh - 52px)' }}>
 
       {/* History controls — floated top right regardless of state */}
-      <div style={{ position: 'absolute', top: 60, right: 24, zIndex: 10 }}>
+      <div className="absolute z-10" style={{ top: 60, right: 24 }}>
         <HistoryControls store={store} showHistory={showHistory} setShowHistory={setShowHistory} />
       </div>
 
       {/* Messages / Empty state */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 24px' }}>
+      <div className="flex-1 overflow-y-auto px-6">
         {isEmpty ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 60 }}>
+          <div className="flex flex-col items-center pt-[60px]">
 
             {/* Navy square icon */}
-            <div style={{ width: 56, height: 56, background: 'var(--navy)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div className="flex items-center justify-center rounded-[12px] bg-primary w-14 h-14">
               <SparkleIcon size={28} color="#fff" />
             </div>
 
-            <h1 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 800, fontSize: 32, color: 'var(--navy)', marginTop: 20, textAlign: 'center' }}>
+            <h1 className="font-extrabold text-center mt-5 text-primary font-[Manrope,sans-serif] text-[32px]">
               Hello, Nino 👋
             </h1>
-            <p style={{ fontSize: 14, color: 'var(--c3)', textAlign: 'center', lineHeight: 1.6, marginTop: 8, maxWidth: 440 }}>
+            <p className="text-sm text-muted-foreground text-center leading-[1.6] mt-2 max-w-[440px]">
               Ask me anything about your agency — revenue, clients, domains, pipeline, or let me draft something for you.
             </p>
 
             {/* 2×2 + 1 full-width chip grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 32, width: '100%', maxWidth: 600 }}>
+            <div className="grid gap-[10px] mt-8 w-full max-w-[600px]" style={{ gridTemplateColumns: '1fr 1fr' }}>
               {CHIPS.map((chip, i) => (
                 <button
                   key={chip.text}
                   onClick={() => { setInput(chip.text); textareaRef.current?.focus() }}
+                  className="bg-white cursor-pointer flex items-center gap-[10px] rounded-lg px-[18px] py-[14px] text-left transition-colors hover:bg-[#f8f7f9] border border-border font-[inherit]"
                   style={{
-                    background: '#fff', border: '1px solid var(--c6)', borderRadius: 8,
-                    padding: '14px 18px', cursor: 'pointer', display: 'flex',
-                    alignItems: 'center', gap: 10, transition: 'background .12s, border-color .12s',
-                    fontFamily: 'inherit', textAlign: 'left',
                     gridColumn: i === CHIPS.length - 1 ? '1 / -1' : undefined,
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#f8f7f9'; e.currentTarget.style.borderColor = '#d9d3dc' }}
-                  onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = 'var(--c6)' }}
                 >
-                  <span style={{ color: 'var(--c3)', flexShrink: 0 }}><ChipIcon index={i} /></span>
-                  <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--c0)', lineHeight: 1.4 }}>{chip.text}</span>
+                  <span className="text-muted-foreground flex-shrink-0"><ChipIcon index={i} /></span>
+                  <span className="text-[13px] font-medium leading-[1.4] text-foreground">{chip.text}</span>
                 </button>
               ))}
             </div>
 
           </div>
         ) : (
-          <div style={{ maxWidth: 640, margin: '0 auto', paddingTop: 60, paddingBottom: 12 }}>
+          <div className="mx-auto pt-[60px] pb-3 max-w-[640px]">
             {store.messages.map(msg => <MessageBubble key={msg.id} msg={msg} />)}
-            {store.sending && (
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginBottom: 20 }}>
+            {store.streamingContent !== null ? (
+              <div className="flex items-end gap-[10px] mb-5">
                 <AIAvatar size={30} />
-                <div style={{ padding: '12px 16px', background: '#fff', borderRadius: '3px 12px 12px 12px', boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
+                <div style={{ maxWidth: '82%', padding: '12px 16px', background: '#fff', color: 'var(--c1)', borderRadius: '3px 12px 12px 12px', boxShadow: '0 1px 4px rgba(0,0,0,0.07), 0 0 0 1px rgba(0,0,0,0.05)', fontSize: 13, lineHeight: 1.65 }}>
+                  <MarkdownContent content={store.streamingContent || '​'} />
+                </div>
+              </div>
+            ) : store.sending && (
+              <div className="flex items-end gap-[10px] mb-5">
+                <AIAvatar size={30} />
+                <div className="px-4 py-3 bg-white rounded-[3px_12px_12px_12px] shadow-sm">
                   <ThinkingDots />
                 </div>
               </div>
             )}
-            {store.error && <div className="alert alert-red" style={{ marginBottom: 16, fontSize: 12 }}>{store.error}</div>}
+            {store.error && (
+              <div className="rounded-lg border border-[#fecaca] bg-[#fff1f2] px-3 py-2 text-xs text-[#be123c] mb-4">{store.error}</div>
+            )}
             <div ref={bottomRef} />
           </div>
         )}
       </div>
 
       {/* Fixed input bar */}
-      <div style={{
-        position: 'fixed', bottom: 0, left: 'var(--sidebar-w)', right: 0,
-        background: 'rgba(240,238,242,0.95)', backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)', borderTop: '1px solid var(--c6)',
-        padding: '16px 32px', zIndex: 80,
-      }}>
-        <div style={{ maxWidth: 600, margin: '0 auto' }}>
-          <div style={{ background: '#fff', border: '1px solid var(--c6)', borderRadius: 10, padding: '14px 54px 42px 18px', position: 'relative' }}>
+      <div className="fixed bottom-0 right-0 z-[80] border-t border-border px-8 py-4"
+        style={{
+          left: 'var(--sidebar-w)',
+          background: 'rgba(240,238,242,0.95)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+        }}>
+        <div className="mx-auto max-w-[600px]">
+          <div className="bg-white rounded-[10px] relative border border-border" style={{ padding: '14px 54px 42px 18px' }}>
             <textarea
               ref={textareaRef}
               value={input}
@@ -312,26 +308,21 @@ export function PixelView() {
               onKeyDown={handleKey}
               placeholder="Message Pixel AI…"
               rows={1}
-              style={{
-                border: 'none', outline: 'none', background: 'transparent',
-                fontFamily: 'inherit', fontSize: 14, color: 'var(--c0)',
-                width: '100%', resize: 'none', minHeight: 20, maxHeight: 120,
-                lineHeight: 1.5, overflowY: 'auto',
-              }}
+              className="border-0 outline-none bg-transparent w-full resize-none overflow-y-auto leading-[1.5] text-sm text-foreground font-[inherit]"
+              style={{ minHeight: 20, maxHeight: 120 }}
             />
             {/* Model pills */}
-            <div style={{ position: 'absolute', bottom: 10, left: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div className="absolute bottom-[10px] left-[14px] flex items-center gap-[6px]">
               {MODEL_PILLS.map(pill => (
                 <button
                   key={pill.value}
                   onClick={() => setModel(pill.value)}
+                  className="rounded-[3px] cursor-pointer uppercase font-bold leading-[1.4] font-[Manrope,sans-serif] text-[10px] tracking-[0.04em]"
                   style={{
                     background: model === pill.value ? 'var(--navy)' : 'transparent',
                     border: `1px solid ${model === pill.value ? 'var(--navy)' : 'var(--c6)'}`,
-                    borderRadius: 3, padding: '3px 10px',
-                    fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: 10,
+                    padding: '3px 10px',
                     color: model === pill.value ? '#fff' : 'var(--c3)',
-                    cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '.04em', lineHeight: 1.4,
                   }}
                 >
                   {pill.label}
@@ -342,13 +333,11 @@ export function PixelView() {
             <button
               onClick={handleSend}
               disabled={!canSend}
+              className="absolute bottom-[10px] right-[10px] flex items-center justify-center rounded-[6px] border-0 transition-colors w-9 h-9"
               style={{
-                position: 'absolute', bottom: 10, right: 10,
-                width: 36, height: 36, background: canSend ? 'var(--navy)' : 'var(--c6)',
-                border: 'none', borderRadius: 6,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: canSend ? 'pointer' : 'default', opacity: canSend ? 1 : 0.6,
-                transition: 'background .12s',
+                background: canSend ? 'var(--navy)' : 'var(--c6)',
+                cursor: canSend ? 'pointer' : 'default',
+                opacity: canSend ? 1 : 0.6,
               }}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={canSend ? '#fff' : 'var(--c4)'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -356,7 +345,7 @@ export function PixelView() {
               </svg>
             </button>
           </div>
-          <p style={{ textAlign: 'center', marginTop: 8, fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: 9, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--c4)' }}>
+          <p className="text-center mt-2 font-bold uppercase text-muted-foreground font-[Manrope,sans-serif] text-[9px] tracking-[0.06em]">
             Pixel AI may produce inaccurate information · Enter to send · Shift+Enter for new line
           </p>
         </div>

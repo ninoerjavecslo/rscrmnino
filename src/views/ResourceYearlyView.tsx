@@ -3,7 +3,13 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useResourceStore } from '../stores/resource'
 import { useHolidayStore } from '../stores/holidays'
+import { useProjectsStore } from '../stores/projects'
 import { workDaysInRange, timeOffWorkDays, holidayWorkDays } from '../lib/capacityUtils'
+import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Modal } from '../components/Modal'
+import { Select } from '../components/Select'
+import { toast } from '../lib/toast'
 import type { CompanyHoliday } from '../lib/types'
 
 interface AllocRow { member_id: string; category: string; date: string; hours: number }
@@ -48,6 +54,7 @@ interface MonthCell { hours: number; capacity: number; pct: number }
 export function ResourceYearlyView() {
   const { teams, members, fetchTeams, fetchMembers } = useResourceStore()
   const holidayStore = useHolidayStore()
+  const projectsStore = useProjectsStore()
 
   const [year, setYear] = useState(new Date().getFullYear())
   const [mode, setMode] = useState<Mode>('allocated')
@@ -59,9 +66,89 @@ export function ResourceYearlyView() {
   const [holidays, setHolidays] = useState<CompanyHoliday[]>([])
   const [loading, setLoading] = useState(false)
 
+  // ── Add Estimation modal ──────────────────────────────────────────────────
+  const [showEstModal, setShowEstModal] = useState(false)
+  const [estProjectId, setEstProjectId] = useState('')
+  const [estTitle, setEstTitle] = useState('')
+  const [estStartDate, setEstStartDate] = useState('')
+  const [estDueDate, setEstDueDate] = useState('')
+  const [estHours, setEstHours] = useState<number | ''>('')
+  const [estTeams, setEstTeams] = useState<string[]>([])
+  const [estTeamHours, setEstTeamHours] = useState<Record<string, number>>({})
+  const [estSaving, setEstSaving] = useState(false)
+  const [showNewProjModal, setShowNewProjModal] = useState(false)
+  const [newProjName, setNewProjName] = useState('')
+  const [newClientName, setNewClientName] = useState('')
+  const [newProjSaving, setNewProjSaving] = useState(false)
+
+  function resetEstForm() {
+    setEstProjectId(''); setEstTitle(''); setEstStartDate(''); setEstDueDate('')
+    setEstHours(''); setEstTeams([]); setEstTeamHours({})
+  }
+
+  async function saveEstimation() {
+    if (!estProjectId || !estTitle.trim() || !estDueDate) return
+    setEstSaving(true)
+    const totalHours = estTeams.length > 1
+      ? estTeams.reduce((s, t) => s + (estTeamHours[t] ?? 0), 0)
+      : estHours || null
+    const teamHrsPayload = estTeams.length > 1 ? estTeamHours : null
+    const { error } = await supabase.from('project_deliverables').insert({
+      project_id: estProjectId,
+      title: estTitle.trim(),
+      due_date: estDueDate,
+      start_date: estStartDate || null,
+      estimated_hours: totalHours,
+      team: estTeams.length > 0 ? estTeams.join(', ') : null,
+      team_hours: teamHrsPayload,
+      status: 'active',
+    })
+    setEstSaving(false)
+    if (error) { toast('error', 'Failed to save estimation'); return }
+    toast('success', 'Estimation added')
+    setShowEstModal(false)
+    resetEstForm()
+    // refresh deliverables if in estimated mode
+    if (mode === 'estimated') {
+      const yearStart = `${year}-01-01`
+      const yearEnd = `${year}-12-31`
+      const { data } = await supabase.from('project_deliverables')
+        .select('project_id, due_date, start_date, estimated_hours, team, team_hours')
+        .gte('due_date', yearStart).lte('due_date', yearEnd).neq('status', 'completed')
+      setDeliverables((data ?? []) as DelivRow[])
+    }
+  }
+
+  async function saveNewProject() {
+    if (!newProjName.trim() || !newClientName.trim()) return
+    setNewProjSaving(true)
+    const { data: client, error: ce } = await supabase
+      .from('clients').insert({ name: newClientName.trim(), status: 'active' }).select('id').single()
+    if (ce) { toast('error', 'Failed to create client'); setNewProjSaving(false); return }
+    const allProjects = projectsStore.projects
+    const year = new Date().getFullYear()
+    const prefix = `RS-${year}-`
+    const nums = allProjects.map(p => p.pn).filter(pn => pn.startsWith(prefix))
+      .map(pn => parseInt(pn.slice(prefix.length), 10)).filter(n => !isNaN(n))
+    const pn = `${prefix}${String((nums.length > 0 ? Math.max(...nums) : 0) + 1).padStart(3, '0')}`
+    const { data: proj, error: pe } = await supabase
+      .from('projects').insert({
+        pn, name: newProjName.trim(), client_id: client.id,
+        type: 'fixed', status: 'active', pm: 'Nino', currency: 'EUR',
+      }).select('id').single()
+    if (pe) { toast('error', 'Failed to create project'); setNewProjSaving(false); return }
+    await projectsStore.fetchAll()
+    setEstProjectId(proj.id)
+    setShowNewProjModal(false)
+    setNewProjName(''); setNewClientName('')
+    setNewProjSaving(false)
+    toast('success', 'Project created')
+  }
+
   useEffect(() => {
     fetchTeams()
     fetchMembers()
+    projectsStore.fetchAll()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -225,9 +312,9 @@ export function ResourceYearlyView() {
   }
 
   function Cell({ cell, bold }: { cell: MonthCell; bold?: boolean }) {
-    if (cell.capacity === 0) return <td style={{ textAlign: 'center', color: 'var(--c5)', fontSize: 12 }}>—</td>
+    if (cell.capacity === 0) return <td className="text-center text-xs text-muted-foreground">—</td>
     return (
-      <td style={{ textAlign: 'center', padding: '3px 4px' }}>
+      <td className="text-center" style={{ padding: '3px 4px' }}>
         <div style={{
           background: cellColor(cell.pct),
           color: cellTextColor(cell.pct),
@@ -247,79 +334,97 @@ export function ResourceYearlyView() {
 
   return (
     <>
-      <div className="page-header">
+      <div className="flex items-center justify-between px-6 py-4 bg-background border-b border-border">
         <div>
           <h1>Yearly Capacity Planning</h1>
           <p>Strategic allocation and team utilization for {year}.</p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <button className="btn btn-ghost btn-sm" onClick={() => setYear(y => y - 1)}>‹</button>
-            <span style={{ fontWeight: 700, fontSize: 15, minWidth: 40, textAlign: 'center' }}>{year}</span>
-            <button className="btn btn-ghost btn-sm" onClick={() => setYear(y => y + 1)}>›</button>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <Button variant="ghost" size="sm" onClick={() => setYear(y => y - 1)}>‹</Button>
+            <span className="font-bold text-[15px] min-w-[40px] text-center">{year}</span>
+            <Button variant="ghost" size="sm" onClick={() => setYear(y => y + 1)}>›</Button>
           </div>
-          <div style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--c5)' }}>
-            <button className={`btn btn-sm${mode === 'allocated' ? ' btn-primary' : ' btn-ghost'}`} style={{ borderRadius: 0, border: 'none' }} onClick={() => setMode('allocated')}>Allocated</button>
-            <button className={`btn btn-sm${mode === 'estimated' ? ' btn-primary' : ' btn-ghost'}`} style={{ borderRadius: 0, border: 'none', borderLeft: '1px solid var(--c5)' }} onClick={() => setMode('estimated')}>Estimated</button>
+          <div className="flex rounded-lg overflow-hidden border border-border">
+            <Button
+              size="sm"
+              variant={mode === 'allocated' ? 'default' : 'ghost'}
+              className="rounded-none border-none"
+              onClick={() => setMode('allocated')}
+            >Allocated</Button>
+            <Button
+              size="sm"
+              variant={mode === 'estimated' ? 'default' : 'ghost'}
+              className="rounded-none border-none border-l border-border"
+              onClick={() => setMode('estimated')}
+            >Estimated</Button>
           </div>
+          <Button size="sm" onClick={() => { resetEstForm(); setShowEstModal(true) }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add Estimation
+          </Button>
         </div>
       </div>
 
-      <div className="page-content">
+      <div className="flex-1 overflow-auto p-6">
 
         {/* ── Stats strip ─────────────────────────────────────────────────── */}
         {!loading && totalCapacity > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 24 }}>
+          <div className="grid grid-cols-3 gap-3 mb-4">
             {/* Total Billable Capacity */}
-            <div className="card">
-              <div className="card-body" style={{ padding: '20px 24px' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Total Billable Capacity</div>
-                <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--c0)', fontFamily: 'Manrope, sans-serif', lineHeight: 1 }}>
+            <Card>
+              <CardContent className="px-6 py-5">
+                <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-[0.5px] mb-2">Total Billable Capacity</div>
+                <div className="text-[32px] font-extrabold text-foreground font-[Manrope,sans-serif] leading-none">
                   {totalCapacity.toLocaleString()}
-                  <span style={{ fontSize: 16, fontWeight: 500, color: 'var(--c3)', marginLeft: 6 }}>Hours</span>
+                  <span className="text-base font-medium text-muted-foreground ml-1.5">Hours</span>
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--c4)', marginTop: 8 }}>
+                <div className="text-xs text-muted-foreground mt-2">
                   {activeMembers.length} active members
                 </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
 
             {/* Current Commitments */}
-            <div className="card">
-              <div className="card-body" style={{ padding: '20px 24px' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Current Commitments</div>
-                <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--c0)', fontFamily: 'Manrope, sans-serif', lineHeight: 1 }}>
+            <Card>
+              <CardContent className="px-6 py-5">
+                <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-[0.5px] mb-2">Current Commitments</div>
+                <div className="text-[32px] font-extrabold text-foreground font-[Manrope,sans-serif] leading-none">
                   {Math.round(totalCommitments).toLocaleString()}
-                  <span style={{ fontSize: 16, fontWeight: 500, color: 'var(--c3)', marginLeft: 6 }}>Hours</span>
+                  <span className="text-base font-medium text-muted-foreground ml-1.5">Hours</span>
                 </div>
-                <div style={{ marginTop: 10 }}>
-                  <div style={{ height: 4, borderRadius: 2, background: 'var(--c6)', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', borderRadius: 2, width: `${Math.min(100, utilizationPct)}%`, background: utilizationPct > 100 ? 'var(--red)' : utilizationPct >= 80 ? 'var(--green)' : 'var(--amber)', transition: 'width 0.4s' }} />
+                <div className="mt-2.5">
+                  <div className="h-1 rounded-sm bg-[var(--c6)] overflow-hidden">
+                    <div style={{
+                      height: '100%', borderRadius: 2, width: `${Math.min(100, utilizationPct)}%`,
+                      background: utilizationPct > 100 ? 'var(--red)' : utilizationPct >= 80 ? 'var(--green)' : 'var(--amber)',
+                      transition: 'width 0.4s'
+                    }} />
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--c4)', marginTop: 4 }}>{utilizationPct}% of total capacity utilized</div>
+                  <div className="text-[11px] text-muted-foreground mt-1">{utilizationPct}% of total capacity utilized</div>
                 </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
 
-            {/* Available for Sales */}
-            <div className="card" style={{ background: 'var(--navy)', border: 'none' }}>
-              <div className="card-body" style={{ padding: '20px 24px' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Available Capacity</div>
-                <div style={{ fontSize: 32, fontWeight: 800, color: '#fff', fontFamily: 'Manrope, sans-serif', lineHeight: 1 }}>
+            {/* Available Capacity */}
+            <Card className="bg-[var(--navy)] border-none">
+              <CardContent className="px-6 py-5">
+                <div className="text-[11px] font-bold text-white/60 uppercase tracking-[0.5px] mb-2">Available Capacity</div>
+                <div className="text-[32px] font-extrabold text-white font-[Manrope,sans-serif] leading-none">
                   {Math.round(availableHours).toLocaleString()}
-                  <span style={{ fontSize: 16, fontWeight: 500, color: 'rgba(255,255,255,0.7)', marginLeft: 6 }}>Hours</span>
+                  <span className="text-base font-medium text-white/70 ml-1.5">Hours</span>
                 </div>
-                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 8 }}>
+                <div className="text-xs text-white/50 mt-2">
                   Unallocated hours for {year}
                 </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           </div>
         )}
 
         {/* ── Heatmap legend ───────────────────────────────────────────────── */}
-        <div style={{ display: 'flex', gap: 16, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, color: 'var(--c3)', fontWeight: 600 }}>Utilization:</span>
+        <div className="flex gap-4 mb-4 items-center flex-wrap">
+          <span className="text-xs text-[var(--c3)] font-semibold">Utilization:</span>
           {[
             { label: '0–50%', bg: '#e2e8f0', color: 'var(--c3)' },
             { label: '50–80%', bg: '#64748b', color: '#fff' },
@@ -327,28 +432,28 @@ export function ResourceYearlyView() {
             { label: '95–100%', bg: '#1e293b', color: '#fff' },
             { label: '>100%', bg: '#fee2e2', color: '#b91c1c' },
           ].map(l => (
-            <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div key={l.label} className="flex items-center gap-1.5">
               <div style={{ width: 28, height: 20, background: l.bg, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <span style={{ fontSize: 9, fontWeight: 700, color: l.color }}>{l.label.split('–')[0]}</span>
               </div>
-              <span style={{ fontSize: 12, color: 'var(--c3)' }}>{l.label}</span>
+              <span className="text-xs text-[var(--c3)]">{l.label}</span>
             </div>
           ))}
         </div>
 
         {/* ── Heatmap table ────────────────────────────────────────────────── */}
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--c4)' }}>Loading…</div>
+          <div className="text-center py-16 text-muted-foreground">Loading…</div>
         ) : (
-          <div className="card" style={{ overflowX: 'auto', marginBottom: 24 }}>
+          <Card className="overflow-x-auto mb-6">
             <table style={{ minWidth: 900 }}>
               <thead>
-                <tr style={{ background: 'var(--c7)' }}>
-                  <th style={{ width: 200, textAlign: 'left', padding: '10px 16px', fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase' }}>Team / Member</th>
+                <tr className="bg-[var(--c7)]">
+                  <th className="text-left px-4 py-2.5 text-[11px] font-bold text-[var(--c3)] uppercase" style={{ width: 200 }}>Team / Member</th>
                   {MONTHS.map(m => (
-                    <th key={m} style={{ textAlign: 'center', padding: '10px 4px', fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', minWidth: 68 }}>{m}</th>
+                    <th key={m} className="text-center py-2.5 text-[11px] font-bold text-[var(--c3)] uppercase" style={{ padding: '10px 4px', minWidth: 68 }}>{m}</th>
                   ))}
-                  <th style={{ textAlign: 'center', padding: '10px 8px', fontSize: 11, fontWeight: 700, color: 'var(--c3)', textTransform: 'uppercase', minWidth: 68 }}>Year</th>
+                  <th className="text-center py-2.5 text-[11px] font-bold text-[var(--c3)] uppercase" style={{ padding: '10px 8px', minWidth: 68 }}>Year</th>
                 </tr>
               </thead>
               <tbody>
@@ -357,13 +462,13 @@ export function ResourceYearlyView() {
                   return (
                     <>
                       <tr key={team.id} onClick={() => toggleTeam(team.id)}
-                        style={{ cursor: 'pointer', background: '#fafafa', borderTop: '2px solid var(--c6)' }}>
-                        <td style={{ padding: '10px 16px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontSize: 13, color: 'var(--c4)', lineHeight: 1 }}>{isExpanded ? '▼' : '▶'}</span>
+                        className="cursor-pointer bg-[#fafafa] border-t-2 border-[var(--c6)]">
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[13px] text-[var(--c4)] leading-none">{isExpanded ? '▼' : '▶'}</span>
                             <div style={{ width: 10, height: 10, borderRadius: '50%', background: team.color, flexShrink: 0 }} />
-                            <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--c0)' }}>{team.name}</span>
-                            <span style={{ fontSize: 12, color: 'var(--c4)' }}>({memberRows.length})</span>
+                            <span className="font-bold text-sm text-[var(--c0)]">{team.name}</span>
+                            <span className="text-xs text-[var(--c4)]">({memberRows.length})</span>
                           </div>
                         </td>
                         {months.map((cell, i) => <Cell key={i} cell={cell} bold />)}
@@ -371,16 +476,16 @@ export function ResourceYearlyView() {
                       </tr>
 
                       {isExpanded && memberRows.map(({ member, months: mMonths, yearTotal: mYear }) => (
-                        <tr key={member.id} style={{ borderTop: '1px solid var(--c6)' }}>
+                        <tr key={member.id} className="border-t border-[var(--c6)]">
                           <td style={{ padding: '8px 16px 8px 36px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div className="flex items-center gap-2">
                               <div style={{ width: 24, height: 24, borderRadius: '50%', background: team.color + '33', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: team.color, flexShrink: 0 }}>
                                 {member.name.charAt(0).toUpperCase()}
                               </div>
                               <div>
-                                <Link to={`/team/${member.id}`} style={{ fontWeight: 600, fontSize: 13, color: 'var(--c0)', textDecoration: 'none' }}
+                                <Link to={`/team/${member.id}`} className="font-semibold text-[13px] text-[var(--c0)] no-underline"
                                   onClick={e => e.stopPropagation()}>{member.name}</Link>
-                                {member.role && <div style={{ fontSize: 11, color: 'var(--c4)' }}>{member.role}</div>}
+                                {member.role && <div className="text-[11px] text-[var(--c4)]">{member.role}</div>}
                               </div>
                             </div>
                           </td>
@@ -395,82 +500,187 @@ export function ResourceYearlyView() {
             </table>
 
             {teamRows.length === 0 && !loading && (
-              <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--c4)' }}>
+              <div className="text-center py-16 text-muted-foreground">
                 No team members found. Add members in Settings → Team.
               </div>
             )}
-          </div>
+          </Card>
         )}
 
         {/* ── Bottom sections ──────────────────────────────────────────────── */}
         {!loading && (criticalAlerts.length > 0 || topMembers.length > 0) && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div className="grid grid-cols-2 gap-4">
 
             {/* Critical Alerts */}
             {criticalAlerts.length > 0 && (
-              <div className="card">
-                <div className="card-body">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+              <Card>
+                <CardContent>
+                  <div className="flex items-center gap-2 mb-4">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--red)" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                    <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--c0)' }}>Critical Allocation Alerts</span>
+                    <span className="font-bold text-sm text-[var(--c0)]">Critical Allocation Alerts</span>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div className="flex flex-col gap-2.5">
                     {criticalAlerts.map((a, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', background: '#fff5f5', borderRadius: 8, borderLeft: '3px solid var(--red)' }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" strokeWidth="2.5" strokeLinecap="round" style={{ marginTop: 1, flexShrink: 0 }}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                      <div key={i} className="flex items-start gap-2.5 px-3 py-2.5 bg-[#fff5f5] rounded-lg border-l-[3px] border-[var(--red)]">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" strokeWidth="2.5" strokeLinecap="round" className="mt-px shrink-0"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                         <div>
-                          <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--c0)' }}>
+                          <div className="font-semibold text-[13px] text-[var(--c0)]">
                             {a.name} over-capacity ({a.month})
                           </div>
-                          <div style={{ fontSize: 12, color: 'var(--c3)', marginTop: 2 }}>
-                            {a.type === 'team' ? 'Team' : 'Member'} at <strong style={{ color: 'var(--red)' }}>{a.pct}%</strong> utilization
+                          <div className="text-xs text-[var(--c3)] mt-0.5">
+                            {a.type === 'team' ? 'Team' : 'Member'} at <strong className="text-[var(--red)]">{a.pct}%</strong> utilization
                           </div>
                         </div>
                       </div>
                     ))}
                   </div>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             )}
 
             {/* Lead Utilization */}
             {topMembers.length > 0 && (
-              <div className="card">
-                <div className="card-body">
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                    <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--c0)' }}>Lead Utilization</span>
-                    <span style={{ fontSize: 12, color: 'var(--c4)' }}>Year {year}</span>
+              <Card>
+                <CardContent>
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="font-bold text-sm text-[var(--c0)]">Lead Utilization</span>
+                    <span className="text-xs text-[var(--c4)]">Year {year}</span>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div className="flex flex-col gap-3">
                     {topMembers.map(m => (
-                      <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div key={m.id} className="flex items-center gap-3">
                         <div style={{ width: 34, height: 34, borderRadius: '50%', background: m.teamColor + '33', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: m.teamColor, flexShrink: 0 }}>
                           {m.name.charAt(0).toUpperCase()}
                         </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                            <Link to={`/team/${m.id}`} style={{ fontWeight: 600, fontSize: 13, color: 'var(--c0)', textDecoration: 'none' }}>{m.name}</Link>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: m.pct > 100 ? 'var(--red)' : m.pct >= 80 ? 'var(--green)' : 'var(--c3)', fontFamily: 'Manrope, sans-serif', flexShrink: 0 }}>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-center mb-1">
+                            <Link to={`/team/${m.id}`} className="font-semibold text-[13px] text-[var(--c0)] no-underline">{m.name}</Link>
+                            <span className="text-xs font-bold shrink-0 font-[Manrope,sans-serif]" style={{ color: m.pct > 100 ? 'var(--red)' : m.pct >= 80 ? 'var(--green)' : 'var(--c3)' }}>
                               {m.pct}%
-                              {m.pct > 100 && <span style={{ marginLeft: 4, fontSize: 10 }}>OVER</span>}
+                              {m.pct > 100 && <span className="ml-1 text-[10px]">OVER</span>}
                             </span>
                           </div>
-                          {m.role && <div style={{ fontSize: 11, color: 'var(--c4)', textTransform: 'uppercase', letterSpacing: '0.3px' }}>{m.role}</div>}
-                          <div style={{ height: 3, borderRadius: 2, background: 'var(--c6)', marginTop: 4, overflow: 'hidden' }}>
+                          {m.role && <div className="text-[11px] text-[var(--c4)] uppercase tracking-[0.3px]">{m.role}</div>}
+                          <div className="h-[3px] rounded-sm bg-[var(--c6)] mt-1 overflow-hidden">
                             <div style={{ height: '100%', borderRadius: 2, width: `${Math.min(100, m.pct)}%`, background: m.pct > 100 ? 'var(--red)' : m.pct >= 80 ? 'var(--green)' : 'var(--amber)' }} />
                           </div>
                         </div>
                       </div>
                     ))}
                   </div>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             )}
 
           </div>
         )}
 
       </div>
+      {/* ── Add Estimation Modal ─────────────────────────────────────────── */}
+      {showEstModal && (
+        <Modal title="Add Estimation" maxWidth={620} onClose={() => { setShowEstModal(false); resetEstForm() }}>
+          <div className="mb-4">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Project</label>
+            <Select
+              value={estProjectId}
+              onChange={v => {
+                if (v === '__new__') { setShowNewProjModal(true) }
+                else { setEstProjectId(v) }
+              }}
+              placeholder="Select project…"
+              options={[
+                ...projectsStore.projects
+                  .filter(p => p.status === 'active')
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map(p => ({ value: p.id, label: p.name })),
+                { value: '__new__', label: '+ New project…' },
+              ]}
+            />
+          </div>
+          <div className="mb-4">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Title</label>
+            <input value={estTitle} onChange={e => setEstTitle(e.target.value)} placeholder="e.g. UX/UI Design delivery" autoFocus />
+          </div>
+          <div className="grid grid-cols-3 gap-4 mb-4">
+            <div>
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Start Date <span className="font-normal text-muted-foreground">(optional)</span></label>
+              <input type="date" value={estStartDate} onChange={e => setEstStartDate(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Due Date</label>
+              <input type="date" value={estDueDate} onChange={e => setEstDueDate(e.target.value)} />
+            </div>
+            {estTeams.length <= 1 && (
+              <div>
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Estimated Hours</label>
+                <input type="number" value={estHours} onChange={e => setEstHours(e.target.value ? Number(e.target.value) : '')} min={0} step={1} placeholder="40" />
+              </div>
+            )}
+          </div>
+          <div className="mb-4">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Team</label>
+            <div className="flex flex-wrap gap-2 mt-1">
+              {teams.map(t => {
+                const sel = estTeams.includes(t.name)
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setEstTeams(prev => sel ? prev.filter(x => x !== t.name) : [...prev, t.name])}
+                    className={`px-3.5 py-1 rounded-full border-2 font-semibold text-[13px] cursor-pointer uppercase tracking-wide transition-all ${sel ? 'border-primary bg-primary text-white' : 'border-[var(--c5)] bg-white text-[#374151]'}`}
+                  >
+                    {t.name}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          {estTeams.length > 1 && (
+            <div className="bg-[var(--c7)] rounded-lg px-4 py-3 mb-4">
+              <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-2.5">Hours per Team</div>
+              <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
+                {estTeams.map(tName => (
+                  <div key={tName}>
+                    <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">{tName}</label>
+                    <input
+                      type="number" min={0} step={1} placeholder="0"
+                      value={estTeamHours[tName] ?? ''}
+                      onChange={e => setEstTeamHours(prev => ({ ...prev, [tName]: e.target.value ? Number(e.target.value) : 0 }))}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 text-xs text-muted-foreground">
+                Total: <strong>{estTeams.reduce((s, t) => s + (estTeamHours[t] ?? 0), 0)}h</strong>
+              </div>
+            </div>
+          )}
+          <div className="flex gap-2 justify-end mt-5">
+            <Button variant="outline" size="sm" onClick={() => { setShowEstModal(false); resetEstForm() }}>Cancel</Button>
+            <Button size="sm" disabled={!estProjectId || !estTitle.trim() || !estDueDate || estSaving} onClick={saveEstimation}>
+              {estSaving ? 'Saving…' : 'Add Estimation'}
+            </Button>
+          </div>
+        </Modal>
+      )}
+      {showNewProjModal && (
+        <Modal title="New Project" maxWidth={420} onClose={() => { setShowNewProjModal(false); setNewProjName(''); setNewClientName('') }}>
+          <div className="mb-4">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Project name</label>
+            <input value={newProjName} onChange={e => setNewProjName(e.target.value)} placeholder="e.g. Petrol — Prenova" autoFocus />
+          </div>
+          <div className="mb-4">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Client name</label>
+            <input value={newClientName} onChange={e => setNewClientName(e.target.value)} placeholder="e.g. Petrol d.o.o." />
+          </div>
+          <div className="flex gap-2 justify-end mt-5">
+            <Button variant="outline" size="sm" onClick={() => { setShowNewProjModal(false); setNewProjName(''); setNewClientName('') }}>Cancel</Button>
+            <Button size="sm" disabled={!newProjName.trim() || !newClientName.trim() || newProjSaving} onClick={saveNewProject}>
+              {newProjSaving ? 'Creating…' : 'Create & Select'}
+            </Button>
+          </div>
+        </Modal>
+      )}
     </>
   )
 }

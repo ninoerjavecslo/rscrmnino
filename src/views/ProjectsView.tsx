@@ -58,6 +58,8 @@ function TypePills({ value, onChange }: { value: string; onChange: (v: string) =
       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg> },
     { key: 'variable',    label: 'Variable',      sub: 'Hourly / usage-based',
       icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg> },
+    { key: 'internal',    label: 'Internal',    sub: 'Non-billable',
+      icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> },
   ]
   return (
     <div className="mb-4">
@@ -227,7 +229,7 @@ export function ProjectsView() {
 
   const activeCount    = pStore.projects.filter(p => p.status === 'active').length
   const portfolioValue = pStore.projects
-    .filter(p => p.status === 'active')
+    .filter(p => p.status === 'active' && p.type !== 'internal')
     .reduce((sum, p) => {
       const isRecurring = p.type === 'maintenance' || p.type === 'variable'
       const regularRows = rpStore.rows.filter(r => r.project_id === p.id && !r.notes?.startsWith('CR:') && r.status !== 'cost')
@@ -349,21 +351,23 @@ export function ProjectsView() {
             <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Project name</label>
             <input value={form.name} onChange={e => setF('name', e.target.value)} placeholder="e.g. Petrol — Prenova" autoFocus />
           </div>
-          <div className="mb-4">
-            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Client</label>
-            <Select
-              value={showNewClient ? '__new__' : form.client_id}
-              onChange={handleClientChange}
-              placeholder="— Select client —"
-              options={[
-                ...cStore.clients.map(c => ({ value: c.id, label: c.name })),
-                { value: '__new__', label: '+ New client…' },
-              ]}
-            />
-            {showNewClient && (
-              <input className="mt-2" value={newClientName} onChange={e => setNewClientName(e.target.value)} placeholder="New client name…" />
-            )}
-          </div>
+          {form.type !== 'internal' && (
+            <div className="mb-4">
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Client</label>
+              <Select
+                value={showNewClient ? '__new__' : form.client_id}
+                onChange={handleClientChange}
+                placeholder="— Select client —"
+                options={[
+                  ...cStore.clients.map(c => ({ value: c.id, label: c.name })),
+                  { value: '__new__', label: '+ New client…' },
+                ]}
+              />
+              {showNewClient && (
+                <input className="mt-2" value={newClientName} onChange={e => setNewClientName(e.target.value)} placeholder="New client name…" />
+              )}
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-4 mb-3">
@@ -375,7 +379,7 @@ export function ProjectsView() {
               options={pmOptions}
             />
           </div>
-          {form.type !== 'variable' && (
+          {form.type !== 'variable' && form.type !== 'internal' && (
             <div className="mb-4">
               <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
                 {form.type === 'maintenance' ? 'Monthly amount (€)' : 'Project value (€)'}

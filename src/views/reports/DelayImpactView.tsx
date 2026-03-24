@@ -55,20 +55,20 @@ export function DelayImpactView() {
         .select('id, title, due_date, estimated_hours, notes, member_percentages, project:projects(id, pn, name)')
         .eq('status', 'delayed')
         .order('due_date')
-        .then(({ data }) => setDeliverables((data ?? []) as DelayedDeliverable[])),
+        .then(({ data }) => setDeliverables((data ?? []) as unknown as DelayedDeliverable[])),
       supabase.from('resource_confirmations')
         .select('id, member_id, date, delay_reason, member:team_members(id, name)')
         .eq('status', 'delayed')
         .order('date', { ascending: false })
         .limit(50)
-        .then(({ data }) => setConfirmDelays((data ?? []) as ConfirmDelay[])),
+        .then(({ data }) => setConfirmDelays((data ?? []) as unknown as ConfirmDelay[])),
       supabase.from('resource_allocations')
         .select('id, date, hours, member:team_members(id, name), project:projects(id, pn, name)')
         .not('displaced_allocation_id', 'is', null)
         .gte('date', today)
         .order('date')
         .limit(100)
-        .then(({ data }) => setDisplaced((data ?? []) as DisplacedAlloc[])),
+        .then(({ data }) => setDisplaced((data ?? []) as unknown as DisplacedAlloc[])),
     ]).finally(() => setLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

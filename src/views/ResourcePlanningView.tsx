@@ -1279,6 +1279,7 @@ export function ResourcePlanningView() {
         status: 'active' as const,
         client_id: p.client_id ?? '',
         monthly_retainer: 0,
+        billing_cycle: 'monthly' as const,
         help_requests_included: 0,
         hours_included: 0,
         contract_start: p.start_date ?? '',

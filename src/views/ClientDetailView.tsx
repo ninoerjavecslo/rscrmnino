@@ -400,7 +400,7 @@ export function ClientDetailView() {
         const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
         const clientProjects = pStore.projects.filter(p => p.client_id === id)
         const clientMaint = mStore.maintenances.filter(m => m.client_id === id)
-        const projLines = clientProjects.map(p => `${p.name} (${p.status}${p.value ? `, value: ${p.value}€` : ''}${p.type ? `, type: ${p.type}` : ''})`).join(', ') || 'none'
+        const projLines = clientProjects.map(p => `${p.name} (${p.status}${p.contract_value ? `, value: ${p.contract_value}€` : ''}${p.type ? `, type: ${p.type}` : ''})`).join(', ') || 'none'
         const maintLines = clientMaint.map(m => `${m.name} (${m.status}, ${m.monthly_retainer}€/mo)`).join(', ') || 'none'
         const builtWebsite = clientMaint.length > 0 || clientProjects.some(p => p.type === 'fixed')
         const prompt = `You are a strategic account manager at a digital agency called Renderspace. Based on this client profile, respond with ONLY valid JSON (no markdown, no explanation) in this exact format:
@@ -418,7 +418,7 @@ Client profile:
 - Domains: ${dStore.domains.filter(d => d.client_id === id && !d.archived).length}
 - Invoiced YTD: ${invoicedYTD}€
 - Invoiced last year: ${prevYearInvoiced}€
-- Total lifetime value: ${pStore.projects.filter(p => p.client_id === id).reduce((s, p) => s + (p.value ?? 0), 0)}€
+- Total lifetime value: ${pStore.projects.filter(p => p.client_id === id).reduce((s, p) => s + (p.contract_value ?? 0), 0)}€
 - Open pipeline value: ${pipelineTotal}€`
 
         const res = await fetch(edgeUrl, {

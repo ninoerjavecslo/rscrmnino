@@ -1,0 +1,2 @@
+[functions.jira-proxy]
+verify_jwt = false

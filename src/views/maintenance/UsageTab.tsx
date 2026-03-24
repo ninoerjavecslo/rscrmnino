@@ -133,12 +133,28 @@ export function UsageTab({ maintenance }: Props) {
       <div className="grid grid-cols-3 gap-4 mb-6">
         <UsageBar used={summary?.bugsUsed ?? 0} included={maintenance.help_requests_included} label="Bugs this month" />
         <UsageBar used={summary?.crsUsed ?? 0} included={maintenance.help_requests_included} label="Change requests" />
-        <div className="bg-white rounded-[10px] border border-border p-4">
+        {(() => {
+          const included = maintenance.hours_included ?? 0
+          const pct = included > 0 ? Math.min(100, Math.round((hoursUsed / included) * 100)) : 0
+          const over = hoursUsed > included
+          const extraHours = over ? Math.round((hoursUsed - included) * 100) / 100 : 0
+          const barColor = over ? 'bg-red-500' : pct >= 80 ? 'bg-amber-400' : 'bg-[var(--navy)]'
+          return (
+        <div className={`bg-white rounded-[10px] border p-4 ${over ? 'border-red-300' : 'border-border'}`}>
           <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-[.09em] mb-2">Hours this month</div>
           <div className="flex items-end gap-1 mb-2">
-            <span className="text-[28px] font-extrabold tracking-[-0.5px]">{hoursUsed}h</span>
-            <span className="text-sm text-muted-foreground mb-1">/ {maintenance.hours_included}h included</span>
+            <span className={`text-[28px] font-extrabold tracking-[-0.5px] ${over ? 'text-red-600' : pct >= 80 ? 'text-amber-600' : 'text-foreground'}`}>{hoursUsed}h</span>
+            <span className="text-sm text-muted-foreground mb-1">/ {included}h included</span>
           </div>
+          <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-1.5">
+            <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+          </div>
+          {over && (
+            <div className="text-xs font-medium text-red-600 mb-1">+{extraHours}h over — charge extra</div>
+          )}
+          {!over && pct >= 80 && (
+            <div className="text-xs font-medium text-amber-600 mb-1">{pct}% used</div>
+          )}
           {summary?.hoursManualOverride != null && (
             <div className="text-xs text-muted-foreground mb-1">Manual override (Tempo: {summary.hoursUsed}h)</div>
           )}
@@ -163,6 +179,8 @@ export function UsageTab({ maintenance }: Props) {
             </div>
           )}
         </div>
+          )
+        })()}
       </div>
 
       {/* Issue list */}

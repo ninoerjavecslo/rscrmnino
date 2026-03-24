@@ -753,7 +753,7 @@ export function MaintenanceDetailView() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex border-b border-border px-6 bg-white">
+      <div className="flex border-b border-border px-6 bg-background">
         {(['overview', 'invoice-planning', 'usage', 'reports'] as const).map(tab => (
           <button
             key={tab}

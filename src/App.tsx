@@ -39,6 +39,7 @@ import { ReportsView } from './views/ReportsView'
 import { PipelineImpactView } from './views/reports/PipelineImpactView'
 import { DelayImpactView } from './views/reports/DelayImpactView'
 import { MonthlyDigestView } from './views/reports/MonthlyDigestView'
+import { CapacityForecastView } from './views/reports/CapacityForecastView'
 import { Toaster } from './components/Toaster'
 import { Topbar } from './components/layout/Topbar'
 
@@ -124,6 +125,7 @@ function App() {
                 <Route path="/reports/pipeline-impact" element={<PipelineImpactView />} />
                 <Route path="/reports/delay-impact" element={<DelayImpactView />} />
                 <Route path="/reports/monthly-digest" element={<MonthlyDigestView />} />
+                <Route path="/reports/capacity-forecast" element={<CapacityForecastView />} />
                 <Route path="/resource-yearly" element={<ResourceYearlyView />} />
                 <Route path="/resource-monthly" element={<ResourceMonthlyView />} />
                 <Route path="/resource-by-project" element={<ResourceByProjectView />} />

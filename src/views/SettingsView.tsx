@@ -690,12 +690,16 @@ export function SettingsView() {
                   </div>
                   <div>
                     <label className="text-xs text-muted-foreground block mb-1">Maintenance</label>
-                    <Select
+                    <select
                       value={intakeForm.maintenance_id}
-                      onChange={v => setIntakeForm(f => ({ ...f, maintenance_id: v }))}
-                      placeholder="Select…"
-                      options={maintenancesStore.maintenances.map(m => ({ value: m.id, label: m.name }))}
-                    />
+                      onChange={e => setIntakeForm(f => ({ ...f, maintenance_id: e.target.value }))}
+                      className="w-full"
+                    >
+                      <option value="">Select…</option>
+                      {maintenancesStore.maintenances.map(m => (
+                        <option key={m.id} value={m.id}>{m.name}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="text-xs text-muted-foreground block mb-1">Default issue type</label>

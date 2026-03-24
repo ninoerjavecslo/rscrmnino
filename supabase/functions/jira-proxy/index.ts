@@ -4,11 +4,14 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
+const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY') ?? ''
+
 interface JiraProxyRequest {
-  action: 'ping' | 'get-issues' | 'get-tempo-hours'
+  action: 'ping' | 'get-issues' | 'get-tempo-hours' | 'claude-insight'
   projectKey?: string
   month?: string   // YYYY-MM
   issueTypes?: string[]  // e.g. ['Bug', 'Story']
+  prompt?: string  // for claude-insight
 }
 
 Deno.serve(async (req) => {
@@ -17,14 +20,10 @@ Deno.serve(async (req) => {
     return new Response(null, {
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'authorization, content-type',
+        'Access-Control-Allow-Headers': 'authorization, content-type, x-client-info, apikey',
       },
     })
   }
-
-  // Verify authenticated user
-  const authHeader = req.headers.get('Authorization')
-  if (!authHeader) return new Response('Unauthorized', { status: 401 })
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
@@ -32,7 +31,7 @@ Deno.serve(async (req) => {
   const { data: settingsRows } = await supabase
     .from('app_settings')
     .select('key, value')
-    .in('key', ['jira_base_url', 'jira_user_email', 'jira_api_token'])
+    .in('key', ['jira_base_url', 'jira_user_email', 'jira_api_token', 'tempo_api_token'])
 
   const settings = Object.fromEntries(
     (settingsRows ?? []).map((r: { key: string; value: string }) => [r.key, r.value])
@@ -95,8 +94,12 @@ Deno.serve(async (req) => {
     }
     jql += ' ORDER BY created DESC'
 
-    const searchUrl = `${baseUrl}/rest/api/3/search?jql=${encodeURIComponent(jql)}&fields=summary,status,issuetype,assignee&maxResults=100`
-    const searchRes = await fetch(searchUrl, { headers: jiraHeaders })
+    const searchUrl = `${baseUrl}/rest/api/3/search/jql`
+    const searchRes = await fetch(searchUrl, {
+      method: 'POST',
+      headers: jiraHeaders,
+      body: JSON.stringify({ jql, fields: ['summary', 'status', 'issuetype', 'assignee', 'created'], maxResults: 100 }),
+    })
 
     if (!searchRes.ok) {
       const text = await searchRes.text()
@@ -142,9 +145,18 @@ Deno.serve(async (req) => {
     const from = `${year}-${String(mon).padStart(2, '0')}-01`
     const to   = new Date(year, mon, 0).toISOString().split('T')[0]  // last day of month
 
-    // Tempo Timesheets API v4 (gracefully returns 0 if unavailable)
-    const tempoUrl = `${baseUrl}/rest/tempo-timesheets/4/worklogs?projectKey=${projectKey}&dateFrom=${from}&dateTo=${to}&limit=1000`
-    const tempoRes = await fetch(tempoUrl, { headers: jiraHeaders })
+    const tempoToken = settings['tempo_api_token']
+    if (!tempoToken) {
+      return new Response(JSON.stringify({ totalHours: 0, available: false }), {
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      })
+    }
+
+    // Tempo Cloud API v4
+    const tempoUrl = `https://api.tempo.io/4/worklogs?projectKey=${projectKey}&from=${from}&to=${to}&limit=1000`
+    const tempoRes = await fetch(tempoUrl, {
+      headers: { 'Authorization': `Bearer ${tempoToken}`, 'Accept': 'application/json' },
+    })
 
     if (!tempoRes.ok) {
       // Tempo not available — return 0 gracefully
@@ -161,6 +173,29 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ totalHours, available: true }), {
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
     })
+  }
+
+  // ── Claude insight ──────────────────────────────────────────────────────────
+  if (body.action === 'claude-insight') {
+    const { prompt } = body
+    if (!prompt) {
+      return new Response(JSON.stringify({ error: 'prompt required' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } })
+    }
+    if (!ANTHROPIC_API_KEY) {
+      return new Response(JSON.stringify({ error: 'ANTHROPIC_API_KEY not set' }), { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } })
+    }
+    const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1500, messages: [{ role: 'user', content: prompt }] }),
+    })
+    if (!claudeRes.ok) {
+      const err = await claudeRes.text()
+      return new Response(JSON.stringify({ error: `Claude API error: ${err}` }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } })
+    }
+    const claudeData = await claudeRes.json()
+    const insight = claudeData.content?.[0]?.text ?? ''
+    return new Response(JSON.stringify({ insight }), { headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } })
   }
 
   return new Response(JSON.stringify({ error: 'Unknown action' }), {

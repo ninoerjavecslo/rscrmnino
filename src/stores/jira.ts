@@ -75,7 +75,7 @@ export const useJiraStore = create<JiraState>((set, _get) => ({
       hours_used: hours,
       source: 'manual',
       notes: notes ?? null,
-    })
+    }, { onConflict: 'maintenance_id,month' })
     // Invalidate cache for this month so it reloads
     const cacheKey = `${maintenanceId}:${month}`
     set(s => {

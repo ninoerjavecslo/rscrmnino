@@ -101,6 +101,13 @@ export function SettingsView() {
   // ── Team search ───────────────────────────────────────────────────────────
   const [memberSearch, setMemberSearch] = useState('')
 
+  // ── Jira Integration ─────────────────────────────────────────────────────
+  const [jiraBaseUrlLocal, setJiraBaseUrlLocal] = useState(settingsStore.jiraBaseUrl)
+  const [jiraUserEmailLocal, setJiraUserEmailLocal] = useState(settingsStore.jiraUserEmail)
+  const [jiraApiTokenLocal, setJiraApiTokenLocal] = useState(settingsStore.jiraApiToken)
+  const [testingJira, setTestingJira] = useState(false)
+  const [jiraTestResult, setJiraTestResult] = useState<'ok' | 'fail' | null>(null)
+
   const checkTgStatus = useCallback(async () => {
     try {
       const res = await fetch(`${FUNCTIONS_URL}/telegram-link`, { method: 'POST', headers: fnHeaders() })
@@ -122,6 +129,12 @@ export function SettingsView() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { setInternalRate(String(settingsStore.internalHourlyRate || '')) }, [settingsStore.internalHourlyRate])
+
+  useEffect(() => {
+    setJiraBaseUrlLocal(settingsStore.jiraBaseUrl)
+    setJiraUserEmailLocal(settingsStore.jiraUserEmail)
+    setJiraApiTokenLocal(settingsStore.jiraApiToken)
+  }, [settingsStore.jiraBaseUrl, settingsStore.jiraUserEmail, settingsStore.jiraApiToken])
 
   useEffect(() => {
     if (!linkCode || codeExpiry <= 0) return
@@ -202,6 +215,24 @@ export function SettingsView() {
       await fetch(`${FUNCTIONS_URL}/telegram-link`, { method: 'DELETE', headers: fnHeaders() })
       setLinked(false); setLinkedAt(null); setLinkCode(null)
     } finally { setRevoking(false) }
+  }
+
+  async function handleTestJira() {
+    setTestingJira(true)
+    setJiraTestResult(null)
+    try {
+      const res = await fetch(`${FUNCTIONS_URL}/jira-proxy`, {
+        method: 'POST',
+        headers: fnHeaders(),
+        body: JSON.stringify({ action: 'ping' }),
+      })
+      const data = await res.json()
+      setJiraTestResult(data?.error ? 'fail' : 'ok')
+    } catch {
+      setJiraTestResult('fail')
+    } finally {
+      setTestingJira(false)
+    }
   }
 
   function openInvite() {
@@ -532,6 +563,51 @@ export function SettingsView() {
                 </Button>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* ── Jira Integration ──────────────────────────────────────────────────── */}
+        <Card>
+          <CardContent className="p-5 space-y-4">
+            <div className="font-bold text-[15px] text-foreground">Jira Integration</div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Jira Base URL</label>
+                <input
+                  value={jiraBaseUrlLocal}
+                  onChange={e => setJiraBaseUrlLocal(e.target.value)}
+                  onBlur={e => settingsStore.setJiraBaseUrl(e.target.value)}
+                  placeholder="https://yourcompany.atlassian.net"
+                />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Jira User Email</label>
+                <input
+                  value={jiraUserEmailLocal}
+                  onChange={e => setJiraUserEmailLocal(e.target.value)}
+                  onBlur={e => settingsStore.setJiraUserEmail(e.target.value)}
+                  placeholder="you@company.com"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Jira API Token</label>
+              <input
+                type="password"
+                value={jiraApiTokenLocal}
+                onChange={e => setJiraApiTokenLocal(e.target.value)}
+                onBlur={e => settingsStore.setJiraApiToken(e.target.value)}
+                placeholder="••••••••••••••••"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Generate at id.atlassian.net → Security → API tokens</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button variant="outline" size="sm" onClick={handleTestJira} disabled={testingJira}>
+                {testingJira ? 'Testing…' : 'Test connection'}
+              </Button>
+              {jiraTestResult === 'ok' && <span className="text-xs text-green-600 font-medium">Connected ✓</span>}
+              {jiraTestResult === 'fail' && <span className="text-xs text-red-600 font-medium">Failed — check credentials</span>}
+            </div>
           </CardContent>
         </Card>
       </div>

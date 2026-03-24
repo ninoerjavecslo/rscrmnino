@@ -60,6 +60,7 @@ interface EditForm {
   contract_url: string
   notes: string
   status: string
+  jira_project_key: string
 }
 
 interface CRForm {
@@ -193,6 +194,8 @@ export function MaintenanceDetailView() {
   const [crForm, setCRForm] = useState<CRForm>(defaultCRForm())
   const [crSaving, setCRSaving] = useState(false)
 
+  const [activeTab, setActiveTab] = useState<'overview' | 'invoice-planning' | 'usage' | 'reports'>('overview')
+
   // Plan CR
   const [showPlanCR, setShowPlanCR] = useState(false)
   const [planCRTarget, setPlanCRTarget] = useState<ChangeRequest | null>(null)
@@ -284,6 +287,7 @@ export function MaintenanceDetailView() {
       contract_url:           maint.contract_url ?? '',
       notes:                  maint.notes ?? '',
       status:                 maint.status,
+      jira_project_key:       maint.jira_project_key ?? '',
     })
     setEditTeamHours(maint.team_hours ?? {})
     setShowEdit(true)
@@ -314,6 +318,7 @@ export function MaintenanceDetailView() {
         notes:                  editForm.notes || null,
         status:                 editForm.status as Maintenance['status'],
         team_hours:             Object.keys(filteredTeamHours).length > 0 ? filteredTeamHours : null,
+        jira_project_key:       editForm.jira_project_key.trim() || null,
       })
       await fetchRows()
       setShowEdit(false)
@@ -745,8 +750,28 @@ export function MaintenanceDetailView() {
         </div>
       </div>
 
+      {/* Tab bar */}
+      <div className="flex border-b border-border px-6 bg-white">
+        {(['overview', 'invoice-planning', 'usage', 'reports'] as const).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-4 py-3 text-[13px] font-medium border-b-2 transition-colors ${
+              activeTab === tab
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {tab === 'overview' ? 'Overview'
+              : tab === 'invoice-planning' ? 'Invoice Planning'
+              : tab === 'usage' ? 'Usage'
+              : 'Reports'}
+          </button>
+        ))}
+      </div>
+
       {/* ── KPI cards + terms section (padded to match page-header/page-content) */}
-      <div className="px-7 pb-5">
+      {activeTab === 'overview' && <div className="px-7 pb-5">
 
       {/* ── KPI cards ─────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-4 gap-3 mb-5">
@@ -925,9 +950,9 @@ export function MaintenanceDetailView() {
         )}
       </div>
 
-      </div>{/* end padded wrapper */}
+      </div>}{/* end padded wrapper */}
 
-      <div className="flex-1 overflow-auto p-6">
+      {activeTab === 'overview' && <div className="flex-1 overflow-auto p-6">
 
         {/* Not-billed alert */}
         {notBilledRows.length > 0 && (
@@ -964,157 +989,6 @@ export function MaintenanceDetailView() {
             </CardContent>
           </Card>
         )}
-
-        {/* Invoice Plans */}
-        {(() => {
-          const PAGE_SIZE = 12
-          const planYears = [...new Set(invoiceRows.map(r => parseInt(r.month.slice(0, 4))))].sort()
-          const availYears = planYears.length > 0 ? planYears : [new Date().getFullYear()]
-          const currentYear = availYears.includes(planYear) ? planYear : availYears[availYears.length - 1]
-          const yearRows = invoiceRows.filter(r => parseInt(r.month.slice(0, 4)) === currentYear)
-          const totalPages = Math.ceil(yearRows.length / PAGE_SIZE)
-          const page = Math.min(planPage, Math.max(0, totalPages - 1))
-          const pagedRows = yearRows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
-          const yearInvoiced = yearRows.filter(r => r.status === 'paid' || r.status === 'issued').reduce((s, r) => s + (r.actual_amount ?? 0), 0)
-          const yearPlanned = yearRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0)
-          const yearExtra = yearRows.filter(r => r.status === 'paid' || r.status === 'issued').reduce((s, r) => s + Math.max(0, (r.actual_amount ?? 0) - (r.planned_amount ?? 0) - hostingMonthlyAmt), 0)
-          const yearNotBilled = yearRows.filter(r => r.status === 'retainer').length
-
-          return (
-            <>
-              <div className="flex items-center justify-between mb-2.5">
-                <h2 className="flex items-center gap-2">
-                  Invoice Plans
-                  {yearNotBilled > 0 && (
-                    <Badge variant="amber" className="text-[11px]">
-                      {yearNotBilled} not billed
-                    </Badge>
-                  )}
-                </h2>
-                <div className="flex gap-1">
-                  {availYears.map(y => (
-                    <Button
-                      key={y}
-                      size="xs"
-                      variant={currentYear === y ? 'default' : 'outline'}
-                      onClick={() => { setPlanYear(y); setPlanPage(0) }}
-                    >{y}</Button>
-                  ))}
-                </div>
-              </div>
-
-              <Card className="mb-5">
-                {loading ? (
-                  <div className="p-7 text-center text-muted-foreground text-[13px]">Loading…</div>
-                ) : yearRows.length === 0 ? (
-                  <div className="p-7 text-center text-muted-foreground text-[13px]">No invoice rows for {currentYear}.</div>
-                ) : (
-                  <>
-                    <table>
-                      <thead>
-                        <tr>
-                          <th style={{ width: 120 }}>MONTH</th>
-                          <th style={{ width: 120 }}>TYPE</th>
-                          <th className="text-right" style={{ width: 110 }}>AMOUNT</th>
-                          <th className="text-right" style={{ width: 110 }}>ACTUAL</th>
-                          <th className="text-right" style={{ width: 100 }}>EXTRA</th>
-                          <th>NOTES</th>
-                          <th style={{ width: 110 }}>STATUS</th>
-                          <th className="text-right" style={{ width: 200 }}>ACTIONS</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {pagedRows.map(row => {
-                          const isPending   = row.status === 'planned'
-                          const isNotBilled = row.status === 'retainer'
-                          const isSettled   = row.status === 'paid' || row.status === 'issued'
-                          const isCR        = !!row.notes?.startsWith('CR:')
-                          const rowHosting  = isCR ? 0 : hostingMonthlyAmt
-                          const extra       = isSettled ? Math.max(0, (row.actual_amount ?? 0) - (row.planned_amount ?? 0) - rowHosting) : 0
-                          return (
-                            <tr key={row.id} style={{ background: isNotBilled ? 'rgba(255, 193, 7, 0.06)' : isPending ? 'var(--amber-bg, #fffbf0)' : undefined }}>
-                              <td style={{ fontWeight: 600 }}>{fmtMonth(row.month)}</td>
-                              <td>
-                                {isCR
-                                  ? <Badge variant="navy" className="text-[10px]">Change Request</Badge>
-                                  : <span className="text-xs text-muted-foreground">Retainer</span>}
-                              </td>
-                              <td className="text-right">
-                                {fmtEuro((row.planned_amount ?? 0) + (isCR ? 0 : (hosting?.cycle === 'monthly' ? hosting.amount : 0)))}
-                                {!isCR && hosting?.cycle === 'monthly' && (
-                                  <div className="text-[10px] text-muted-foreground font-normal">
-                                    {fmtEuro(row.planned_amount ?? 0)} + {fmtEuro(hosting.amount)}
-                                  </div>
-                                )}
-                              </td>
-                              <td className={`text-right ${isSettled ? 'font-bold text-[#16a34a]' : 'text-muted-foreground'}`}>
-                                {isSettled ? fmtEuro(row.actual_amount ?? 0) : '—'}
-                              </td>
-                              <td className={`text-right text-[#2563eb] ${extra > 0 ? 'font-bold' : ''}`}>
-                                {extra > 0 ? `+${fmtEuro(extra)}` : <span className="text-border">—</span>}
-                              </td>
-                              <td className="text-xs text-muted-foreground">
-                                {row.notes
-                                  ? <span className={isNotBilled ? 'text-muted-foreground' : extra > 0 ? 'text-[#2563eb]' : 'text-muted-foreground'}>{row.notes}</span>
-                                  : <span className="text-border">—</span>}
-                              </td>
-                              <td>
-                                <Badge variant={STATUS_BADGE_VARIANT[row.status] ?? 'gray'}>
-                                  {row.status === 'retainer' ? 'Not billed' : row.status.charAt(0).toUpperCase() + row.status.slice(1)}
-                                </Badge>
-                              </td>
-                              <td className="text-right">
-                                <div className="flex gap-1.5 justify-end">
-                                  {isPending && (
-                                    <>
-                                      <Button size="xs" onClick={() => openConfirm(row)}>Confirm</Button>
-                                      <Button size="xs" variant="outline" onClick={() => openNotBilled(row)}>Not billed</Button>
-                                    </>
-                                  )}
-                                  {isNotBilled && (
-                                    <>
-                                      <Button size="xs" variant="outline" className="text-primary" onClick={() => setPlanAgainRow(row)}>Plan again</Button>
-                                      <Button size="xs" variant="ghost" className="text-[#dc2626]" onClick={() => setDeleteNotBilledRow(row)}>Delete</Button>
-                                    </>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                      <tfoot>
-                        <tr className="bg-gray-50 border-t-2 border-border">
-                          <td colSpan={2} className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.05em]">{currentYear} total</td>
-                          <td className="text-right font-bold">
-                            {fmtEuro(yearPlanned + (hosting?.cycle === 'monthly' ? hosting.amount * yearRows.filter(r => !r.notes?.startsWith('CR:')).length : 0))}
-                          </td>
-                          <td className="text-right font-bold text-[#16a34a]">{yearInvoiced > 0 ? fmtEuro(yearInvoiced) : '—'}</td>
-                          <td className="text-right font-bold text-[#2563eb]">{yearExtra > 0 ? `+${fmtEuro(yearExtra)}` : '—'}</td>
-                          <td colSpan={3}></td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                    {totalPages > 1 && (
-                      <div className="flex items-center justify-between px-5 py-2.5 border-t border-border bg-gray-50">
-                        <span className="text-xs text-muted-foreground">
-                          Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, yearRows.length)} of {yearRows.length}
-                        </span>
-                        <div className="flex gap-1">
-                          <Button size="xs" variant="outline" onClick={() => setPlanPage(p => Math.max(0, p - 1))} disabled={page === 0}>← Prev</Button>
-                          {Array.from({ length: totalPages }, (_, i) => (
-                            <Button key={i} size="xs" variant={page === i ? 'default' : 'outline'} onClick={() => setPlanPage(i)}>{i + 1}</Button>
-                          ))}
-                          <Button size="xs" variant="outline" onClick={() => setPlanPage(p => Math.min(totalPages - 1, p + 1))} disabled={page === totalPages - 1}>Next →</Button>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-              </Card>
-            </>
-          )
-        })()}
 
         {/* Change Requests */}
         <div className="flex items-center justify-between mb-2.5">
@@ -1270,7 +1144,163 @@ export function MaintenanceDetailView() {
             </table>
           )}
         </Card>
-      </div>
+      </div>}
+
+      {activeTab === 'invoice-planning' && <div className="flex-1 overflow-auto p-6">
+        {/* Invoice Plans */}
+        {(() => {
+          const PAGE_SIZE = 12
+          const planYears = [...new Set(invoiceRows.map(r => parseInt(r.month.slice(0, 4))))].sort()
+          const availYears = planYears.length > 0 ? planYears : [new Date().getFullYear()]
+          const currentYear = availYears.includes(planYear) ? planYear : availYears[availYears.length - 1]
+          const yearRows = invoiceRows.filter(r => parseInt(r.month.slice(0, 4)) === currentYear)
+          const totalPages = Math.ceil(yearRows.length / PAGE_SIZE)
+          const page = Math.min(planPage, Math.max(0, totalPages - 1))
+          const pagedRows = yearRows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+          const yearInvoiced = yearRows.filter(r => r.status === 'paid' || r.status === 'issued').reduce((s, r) => s + (r.actual_amount ?? 0), 0)
+          const yearPlanned = yearRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0)
+          const yearExtra = yearRows.filter(r => r.status === 'paid' || r.status === 'issued').reduce((s, r) => s + Math.max(0, (r.actual_amount ?? 0) - (r.planned_amount ?? 0) - hostingMonthlyAmt), 0)
+          const yearNotBilled = yearRows.filter(r => r.status === 'retainer').length
+
+          return (
+            <>
+              <div className="flex items-center justify-between mb-2.5">
+                <h2 className="flex items-center gap-2">
+                  Invoice Plans
+                  {yearNotBilled > 0 && (
+                    <Badge variant="amber" className="text-[11px]">
+                      {yearNotBilled} not billed
+                    </Badge>
+                  )}
+                </h2>
+                <div className="flex gap-1">
+                  {availYears.map(y => (
+                    <Button
+                      key={y}
+                      size="xs"
+                      variant={currentYear === y ? 'default' : 'outline'}
+                      onClick={() => { setPlanYear(y); setPlanPage(0) }}
+                    >{y}</Button>
+                  ))}
+                </div>
+              </div>
+
+              <Card className="mb-5">
+                {loading ? (
+                  <div className="p-7 text-center text-muted-foreground text-[13px]">Loading…</div>
+                ) : yearRows.length === 0 ? (
+                  <div className="p-7 text-center text-muted-foreground text-[13px]">No invoice rows for {currentYear}.</div>
+                ) : (
+                  <>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th style={{ width: 120 }}>MONTH</th>
+                          <th style={{ width: 120 }}>TYPE</th>
+                          <th className="text-right" style={{ width: 110 }}>AMOUNT</th>
+                          <th className="text-right" style={{ width: 110 }}>ACTUAL</th>
+                          <th className="text-right" style={{ width: 100 }}>EXTRA</th>
+                          <th>NOTES</th>
+                          <th style={{ width: 110 }}>STATUS</th>
+                          <th className="text-right" style={{ width: 200 }}>ACTIONS</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pagedRows.map(row => {
+                          const isPending   = row.status === 'planned'
+                          const isNotBilled = row.status === 'retainer'
+                          const isSettled   = row.status === 'paid' || row.status === 'issued'
+                          const isCR        = !!row.notes?.startsWith('CR:')
+                          const rowHosting  = isCR ? 0 : hostingMonthlyAmt
+                          const extra       = isSettled ? Math.max(0, (row.actual_amount ?? 0) - (row.planned_amount ?? 0) - rowHosting) : 0
+                          return (
+                            <tr key={row.id} style={{ background: isNotBilled ? 'rgba(255, 193, 7, 0.06)' : isPending ? 'var(--amber-bg, #fffbf0)' : undefined }}>
+                              <td style={{ fontWeight: 600 }}>{fmtMonth(row.month)}</td>
+                              <td>
+                                {isCR
+                                  ? <Badge variant="navy" className="text-[10px]">Change Request</Badge>
+                                  : <span className="text-xs text-muted-foreground">Retainer</span>}
+                              </td>
+                              <td className="text-right">
+                                {fmtEuro((row.planned_amount ?? 0) + (isCR ? 0 : (hosting?.cycle === 'monthly' ? hosting.amount : 0)))}
+                                {!isCR && hosting?.cycle === 'monthly' && (
+                                  <div className="text-[10px] text-muted-foreground font-normal">
+                                    {fmtEuro(row.planned_amount ?? 0)} + {fmtEuro(hosting.amount)}
+                                  </div>
+                                )}
+                              </td>
+                              <td className={`text-right ${isSettled ? 'font-bold text-[#16a34a]' : 'text-muted-foreground'}`}>
+                                {isSettled ? fmtEuro(row.actual_amount ?? 0) : '—'}
+                              </td>
+                              <td className={`text-right text-[#2563eb] ${extra > 0 ? 'font-bold' : ''}`}>
+                                {extra > 0 ? `+${fmtEuro(extra)}` : <span className="text-border">—</span>}
+                              </td>
+                              <td className="text-xs text-muted-foreground">
+                                {row.notes
+                                  ? <span className={isNotBilled ? 'text-muted-foreground' : extra > 0 ? 'text-[#2563eb]' : 'text-muted-foreground'}>{row.notes}</span>
+                                  : <span className="text-border">—</span>}
+                              </td>
+                              <td>
+                                <Badge variant={STATUS_BADGE_VARIANT[row.status] ?? 'gray'}>
+                                  {row.status === 'retainer' ? 'Not billed' : row.status.charAt(0).toUpperCase() + row.status.slice(1)}
+                                </Badge>
+                              </td>
+                              <td className="text-right">
+                                <div className="flex gap-1.5 justify-end">
+                                  {isPending && (
+                                    <>
+                                      <Button size="xs" onClick={() => openConfirm(row)}>Confirm</Button>
+                                      <Button size="xs" variant="outline" onClick={() => openNotBilled(row)}>Not billed</Button>
+                                    </>
+                                  )}
+                                  {isNotBilled && (
+                                    <>
+                                      <Button size="xs" variant="outline" className="text-primary" onClick={() => setPlanAgainRow(row)}>Plan again</Button>
+                                      <Button size="xs" variant="ghost" className="text-[#dc2626]" onClick={() => setDeleteNotBilledRow(row)}>Delete</Button>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-gray-50 border-t-2 border-border">
+                          <td colSpan={2} className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.05em]">{currentYear} total</td>
+                          <td className="text-right font-bold">
+                            {fmtEuro(yearPlanned + (hosting?.cycle === 'monthly' ? hosting.amount * yearRows.filter(r => !r.notes?.startsWith('CR:')).length : 0))}
+                          </td>
+                          <td className="text-right font-bold text-[#16a34a]">{yearInvoiced > 0 ? fmtEuro(yearInvoiced) : '—'}</td>
+                          <td className="text-right font-bold text-[#2563eb]">{yearExtra > 0 ? `+${fmtEuro(yearExtra)}` : '—'}</td>
+                          <td colSpan={3}></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between px-5 py-2.5 border-t border-border bg-gray-50">
+                        <span className="text-xs text-muted-foreground">
+                          Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, yearRows.length)} of {yearRows.length}
+                        </span>
+                        <div className="flex gap-1">
+                          <Button size="xs" variant="outline" onClick={() => setPlanPage(p => Math.max(0, p - 1))} disabled={page === 0}>← Prev</Button>
+                          {Array.from({ length: totalPages }, (_, i) => (
+                            <Button key={i} size="xs" variant={page === i ? 'default' : 'outline'} onClick={() => setPlanPage(i)}>{i + 1}</Button>
+                          ))}
+                          <Button size="xs" variant="outline" onClick={() => setPlanPage(p => Math.min(totalPages - 1, p + 1))} disabled={page === totalPages - 1}>Next →</Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </Card>
+            </>
+          )
+        })()}
+      </div>}
+
+      {activeTab === 'usage' && maint && <div className="p-6 text-muted-foreground text-sm">Usage tab — coming soon</div>}
+      {activeTab === 'reports' && maint && <div className="p-6 text-muted-foreground text-sm">Reports tab — coming soon</div>}
 
       {/* Create Invoice modal */}
       <Modal open={showCreateInvoice} title="Create Invoice" maxWidth={380} onClose={() => setShowCreateInvoice(false)}
@@ -1352,9 +1382,21 @@ export function MaintenanceDetailView() {
                 )}
               </div>
             </div>
-            <div className="mb-4">
-              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Contract URL <span className="text-xs text-muted-foreground ml-1">optional</span></label>
-              <input value={editForm.contract_url} onChange={e => setEditForm(f => f ? { ...f, contract_url: e.target.value } : f)} placeholder="https://..." />
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="mb-4">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Contract URL <span className="text-xs text-muted-foreground ml-1">optional</span></label>
+                <input value={editForm.contract_url} onChange={e => setEditForm(f => f ? { ...f, contract_url: e.target.value } : f)} placeholder="https://..." />
+              </div>
+              <div className="mb-4">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">
+                  Jira Project Key <span className="text-xs text-muted-foreground ml-1">optional</span>
+                </label>
+                <input
+                  value={editForm?.jira_project_key ?? ''}
+                  onChange={e => setEditForm(f => f ? { ...f, jira_project_key: e.target.value.toUpperCase() } : f)}
+                  placeholder="e.g. ACME"
+                />
+              </div>
             </div>
             <div className="mb-4">
               <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Notes <span className="text-xs text-muted-foreground ml-1">optional</span></label>

@@ -128,6 +128,7 @@ export interface Maintenance {
   status: 'active' | 'paused' | 'cancelled'
   notes?: string | null
   cms?: string | null
+  jira_project_key?: string | null
   team_hours?: Record<string, number> | null  // monthly hours per team for resource planning
   created_at: string
   // Joined
@@ -543,4 +544,43 @@ export interface PixelMessage {
   content: string
   model: 'claude' | 'gpt4o' | null
   created_at: string
+}
+
+export interface MaintenanceHoursLog {
+  id: string
+  maintenance_id: string
+  month: string           // YYYY-MM-DD
+  hours_used: number
+  source: 'tempo' | 'manual'
+  notes?: string | null
+  created_at: string
+}
+
+export interface EmailIntakeRule {
+  id: string
+  maintenance_id: string
+  sender_domain?: string | null
+  keyword?: string | null
+  default_issue_type: string
+  created_at: string
+  // Joined
+  maintenance?: Pick<Maintenance, 'id' | 'name'> | null
+}
+
+export interface JiraIssue {
+  key: string               // e.g. ACME-42
+  summary: string
+  status: string            // e.g. "In Progress", "Done"
+  issueType: string         // e.g. "Bug", "Story"
+  assignee?: string | null
+  hoursLogged: number       // from Tempo worklogs, 0 if unavailable
+  created: string           // ISO date string
+}
+
+export interface JiraUsageSummary {
+  bugsUsed: number
+  crsUsed: number
+  hoursUsed: number         // from Tempo (may be 0 if Tempo not configured)
+  hoursManualOverride?: number | null
+  issues: JiraIssue[]
 }

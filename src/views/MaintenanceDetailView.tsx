@@ -12,6 +12,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
+import { UsageTab } from './maintenance/UsageTab'
 
 function safeUrl(url: string | null | undefined): string | undefined {
   if (!url) return undefined
@@ -1299,7 +1300,7 @@ export function MaintenanceDetailView() {
         })()}
       </div>}
 
-      {activeTab === 'usage' && maint && <div className="p-6 text-muted-foreground text-sm">Usage tab — coming soon</div>}
+      {activeTab === 'usage' && maint && <UsageTab maintenance={maint} />}
       {activeTab === 'reports' && maint && <div className="p-6 text-muted-foreground text-sm">Reports tab — coming soon</div>}
 
       {/* Create Invoice modal */}

@@ -67,7 +67,7 @@ export function MonthlyDigestView() {
         .select('id, title, status, due_date, project:projects(id, pn, name)')
         .gte('due_date', monthStart).lte('due_date', monthEnd)
         .order('due_date')
-        .then(({ data }) => setDeliverables((data ?? []) as DigestDeliverable[])),
+        .then(({ data }) => setDeliverables((data ?? []) as unknown as DigestDeliverable[])),
     ]).finally(() => setLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMonthStr])

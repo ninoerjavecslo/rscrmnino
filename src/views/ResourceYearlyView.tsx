@@ -263,7 +263,6 @@ export function ResourceYearlyView() {
           } else {
             const teamName = team.name
             const teamMemberCount = Math.max(1, memberCountByTeamName[teamName] ?? 1)
-            const monthLabel = start.slice(0, 7) // YYYY-MM
             const delivHours = deliverables
               .filter(d => {
                 if (!d.team) return false

@@ -4,6 +4,8 @@ import type { CompanyHoliday, TeamMember } from '../lib/types'
 import { useSettingsStore } from '../stores/settings'
 import { useResourceStore } from '../stores/resource'
 import { useHolidayStore } from '../stores/holidays'
+import { useEmailIntakeStore } from '../stores/emailIntake'
+import { useMaintenancesStore } from '../stores/maintenances'
 import { toast } from '../lib/toast'
 import { Select } from '../components/Select'
 import { Modal } from '../components/Modal'
@@ -48,6 +50,8 @@ export function SettingsView() {
   const settingsStore = useSettingsStore()
   const resourceStore = useResourceStore()
   const holidayStore = useHolidayStore()
+  const intakeStore = useEmailIntakeStore()
+  const maintenancesStore = useMaintenancesStore()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
 
@@ -108,6 +112,11 @@ export function SettingsView() {
   const [testingJira, setTestingJira] = useState(false)
   const [jiraTestResult, setJiraTestResult] = useState<'ok' | 'fail' | null>(null)
 
+  // ── Email Intake ──────────────────────────────────────────────────────────
+  const [intakeForm, setIntakeForm] = useState({
+    sender_domain: '', keyword: '', maintenance_id: '', default_issue_type: 'Bug'
+  })
+
   const checkTgStatus = useCallback(async () => {
     try {
       const res = await fetch(`${FUNCTIONS_URL}/telegram-link`, { method: 'POST', headers: fnHeaders() })
@@ -126,6 +135,8 @@ export function SettingsView() {
     resourceStore.fetchMembers()
     holidayStore.fetchAll()
     checkTgStatus()
+    intakeStore.fetchAll()
+    maintenancesStore.fetchAll()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { setInternalRate(String(settingsStore.internalHourlyRate || '')) }, [settingsStore.internalHourlyRate])
@@ -232,6 +243,21 @@ export function SettingsView() {
       setJiraTestResult('fail')
     } finally {
       setTestingJira(false)
+    }
+  }
+
+  async function handleAddIntakeRule() {
+    try {
+      await intakeStore.add({
+        maintenance_id: intakeForm.maintenance_id,
+        sender_domain: intakeForm.sender_domain.trim() || null,
+        keyword: intakeForm.keyword.trim() || null,
+        default_issue_type: intakeForm.default_issue_type.trim() || 'Bug',
+      })
+      setIntakeForm({ sender_domain: '', keyword: '', maintenance_id: '', default_issue_type: 'Bug' })
+      toast('success', 'Rule added')
+    } catch {
+      toast('error', 'Failed to add rule')
     }
   }
 
@@ -610,6 +636,84 @@ export function SettingsView() {
             </div>
           </CardContent>
         </Card>
+
+        {/* ── Email Intake ──────────────────────────────────────────────────── */}
+        <div className="mb-6">
+          <h2 className="mb-3">Email Intake</h2>
+          <Card>
+            <CardContent className="p-5">
+              <p className="text-[13px] text-muted-foreground mb-4">
+                Forward client emails to your intake webhook URL. Rules below map sender domains or keywords to maintenance contracts.
+              </p>
+
+              {intakeStore.rules.length === 0 ? (
+                <p className="text-xs text-muted-foreground mb-3">No rules yet.</p>
+              ) : (
+                <table className="mb-4">
+                  <thead>
+                    <tr>
+                      <th>SENDER DOMAIN</th>
+                      <th>KEYWORD</th>
+                      <th>MAINTENANCE</th>
+                      <th>ISSUE TYPE</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {intakeStore.rules.map(rule => (
+                      <tr key={rule.id}>
+                        <td className="text-[13px]">{rule.sender_domain ?? '—'}</td>
+                        <td className="text-[13px]">{rule.keyword ?? '—'}</td>
+                        <td className="text-[13px]">{rule.maintenance?.name ?? '—'}</td>
+                        <td className="text-[13px]">{rule.default_issue_type}</td>
+                        <td>
+                          <Button variant="destructive" size="xs" onClick={() => intakeStore.remove(rule.id)}>
+                            Remove
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+
+              <div className="border-t border-border pt-4">
+                <div className="text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wide">Add rule</div>
+                <div className="grid grid-cols-4 gap-3 mb-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-1">Sender domain</label>
+                    <input value={intakeForm.sender_domain} onChange={e => setIntakeForm(f => ({ ...f, sender_domain: e.target.value }))} placeholder="pirnar.si" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-1">Keyword (fallback)</label>
+                    <input value={intakeForm.keyword} onChange={e => setIntakeForm(f => ({ ...f, keyword: e.target.value }))} placeholder="pirnar" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-1">Maintenance</label>
+                    <Select
+                      value={intakeForm.maintenance_id}
+                      onChange={v => setIntakeForm(f => ({ ...f, maintenance_id: v }))}
+                      placeholder="Select…"
+                      options={maintenancesStore.maintenances.map(m => ({ value: m.id, label: m.name }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-1">Default issue type</label>
+                    <input value={intakeForm.default_issue_type} onChange={e => setIntakeForm(f => ({ ...f, default_issue_type: e.target.value }))} placeholder="Bug" />
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleAddIntakeRule}
+                  disabled={!intakeForm.maintenance_id || (!intakeForm.sender_domain && !intakeForm.keyword)}
+                >
+                  Add rule
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     )
   }

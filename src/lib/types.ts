@@ -584,3 +584,62 @@ export interface JiraUsageSummary {
   hoursManualOverride?: number | null
   issues: JiraIssue[]
 }
+
+// ── Offer Generator ──────────────────────────────────────────
+
+export type OfferLanguage = 'sl' | 'en'
+export type OfferMode = 'quick' | 'structured' | 'manual'
+export type OfferStatus = 'draft' | 'sent' | 'accepted' | 'rejected'
+
+export interface OfferBlock {
+  id: string
+  type: 'paragraph' | 'bullet-list' | 'phase-block' | 'pricing-table' | 'goal-list' | 'audience-grid' | 'service-block' | 'notes'
+  content: string
+}
+
+export interface OfferSection {
+  id: string
+  type: 'cover' | 'intro' | 'scope' | 'pricing' | 'timeline' | 'notes' | 'terms' | 'copyright' | 'payment' | 'custom'
+  title: string
+  enabled: boolean
+  order: number
+  blocks: OfferBlock[]
+}
+
+export interface OfferMeta {
+  offer_eyebrow?: string
+  cover_title?: string
+  client_display_name?: string
+  client_address?: string
+  client_contact?: string
+  agency_address?: string
+  date_label?: string
+  doc_title?: string
+}
+
+export interface Offer {
+  id: string
+  title: string
+  client_name: string
+  offer_number: string
+  language: OfferLanguage
+  mode: OfferMode
+  brief_text?: string | null
+  sections: OfferSection[]
+  meta: OfferMeta
+  pricing_total: number
+  status: OfferStatus
+  version: number
+  created_at: string
+  updated_at: string
+}
+
+export interface OfferVersion {
+  id: string
+  offer_id: string
+  version: number
+  sections_snapshot: OfferSection[]
+  meta_snapshot: OfferMeta
+  pricing_total_snapshot: number
+  created_at: string
+}

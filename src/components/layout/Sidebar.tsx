@@ -98,6 +98,16 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         <div className="sidebar-divider" />
 
         <NavLink to="/tools" className={nav}><IconTool /> Tools</NavLink>
+        <NavLink to="/tools/offer-generator" className={nav}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+          Offers
+        </NavLink>
         <NavLink to="/automations" className={nav}><IconZap /> Automations</NavLink>
 
         <div className="sidebar-divider" />

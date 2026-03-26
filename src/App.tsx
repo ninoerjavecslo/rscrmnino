@@ -26,6 +26,9 @@ import { SettingsView } from './views/SettingsView'
 import { AutomationsView } from './views/AutomationsView'
 import { AutomationFormView } from './views/AutomationFormView'
 import { PixelView } from './views/PixelView'
+import { OfferGeneratorView } from './views/OfferGeneratorView'
+import { OfferNewView } from './views/OfferNewView'
+import { OfferEditorView } from './views/OfferEditorView'
 import { ResourcePlanningView } from './views/ResourcePlanningView'
 import { ResourceReportsView } from './views/ResourceReportsView'
 import { ResourceYearlyView } from './views/ResourceYearlyView'
@@ -119,6 +122,9 @@ function App() {
                 <Route path="/domains"         element={<DomainsView />} />
                 <Route path="/tools"           element={<ToolsView />} />
                 <Route path="/tools/timesheet" element={<TimesheetView />} />
+                <Route path="/tools/offer-generator" element={<OfferGeneratorView />} />
+                <Route path="/tools/offer-generator/new" element={<OfferNewView />} />
+                <Route path="/tools/offer-generator/:id" element={<OfferEditorView />} />
                 <Route path="/resource-planning" element={<ResourcePlanningView />} />
                 <Route path="/resource-reports" element={<ResourceReportsView />} />
                 <Route path="/reports" element={<ReportsView />} />

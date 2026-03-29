@@ -1,9 +1,10 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useOffersStore } from '../stores/offers'
 import { Button } from '../components/ui/button'
 import { Badge } from '../components/ui/badge'
 import { toast } from '../lib/toast'
+import { buildExampleOffer } from '../lib/offerExample'
 import type { Offer } from '../lib/types'
 
 const STATUS_VARIANT: Record<string, 'green' | 'amber' | 'blue' | 'gray' | 'red'> = {
@@ -15,9 +16,23 @@ const STATUS_VARIANT: Record<string, 'green' | 'amber' | 'blue' | 'gray' | 'red'
 
 export function OfferGeneratorView() {
   const navigate = useNavigate()
-  const { offers, loading, fetchAll, deleteOffer } = useOffersStore()
+  const { offers, loading, fetchAll, deleteOffer, create } = useOffersStore()
+  const [loadingExample, setLoadingExample] = useState(false)
 
   useEffect(() => { fetchAll() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleLoadExample() {
+    setLoadingExample(true)
+    try {
+      const id = await create(buildExampleOffer())
+      toast('success', 'Example offer loaded')
+      navigate(`/tools/offer-generator/${id}`)
+    } catch {
+      toast('error', 'Failed to load example')
+    } finally {
+      setLoadingExample(false)
+    }
+  }
 
   async function handleDelete(offer: Offer) {
     if (!confirm(`Delete "${offer.title}"?`)) return
@@ -36,9 +51,14 @@ export function OfferGeneratorView() {
           <h1 className="text-xl font-bold text-primary">Offer Generator</h1>
           <p className="text-sm text-muted-foreground mt-0.5">Create and manage client proposals</p>
         </div>
-        <Button onClick={() => navigate('/tools/offer-generator/new')}>
-          + New Offer
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => void handleLoadExample()} disabled={loadingExample}>
+            {loadingExample ? 'Loading…' : 'Load example'}
+          </Button>
+          <Button onClick={() => navigate('/tools/offer-generator/new')}>
+            + New Offer
+          </Button>
+        </div>
       </div>
 
       {loading && <div className="text-sm text-muted-foreground">Loading…</div>}
@@ -59,16 +79,14 @@ export function OfferGeneratorView() {
             className="bg-white rounded-[10px] border border-border p-4 flex items-center justify-between cursor-pointer hover:border-primary/30 transition-colors"
             onClick={() => navigate(`/tools/offer-generator/${offer.id}`)}
           >
-            <div className="flex items-center gap-4">
-              <div>
-                <div className="font-semibold text-sm text-primary">{offer.title}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">
-                  {offer.offer_number && <span className="mr-2">{offer.offer_number}</span>}
-                  {offer.client_name}
-                  {offer.pricing_total > 0 && (
-                    <span className="ml-2">· €{offer.pricing_total.toLocaleString('sl-SI')}</span>
-                  )}
-                </div>
+            <div>
+              <div className="font-semibold text-sm text-primary">{offer.title}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                {offer.offer_number && <span className="mr-2">{offer.offer_number}</span>}
+                {offer.client_name}
+                {offer.pricing_total > 0 && (
+                  <span className="ml-2">· €{offer.pricing_total.toLocaleString('sl-SI')}</span>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-3">

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useOffersStore } from '../stores/offers'
 import { Button } from '../components/ui/button'
@@ -11,7 +11,7 @@ import type { OfferSection } from '../lib/types'
 export function OfferEditorView() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { currentOffer, versions, loading, saving, fetchById, fetchVersions, update, saveVersion, restoreVersion } = useOffersStore()
+  const { currentOffer, versions, loading, saving, fetchById, fetchVersions, update, updateLocal, saveVersion, restoreVersion } = useOffersStore()
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -35,17 +35,17 @@ export function OfferEditorView() {
 
   const selectedSection = currentOffer.sections.find(s => s.id === selectedSectionId) ?? null
 
-  function handleSectionChange(updated: OfferSection) {
+  const handleSectionChange = useCallback((updated: OfferSection) => {
     const sections = currentOffer!.sections.map(s => s.id === updated.id ? updated : s)
-    void update(currentOffer!.id, { sections })
-  }
+    updateLocal({ sections })
+  }, [currentOffer, updateLocal])
 
-  function handleToggleSection(sectionId: string) {
+  const handleToggleSection = useCallback((sectionId: string) => {
     const sections = currentOffer!.sections.map(s =>
       s.id === sectionId ? { ...s, enabled: !s.enabled } : s
     )
-    void update(currentOffer!.id, { sections })
-  }
+    updateLocal({ sections })
+  }, [currentOffer, updateLocal])
 
   async function handleSave() {
     try {
@@ -74,40 +74,60 @@ export function OfferEditorView() {
     }
   }
 
-  function handlePreview() {
+  const handlePreview = useCallback(() => {
     const html = renderOfferToHtml(currentOffer!)
     const blob = new Blob([html], { type: 'text/html' })
     const url = URL.createObjectURL(blob)
     window.open(url, '_blank')
     setTimeout(() => URL.revokeObjectURL(url), 10000)
-  }
+  }, [currentOffer])
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-border">
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+      {/* Top bar — dark, matches AgencyOS topbar style */}
+      <div
+        className="flex items-center justify-between px-6 border-b"
+        style={{ background: 'var(--navy)', borderColor: 'rgba(255,255,255,0.08)', flexShrink: 0, height: 56 }}
+      >
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/tools/offer-generator')}
-            className="text-muted-foreground hover:text-primary text-sm"
+            style={{ color: 'rgba(255,255,255,0.5)' }}
+            className="hover:text-white transition-colors"
+            title="Back to offers"
           >
-            ←
+            <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
           </button>
           <div>
-            <div className="font-semibold text-sm text-primary">{currentOffer.title}</div>
-            <div className="text-xs text-muted-foreground">{currentOffer.client_name} · {currentOffer.offer_number}</div>
+            <div className="font-semibold text-sm text-white leading-tight">{currentOffer.title}</div>
+            <div className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>{currentOffer.client_name}{currentOffer.offer_number ? ` · ${currentOffer.offer_number}` : ''}</div>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={handlePreview}>
+          <button
+            onClick={handlePreview}
+            className="text-sm font-medium transition-colors px-3 py-1.5 rounded"
+            style={{ color: 'rgba(255,255,255,0.65)', background: 'rgba(255,255,255,0.07)' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.13)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.07)')}
+          >
             Preview PDF
-          </Button>
-          <Button size="sm" onClick={() => void handleSave()} disabled={saving}>
+          </button>
+          <button
+            onClick={() => void handleSave()}
+            disabled={saving}
+            className="text-sm font-semibold px-4 py-1.5 rounded transition-colors"
+            style={{ background: '#E85C1A', color: '#fff', opacity: saving ? 0.6 : 1, cursor: saving ? 'not-allowed' : 'pointer' }}
+            onMouseEnter={e => { if (!saving) e.currentTarget.style.background = '#d04f15' }}
+            onMouseLeave={e => { if (!saving) e.currentTarget.style.background = '#E85C1A' }}
+          >
             {saving ? 'Saving…' : 'Save'}
-          </Button>
+          </button>
         </div>
       </div>
 
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+      {/* Two-panel body */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
         <SectionSidebar
           sections={currentOffer.sections}
           selectedId={selectedSectionId}
@@ -119,7 +139,7 @@ export function OfferEditorView() {
           saving={saving}
         />
 
-        <div style={{ flex: 1, overflowY: 'auto', background: '#fafaf8' }}>
+        <div className="flex-1 overflow-y-auto" style={{ background: '#f8f8f6' }}>
           {selectedSection ? (
             <SectionEditor
               section={selectedSection}

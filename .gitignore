@@ -5,3 +5,9 @@ dist/
 .env.*.local
 .superpowers/
 .playwright-mcp/
+
+# Local documents — not part of the codebase
+RS OS/
+RS_SALES/
+AGENCY-OS-SPEC.md
+.DS_Store

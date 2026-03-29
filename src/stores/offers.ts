@@ -1,6 +1,18 @@
 import { create } from 'zustand'
 import { supabase } from '../lib/supabase'
-import type { Offer, OfferVersion } from '../lib/types'
+import type { Offer, OfferVersion, OfferMeta, OfferSection } from '../lib/types'
+import { getBoilerplate } from '../lib/offerBoilerplate'
+
+interface GenerateParams {
+  mode: 'quick' | 'structured'
+  brief?: string
+  formData?: Record<string, unknown>
+  language: 'sl' | 'en'
+  sections: string[]
+  coverMeta: OfferMeta
+  clientName: string
+  offerNumber: string
+}
 
 interface OffersState {
   offers: Offer[]
@@ -8,14 +20,17 @@ interface OffersState {
   versions: OfferVersion[]
   loading: boolean
   saving: boolean
+  generating: boolean
   fetchAll: () => Promise<void>
   fetchById: (id: string) => Promise<void>
   create: (data: Omit<Offer, 'id' | 'created_at' | 'updated_at'>) => Promise<string>
   update: (id: string, data: Partial<Omit<Offer, 'id' | 'created_at'>>) => Promise<void>
+  updateLocal: (data: Partial<Omit<Offer, 'id' | 'created_at'>>) => void
   deleteOffer: (id: string) => Promise<void>
   fetchVersions: (offerId: string) => Promise<void>
   saveVersion: (offerId: string) => Promise<void>
   restoreVersion: (versionId: string) => Promise<void>
+  generateFromBrief: (params: GenerateParams) => Promise<string>
 }
 
 export const useOffersStore = create<OffersState>((set, get) => ({
@@ -24,6 +39,7 @@ export const useOffersStore = create<OffersState>((set, get) => ({
   versions: [],
   loading: false,
   saving: false,
+  generating: false,
 
   fetchAll: async () => {
     set({ loading: true })
@@ -86,6 +102,11 @@ export const useOffersStore = create<OffersState>((set, get) => ({
     } finally {
       set({ saving: false })
     }
+  },
+
+  updateLocal: (data) => {
+    const current = get().currentOffer
+    if (current) set({ currentOffer: { ...current, ...data } as Offer })
   },
 
   deleteOffer: async (id: string) => {
@@ -158,5 +179,45 @@ export const useOffersStore = create<OffersState>((set, get) => ({
     })
 
     await get().fetchById(version.offer_id)
+  },
+
+  generateFromBrief: async (params: GenerateParams): Promise<string> => {
+    set({ generating: true })
+    try {
+      const boilerplate = getBoilerplate(params.language)
+
+      const { data, error } = await supabase.functions.invoke('offer-generate', {
+        body: {
+          mode: params.mode,
+          brief: params.brief,
+          formData: params.formData,
+          language: params.language,
+          sections: params.sections,
+          boilerplate,
+        },
+      })
+
+      if (error) throw error
+
+      const generated = data as { title: string; sections: OfferSection[]; pricing_total: number }
+
+      const id = await get().create({
+        title: params.coverMeta.cover_title ?? generated.title ?? params.clientName,
+        client_name: params.clientName,
+        offer_number: params.offerNumber,
+        language: params.language,
+        mode: params.mode,
+        brief_text: params.brief ?? null,
+        sections: generated.sections ?? [],
+        meta: params.coverMeta,
+        pricing_total: generated.pricing_total ?? 0,
+        status: 'draft',
+        version: 1,
+      })
+
+      return id
+    } finally {
+      set({ generating: false })
+    }
   },
 }))

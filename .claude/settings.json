@@ -22,7 +22,16 @@
       "Bash(/tmp/spec_check.txt:*)",
       "Read(//tmp/**)",
       "Bash(npm install:*)",
-      "Bash(python3 -c \":*)"
+      "Bash(python3 -c \":*)",
+      "Bash(/Users/nino/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.2/scripts/start-server.sh --project-dir /Users/nino/Documents/GitHub/rscrmnino)",
+      "Bash(/Users/nino/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.2/skills/brainstorming/scripts/start-server.sh --project-dir /Users/nino/Documents/GitHub/rscrmnino)",
+      "Bash(open http://localhost:5173/tools/offer-generator)",
+      "mcp__plugin_supabase_supabase__list_organizations",
+      "mcp__plugin_supabase_supabase__deploy_edge_function",
+      "mcp__plugin_supabase_supabase__get_logs",
+      "Bash(find /Users/nino/Documents/GitHub/rscrmnino/src/stores -type f -name *.ts -o -name *.js)",
+      "Bash(find /Users/nino/Documents/GitHub/rscrmnino/src/lib -type f -name *.ts -o -name *.js)",
+      "Bash(find /Users/nino/Documents/GitHub/rscrmnino/src/views -type f -name *.ts -o -name *.js)"
     ],
     "additionalDirectories": [
       "/private/tmp"

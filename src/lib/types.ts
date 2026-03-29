@@ -593,13 +593,38 @@ export type OfferStatus = 'draft' | 'sent' | 'accepted' | 'rejected'
 
 export interface OfferBlock {
   id: string
-  type: 'paragraph' | 'bullet-list' | 'phase-block' | 'pricing-table' | 'goal-list' | 'audience-grid' | 'service-block' | 'notes'
+  type:
+    | 'paragraph'
+    | 'bullet-list'
+    | 'goal-list'
+    | 'phase-block'
+    | 'pricing-table'
+    | 'price-table'
+    | 'audience-grid'
+    | 'pillar-block'
+    | 'func-grid'
+    | 'service-block'
+    | 'extra-card'
+    | 'maint-grid'
+    | 'sla-table'
+    | 'team-grid'
+    | 'ref-grid'
+    | 'summary-box'
+    | 'cms-explainer'
+    | 'tech-grid'
+    | 'closing-block'
+    | 'info-box'
+    | 'two-col'
+    | 'stat-grid'
+    | 'notes'
+    | 'boilerplate'
   content: string
+  boilerplate_ref?: string
 }
 
 export interface OfferSection {
   id: string
-  type: 'cover' | 'intro' | 'scope' | 'pricing' | 'timeline' | 'notes' | 'terms' | 'copyright' | 'payment' | 'custom'
+  type: 'cover' | 'intro' | 'agency' | 'strategy' | 'phases' | 'functionality' | 'scope' | 'tech' | 'optional-services' | 'maintenance' | 'rate-card' | 'team' | 'references' | 'pricing' | 'notes' | 'closing' | 'custom'
   title: string
   enabled: boolean
   order: number

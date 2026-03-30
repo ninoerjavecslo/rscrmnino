@@ -6,7 +6,6 @@ import { useHolidayStore } from '../../stores/holidays'
 import { workDaysInRange, adjustedCapacityForRange } from '../../lib/capacityUtils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { ReportHeader } from '../../components/ReportHeader'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
@@ -29,19 +28,6 @@ interface DelivRow {
 }
 
 interface TimeOffRow { member_id: string; start_date: string; end_date: string }
-
-interface MonthData {
-  label: string       // e.g. "Apr 2026"
-  monthKey: string    // e.g. "2026-04"
-  start: string
-  end: string
-  capacity: number
-  estimated: number
-}
-
-interface TeamMonthData extends MonthData {
-  teamBreakdown: Record<string, { capacity: number; estimated: number }>
-}
 
 interface Scenario {
   title: string
@@ -170,7 +156,7 @@ export function CapacityForecastView() {
         .lte('start_date', rangeEnd).gte('end_date', rangeStart),
       holidayStore.fetchByRange(rangeStart, rangeEnd),
     ]).then(([delivRes, toRes, hols]) => {
-      setDeliverables((delivRes.data ?? []) as DelivRow[])
+      setDeliverables((delivRes.data ?? []) as unknown as DelivRow[])
       setTimeOff((toRes.data ?? []) as TimeOffRow[])
       setHolidays(hols)
       setLoading(false)
@@ -321,15 +307,10 @@ Generate exactly 3 scenarios: optimistic, realistic, worst-case. Be brief and sp
     setAiLoading(false)
   }
 
-  const riskColor: Record<string, string> = {
-    low: 'green', medium: 'amber', high: 'red'
-  }
-
   return (
     <div className="flex-1 overflow-auto">
       <ReportHeader
         title="Capacity Forecast"
-        subtitle="Estimated load vs available capacity with AI scenarios"
       />
 
       <div className="p-6 space-y-6">
@@ -380,7 +361,7 @@ Generate exactly 3 scenarios: optimistic, realistic, worst-case. Be brief and sp
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
                       <XAxis dataKey="month" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fontSize: 12 }} unit="h" axisLine={false} tickLine={false} />
-                      <Tooltip formatter={(v: number) => `${v}h`} />
+                      <Tooltip formatter={(v: any) => typeof v === 'number' ? `${v}h` : ''} />
                       <Legend />
                       <Bar dataKey="capacity" name="Available Capacity" fill="#e2e8f0" radius={[3, 3, 0, 0]} />
                       <Bar dataKey="estimated" name="Estimated Load" fill="#1e293b" radius={[3, 3, 0, 0]} />
@@ -393,7 +374,7 @@ Generate exactly 3 scenarios: optimistic, realistic, worst-case. Be brief and sp
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
                       <XAxis dataKey="month" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fontSize: 12 }} unit="h" axisLine={false} tickLine={false} />
-                      <Tooltip formatter={(v: number) => `${v}h`} />
+                      <Tooltip formatter={(v: any) => typeof v === 'number' ? `${v}h` : ''} />
                       <Legend />
                       {teamNames.map((t, i) => (
                         <Bar key={`${t}_cap`} dataKey={`${t}_cap`} name={i === 0 ? 'Capacity' : undefined}

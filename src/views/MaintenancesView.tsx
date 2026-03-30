@@ -207,6 +207,7 @@ export function MaintenancesView() {
         contract_url: form.contract_url.trim() || null,
         status: form.status,
         notes: form.notes.trim() || null,
+        cms: form.cms.trim() || null,
       }
 
       const hosting: HostingPayload | null = form.hosting_enabled && form.hosting_project_pn && form.hosting_amount

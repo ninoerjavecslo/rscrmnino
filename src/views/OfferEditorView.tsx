@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useOffersStore } from '../stores/offers'
-import { Button } from '../components/ui/button'
 import { toast } from '../lib/toast'
 import { SectionSidebar } from './offer-editor/SectionSidebar'
 import { SectionEditor } from './offer-editor/SectionEditor'

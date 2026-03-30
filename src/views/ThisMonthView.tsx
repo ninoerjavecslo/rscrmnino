@@ -35,6 +35,7 @@ function probColors(p: number) {
 
 function getMonthStr(offset = 0): string {
   const d = new Date()
+  d.setDate(1)  // Set to 1st before changing month to avoid rollover
   d.setMonth(d.getMonth() + offset)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
 }

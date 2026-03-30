@@ -111,7 +111,7 @@ export function RevenuePlannerView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [half, year])
 
-  const activeProjects = pStore.projects.filter(p => p.status === 'active')
+  const activeProjects = pStore.projects.filter(p => p.status === 'active' && p.type !== 'internal')
 
   // Build aggregated lookup: `${projectId}:${month}` → summed cell data
   // Deferred and cost rows are excluded from planned_amount (they don't count as active invoices)

@@ -90,7 +90,8 @@ export function ForecastView() {
   const confirmedRows = useMemo(() =>
     rpStore.rows.filter(r =>
       months.includes(r.month) &&
-      (r.status === 'planned' || r.status === 'issued' || r.status === 'paid' || r.status === 'retainer')
+      (r.status === 'planned' || r.status === 'issued' || r.status === 'paid' || r.status === 'retainer') &&
+      r.project?.type !== 'internal'
     ),
     [rpStore.rows, months]
   )

@@ -556,6 +556,18 @@ export interface MaintenanceHoursLog {
   created_at: string
 }
 
+export interface ProjectOrder {
+  id: string
+  project_id: string
+  offer_ref: string
+  po_number?: string | null
+  description: string
+  amount: number
+  month: string           // YYYY-MM-DD (first of month)
+  revenue_planner_id?: string | null
+  created_at: string
+}
+
 export interface EmailIntakeRule {
   id: string
   maintenance_id: string

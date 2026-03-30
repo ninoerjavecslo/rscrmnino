@@ -63,6 +63,13 @@ interface EditForm {
   notes: string
   status: string
   jira_project_key: string
+  // Hosting
+  has_hosting: boolean
+  hosting_description: string
+  hosting_project_pn: string
+  hosting_cycle: 'monthly' | 'yearly'
+  hosting_amount: string
+  hosting_billing_since: string
 }
 
 interface CRForm {
@@ -290,6 +297,12 @@ export function MaintenanceDetailView() {
       notes:                  maint.notes ?? '',
       status:                 maint.status,
       jira_project_key:       maint.jira_project_key ?? '',
+      has_hosting:            !!hosting,
+      hosting_description:    hosting?.description ?? '',
+      hosting_project_pn:     hosting?.project_pn ?? '',
+      hosting_cycle:          hosting?.cycle ?? 'monthly',
+      hosting_amount:         hosting ? String(hosting.amount) : '',
+      hosting_billing_since:  hosting?.billing_since?.slice(0, 7) ?? '',
     })
     setEditTeamHours(maint.team_hours ?? {})
     setShowEdit(true)
@@ -306,6 +319,13 @@ export function MaintenanceDetailView() {
       const filteredTeamHours = Object.fromEntries(
         Object.entries(editTeamHours).filter(([, v]) => v > 0)
       )
+      const hostingPayload: import('../stores/maintenances').HostingPayload | null = editForm.has_hosting ? {
+        project_pn:    editForm.hosting_project_pn,
+        description:   editForm.hosting_description,
+        cycle:         editForm.hosting_cycle,
+        amount:        parseFloat(editForm.hosting_amount) || 0,
+        billing_since: editForm.hosting_billing_since ? editForm.hosting_billing_since + '-01' : null,
+      } : null
       await store.update(maint.id, {
         name:                   editForm.name,
         client_id:              maint.client_id,
@@ -321,7 +341,10 @@ export function MaintenanceDetailView() {
         status:                 editForm.status as Maintenance['status'],
         team_hours:             Object.keys(filteredTeamHours).length > 0 ? filteredTeamHours : null,
         jira_project_key:       editForm.jira_project_key.trim() || null,
-      })
+      }, hostingPayload)
+      // Refresh hosting state from DB
+      const { data: updatedHosting } = await supabase.from('hosting_clients').select('*').eq('maintenance_id', maint.id).maybeSingle()
+      setHosting((updatedHosting as import('../lib/types').HostingClient) ?? null)
       await fetchRows()
       setShowEdit(false)
       toast('success', 'Contract updated')
@@ -1431,6 +1454,81 @@ export function MaintenanceDetailView() {
                 </div>
               </div>
             )}
+
+            {/* Hosting */}
+            <div className="mb-1">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Hosting</label>
+                <button
+                  type="button"
+                  onClick={() => setEditForm(f => f ? { ...f, has_hosting: !f.has_hosting } : f)}
+                  className="text-xs font-medium px-2.5 py-1 rounded border transition-colors"
+                  style={editForm.has_hosting
+                    ? { background: 'var(--navy)', color: '#fff', borderColor: 'var(--navy)' }
+                    : { background: 'transparent', color: 'var(--c3)', borderColor: 'var(--border)' }
+                  }
+                >
+                  {editForm.has_hosting ? 'Remove hosting' : '+ Add hosting'}
+                </button>
+              </div>
+              {!editForm.has_hosting && (
+                <div className="text-xs text-muted-foreground bg-[#f8f8fa] rounded-lg border border-border px-3 py-2.5">
+                  No hosting linked to this contract.
+                </div>
+              )}
+              {editForm.has_hosting && (
+                <div className="bg-[#f8f8fa] rounded-lg border border-border p-3 flex flex-col gap-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1">Description</label>
+                      <input
+                        value={editForm.hosting_description}
+                        onChange={e => setEditForm(f => f ? { ...f, hosting_description: e.target.value } : f)}
+                        placeholder="e.g. Production server"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1">Project PN</label>
+                      <input
+                        value={editForm.hosting_project_pn}
+                        onChange={e => setEditForm(f => f ? { ...f, hosting_project_pn: e.target.value } : f)}
+                        placeholder="e.g. RS-2026-001"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1">Cycle</label>
+                      <Select
+                        value={editForm.hosting_cycle}
+                        onChange={val => setEditForm(f => f ? { ...f, hosting_cycle: val as 'monthly' | 'yearly' } : f)}
+                        options={[
+                          { value: 'monthly', label: 'Monthly' },
+                          { value: 'yearly',  label: 'Yearly' },
+                        ]}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1">Amount (€)</label>
+                      <input
+                        type="number"
+                        value={editForm.hosting_amount}
+                        onChange={e => setEditForm(f => f ? { ...f, hosting_amount: e.target.value } : f)}
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1">Billing since</label>
+                      <input
+                        type="month"
+                        value={editForm.hosting_billing_since}
+                        onChange={e => setEditForm(f => f ? { ...f, hosting_billing_since: e.target.value } : f)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </Modal>

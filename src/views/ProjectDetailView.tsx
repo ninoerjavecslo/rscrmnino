@@ -7,7 +7,7 @@ import { useSettingsStore } from '../stores/settings'
 import { useResourceStore } from '../stores/resource'
 import { supabase } from '../lib/supabase'
 import { toast } from '../lib/toast'
-import type { RevenuePlanner, Project, ChangeRequest, ProjectDeliverable, ResourceAllocation } from '../lib/types'
+import type { RevenuePlanner, Project, ChangeRequest, ProjectDeliverable, ResourceAllocation, ProjectOrder } from '../lib/types'
 import { Select } from '../components/Select'
 import { Modal } from '../components/Modal'
 import { Button } from '@/components/ui/button'
@@ -270,6 +270,13 @@ export function ProjectDetailView() {
   const [delMemberPercentages, setDelMemberPercentages] = useState<Record<string, number>>({})
   const [editDeliverableTarget, setEditDeliverableTarget] = useState<import('../lib/types').ProjectDeliverable | null>(null)
 
+  // orders (variable projects)
+  const [orders, setOrders] = useState<ProjectOrder[]>([])
+  const [showAddOrder, setShowAddOrder] = useState(false)
+  const [orderForm, setOrderForm] = useState({ offer_ref: '', po_number: '', description: '', amount: '', month: '' })
+  const [orderSaving, setOrderSaving] = useState(false)
+  const [deleteOrderTarget, setDeleteOrderTarget] = useState<ProjectOrder | null>(null)
+
   // project team members
   const [projectMembers, setProjectMembers] = useState<Array<{ id: string; member_id: string; member: { id: string; name: string } }>>([])
   const [showAddMember, setShowAddMember] = useState(false)
@@ -278,7 +285,7 @@ export function ProjectDetailView() {
   const [removeMemberTarget, setRemoveMemberTarget] = useState<{ id: string; name: string } | null>(null)
 
   // tabs
-  const [tab, setTab] = useState<'overview' | 'invoice' | 'resource'>('overview')
+  const [tab, setTab] = useState<'overview' | 'invoice' | 'orders' | 'resource'>('overview')
 
   // project allocations (for resource planning tab)
   const [projectAllocations, setProjectAllocations] = useState<ResourceAllocation[]>([])
@@ -315,6 +322,15 @@ export function ProjectDetailView() {
       })
   }
 
+  const fetchOrders = (projectId: string) => {
+    supabase
+      .from('project_orders')
+      .select('*')
+      .eq('project_id', projectId)
+      .order('month', { ascending: false })
+      .then(({ data }) => setOrders((data ?? []) as ProjectOrder[]))
+  }
+
   useEffect(() => {
     if (!id) return
     fetchRpRows(id)
@@ -322,6 +338,7 @@ export function ProjectDetailView() {
     fetchDeliverables(id)
     fetchProjectMembers(id)
     fetchMembers()
+    fetchOrders(id)
   }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -1044,6 +1061,71 @@ export function ProjectDetailView() {
     } catch { toast('error', 'Failed to remove') }
   }
 
+  // ── Orders ────────────────────────────────────────────────────────────────
+  async function handleAddOrder() {
+    if (!id || !project) return
+    if (!orderForm.offer_ref.trim() || !orderForm.amount || !orderForm.month) return
+    setOrderSaving(true)
+    try {
+      const month = orderForm.month + '-01'
+      // Insert revenue_planner row first
+      const { data: rpRow, error: rpErr } = await supabase
+        .from('revenue_planner')
+        .insert({
+          project_id: id,
+          month,
+          notes: `${orderForm.offer_ref}${orderForm.po_number ? ` · PO: ${orderForm.po_number}` : ''} — ${orderForm.description}`,
+          planned_amount: parseFloat(orderForm.amount),
+          actual_amount: null,
+          status: 'planned' as const,
+          probability: 100,
+        })
+        .select('id')
+        .single()
+      if (rpErr) throw rpErr
+      // Insert order row linked to RP row
+      const { data: orderRow, error: orderErr } = await supabase
+        .from('project_orders')
+        .insert({
+          project_id: id,
+          offer_ref: orderForm.offer_ref.trim(),
+          po_number: orderForm.po_number.trim() || null,
+          description: orderForm.description.trim(),
+          amount: parseFloat(orderForm.amount),
+          month,
+          revenue_planner_id: rpRow.id,
+        })
+        .select('*')
+        .single()
+      if (orderErr) throw orderErr
+      setOrders(prev => [orderRow as ProjectOrder, ...prev])
+      setRpRows(prev => [...prev].sort((a, b) => a.month.localeCompare(b.month)))
+      fetchRpRows(id)
+      setShowAddOrder(false)
+      setOrderForm({ offer_ref: '', po_number: '', description: '', amount: '', month: '' })
+      toast('success', 'Order added to invoice plan')
+    } catch (err) {
+      toast('error', (err as Error).message)
+    } finally {
+      setOrderSaving(false)
+    }
+  }
+
+  async function handleDeleteOrder(order: ProjectOrder) {
+    try {
+      if (order.revenue_planner_id) {
+        await supabase.from('revenue_planner').delete().eq('id', order.revenue_planner_id)
+      }
+      await supabase.from('project_orders').delete().eq('id', order.id)
+      setOrders(prev => prev.filter(o => o.id !== order.id))
+      if (id) fetchRpRows(id)
+      setDeleteOrderTarget(null)
+      toast('success', 'Order deleted')
+    } catch (err) {
+      toast('error', (err as Error).message)
+    }
+  }
+
   return (
     <div>
       {/* ── Project edit modal ── */}
@@ -1708,6 +1790,7 @@ export function ProjectDetailView() {
         {([
           ['overview', 'Overview'],
           ...(project.type !== 'internal' ? [['invoice', 'Invoice Planning']] as const : []),
+          ...(project.type === 'variable' ? [['orders', 'Orders']] as const : []),
           ['resource', 'Resource Planning'],
         ] as const).map(([key, label]) => (
           <button
@@ -2263,6 +2346,66 @@ export function ProjectDetailView() {
           </>
         )}
 
+        {/* ── Orders tab ── */}
+        {tab === 'orders' && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-[15px] font-bold text-primary m-0">Orders</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Each order creates an invoice plan entry automatically.</p>
+              </div>
+              <Button size="sm" onClick={() => setShowAddOrder(true)}>+ Add Order</Button>
+            </div>
+            {orders.length === 0 ? (
+              <Card>
+                <div className="p-8 text-center text-sm text-muted-foreground">No orders yet. Add the first one.</div>
+              </Card>
+            ) : (
+              <Card>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Offer ref</th>
+                      <th>PO number</th>
+                      <th>Description</th>
+                      <th>Month</th>
+                      <th className="text-right">Amount</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orders.map(o => (
+                      <tr key={o.id}>
+                        <td className="font-mono text-xs font-semibold">{o.offer_ref}</td>
+                        <td className="text-xs text-muted-foreground">{o.po_number ?? '—'}</td>
+                        <td className="text-sm">{o.description}</td>
+                        <td className="text-xs text-muted-foreground tabular-nums">
+                          {new Date(o.month + 'T00:00:00').toLocaleDateString('sl-SI', { month: 'short', year: 'numeric' })}
+                        </td>
+                        <td className="text-right font-semibold tabular-nums text-sm">
+                          {o.amount.toLocaleString('sl-SI', { minimumFractionDigits: 2 })} €
+                        </td>
+                        <td className="text-right">
+                          <Button variant="ghost" size="xs" className="text-[#dc2626]" onClick={() => setDeleteOrderTarget(o)}>Del</Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-[var(--c7)] border-t-2 border-border">
+                      <td colSpan={4} className="font-bold text-xs text-[#374151] uppercase tracking-wide">Total</td>
+                      <td className="text-right font-bold tabular-nums">
+                        {orders.reduce((s, o) => s + o.amount, 0).toLocaleString('sl-SI', { minimumFractionDigits: 2 })} €
+                      </td>
+                      <td />
+                    </tr>
+                  </tfoot>
+                </table>
+              </Card>
+            )}
+          </div>
+        )}
+
         {/* ── Resource Planning tab ── */}
         {tab === 'resource' && (
           <div>
@@ -2631,6 +2774,52 @@ export function ProjectDetailView() {
             </div>
           </Modal>
         )}
+
+      {/* ── Add Order modal ── */}
+      {showAddOrder && (
+        <Modal title="Add Order" maxWidth={480} onClose={() => setShowAddOrder(false)}
+          footer={<>
+            <Button variant="outline" size="sm" onClick={() => setShowAddOrder(false)}>Cancel</Button>
+            <Button size="sm" disabled={orderSaving || !orderForm.offer_ref.trim() || !orderForm.amount || !orderForm.month} onClick={handleAddOrder}>
+              {orderSaving ? 'Adding…' : 'Add Order'}
+            </Button>
+          </>}>
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Offer ref</label>
+              <input value={orderForm.offer_ref} onChange={e => setOrderForm(f => ({ ...f, offer_ref: e.target.value }))} placeholder="e.g. 26_07_Telekom-USIMM-2983" autoFocus />
+            </div>
+            <div>
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">PO number <span className="font-normal">optional</span></label>
+              <input value={orderForm.po_number} onChange={e => setOrderForm(f => ({ ...f, po_number: e.target.value }))} placeholder="e.g. 4501108633" />
+            </div>
+          </div>
+          <div className="mb-4">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Description</label>
+            <input value={orderForm.description} onChange={e => setOrderForm(f => ({ ...f, description: e.target.value }))} placeholder="e.g. Aktivnosti SUPR font 03/2026" />
+          </div>
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Amount (€)</label>
+              <input type="number" value={orderForm.amount} onChange={e => setOrderForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" />
+            </div>
+            <div>
+              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Invoice month</label>
+              <input type="month" value={orderForm.month} onChange={e => setOrderForm(f => ({ ...f, month: e.target.value }))} />
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Delete Order confirm ── */}
+      <ConfirmDialog
+        open={!!deleteOrderTarget}
+        title="Delete order?"
+        message={deleteOrderTarget ? `Delete "${deleteOrderTarget.offer_ref}"? This will also remove it from the invoice plan.` : ''}
+        confirmLabel="Delete"
+        onConfirm={() => deleteOrderTarget && handleDeleteOrder(deleteOrderTarget)}
+        onCancel={() => setDeleteOrderTarget(null)}
+      />
 
       </div>
     </div>

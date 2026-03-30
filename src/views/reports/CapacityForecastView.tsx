@@ -170,7 +170,7 @@ export function CapacityForecastView() {
     const days = workDaysInRange(start, end)
     const memberTimeOff = timeOff.filter(t => t.member_id === m.id)
     const cap = adjustedCapacityForRange(m, days, memberTimeOff, holidays, [], new Date(start).getFullYear())
-    return isNaN(cap) ? days.length * (m.hours_per_day ?? 8) : cap
+    return cap.adjustedCapacity
   }, [timeOff, holidays])
 
   // Chart data: overall capacity vs estimated
@@ -187,7 +187,7 @@ export function CapacityForecastView() {
 
   const teamChartData = useMemo(() => {
     return months.map(m => {
-      const row: Record<string, number> & { month: string } = { month: m.label }
+      const row: Record<string, string | number> = { month: m.label }
       teams.forEach(t => {
         const teamMembers = activeMembers.filter(mem => mem.team?.name === t.name)
         const cap = teamMembers.reduce((s, mem) => s + memberCapacity(mem, m.start, m.end), 0)

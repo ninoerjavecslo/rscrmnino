@@ -1459,17 +1459,45 @@ export function MaintenanceDetailView() {
             <div className="mb-1">
               <div className="flex items-center justify-between mb-2">
                 <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Hosting</label>
-                <button
-                  type="button"
-                  onClick={() => setEditForm(f => f ? { ...f, has_hosting: !f.has_hosting } : f)}
-                  className="text-xs font-medium px-2.5 py-1 rounded border transition-colors"
-                  style={editForm.has_hosting
-                    ? { background: 'var(--navy)', color: '#fff', borderColor: 'var(--navy)' }
-                    : { background: 'transparent', color: 'var(--c3)', borderColor: 'var(--border)' }
-                  }
-                >
-                  {editForm.has_hosting ? 'Remove hosting' : '+ Add hosting'}
-                </button>
+                <div className="flex gap-2">
+                  {hosting && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (confirm('Delete hosting from this contract?')) {
+                          setSaving(true)
+                          try {
+                            const { error } = await supabase.from('hosting_clients').delete().eq('maintenance_id', maint.id)
+                            if (error) throw error
+                            setHosting(null)
+                            setEditForm(f => f ? { ...f, has_hosting: false } : f)
+                            await fetchRows()
+                            toast('success', 'Hosting removed')
+                          } catch (err) {
+                            toast('error', (err as Error).message)
+                          } finally {
+                            setSaving(false)
+                          }
+                        }
+                      }}
+                      disabled={saving}
+                      className="text-xs font-medium px-2.5 py-1 rounded border transition-colors text-red-600 border-red-300 hover:bg-red-50"
+                    >
+                      Delete
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setEditForm(f => f ? { ...f, has_hosting: !f.has_hosting } : f)}
+                    className="text-xs font-medium px-2.5 py-1 rounded border transition-colors"
+                    style={editForm.has_hosting
+                      ? { background: 'var(--navy)', color: '#fff', borderColor: 'var(--navy)' }
+                      : { background: 'transparent', color: 'var(--c3)', borderColor: 'var(--border)' }
+                    }
+                  >
+                    {editForm.has_hosting ? 'Hide' : '+ Add hosting'}
+                  </button>
+                </div>
               </div>
               {!editForm.has_hosting && (
                 <div className="text-xs text-muted-foreground bg-[#f8f8fa] rounded-lg border border-border px-3 py-2.5">

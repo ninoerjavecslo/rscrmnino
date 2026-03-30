@@ -38,6 +38,9 @@ import { TeamMemberDetailView } from './views/TeamMemberDetailView'
 import { MyWeekView } from './views/MyWeekView'
 import { MemberDashboardView } from './views/MemberDashboardView'
 import { ProfileView } from './views/ProfileView'
+import { ContractsView } from './views/ContractsView'
+import { ContractorsView } from './views/ContractorsView'
+import { AgencyToolsView } from './views/AgencyToolsView'
 import { ReportsView } from './views/ReportsView'
 import { PipelineImpactView } from './views/reports/PipelineImpactView'
 import { DelayImpactView } from './views/reports/DelayImpactView'
@@ -141,6 +144,9 @@ function App() {
                 <Route path="/settings"        element={<SettingsView />} />
                 <Route path="/pixel"           element={<PixelView />} />
                 <Route path="/profile"         element={<ProfileView />} />
+                <Route path="/contracts"       element={<ContractsView />} />
+                <Route path="/contractors"     element={<ContractorsView />} />
+                <Route path="/stack"           element={<AgencyToolsView />} />
               </Routes>
             </main>
           </div>

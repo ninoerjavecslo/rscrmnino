@@ -13,6 +13,7 @@ import { useSettingsStore } from '../stores/settings'
 import { toast } from '../lib/toast'
 import type { Project, Domain, HostingClient, RevenuePlanner, Maintenance, PipelineItem } from '../lib/types'
 import { hostingAnnualValue } from '../lib/types'
+import { buildLogoHtml, openHtmlAsPdf } from '../lib/pdfExport'
 import { Select } from '../components/Select'
 import { Modal } from '../components/Modal'
 import { Button } from '@/components/ui/button'
@@ -1699,6 +1700,161 @@ Client profile:
     { id: 'pipeline', label: `Pipeline${activePipelineItems.length > 0 ? ` (${activePipelineItems.length})` : ''}` },
   ]
 
+  function exportPDF() {
+    if (!client) return
+    const { agencyLogo, agencyName } = settingsStore
+    const logoHtml = buildLogoHtml(agencyLogo, agencyName)
+    const today = new Date().toLocaleDateString('en-GB')
+
+    const inf = (v?: string | null) => v || '—'
+    const eur = (n?: number | null) => n != null ? n.toLocaleString('en-EU') + ' €' : '—'
+
+    const contactParts = [
+      client.email && `<a href="mailto:${client.email}" style="color:#E85C1A">${client.email}</a>`,
+      client.phone && client.phone,
+      client.website && `<a href="${client.website}" style="color:#E85C1A">${client.website.replace(/^https?:\/\//, '')}</a>`,
+      client.contact_person && `Contact: ${client.contact_person}`,
+    ].filter(Boolean).join('  ·  ')
+    const addressLine = [client.address, client.vat_id && `VAT: ${client.vat_id}`].filter(Boolean).join('  ·  ')
+
+    const typeColors: Record<string, string> = { fixed: '#0369a1', maintenance: '#1d4ed8', variable: '#92400e', internal: '#374151' }
+    const typeBgs: Record<string, string>    = { fixed: '#e0f2fe', maintenance: '#dbeafe', variable: '#fef3c7', internal: '#f4f2f6' }
+    const statusColor: Record<string, string> = { active: '#16a34a', paused: '#d97706', completed: '#6b7280', cancelled: '#dc2626' }
+    const statusBg: Record<string, string>    = { active: '#f0fdf4', paused: '#fffbeb', completed: '#f9fafb', cancelled: '#fff1f2' }
+
+    const projRows = projects.map((p, i) => {
+      const bg = i % 2 === 0 ? '#fff' : '#fafaf9'
+      return `<tr>
+        <td style="background:${bg};font-weight:600">${p.name}</td>
+        <td style="background:${bg};color:#6b7280;font-size:9px">${p.pn ?? ''}</td>
+        <td style="background:${bg}"><span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:8px;font-weight:700;background:${typeBgs[p.type] ?? '#f4f2f6'};color:${typeColors[p.type] ?? '#374151'}">${p.type === 'maintenance' ? 'Recurring' : p.type.charAt(0).toUpperCase() + p.type.slice(1)}</span></td>
+        <td style="background:${bg}"><span style="display:inline-block;padding:1px 6px;border-radius:99px;font-size:8px;font-weight:700;background:${statusBg[p.status] ?? '#f9fafb'};color:${statusColor[p.status] ?? '#6b7280'}">${p.status.charAt(0).toUpperCase() + p.status.slice(1)}</span></td>
+        <td style="background:${bg};text-align:right;font-weight:600;color:#16a34a">${p.contract_value ? eur(p.contract_value) : '—'}</td>
+      </tr>`
+    }).join('')
+
+    const maintRows = maintenances.map((m, i) => {
+      const bg = i % 2 === 0 ? '#fff' : '#fafaf9'
+      const mc = { active: '#16a34a', paused: '#d97706', cancelled: '#dc2626' }
+      const mb = { active: '#f0fdf4', paused: '#fffbeb', cancelled: '#fff1f2' }
+      return `<tr>
+        <td style="background:${bg};font-weight:600">${m.name}</td>
+        <td style="background:${bg}"><span style="display:inline-block;padding:1px 6px;border-radius:99px;font-size:8px;font-weight:700;background:${mb[m.status] ?? '#f9fafb'};color:${mc[m.status] ?? '#6b7280'}">${m.status.charAt(0).toUpperCase() + m.status.slice(1)}</span></td>
+        <td style="background:${bg};text-align:right;font-weight:700;color:#16a34a">${eur(m.monthly_retainer)}<span style="font-size:8px;font-weight:400;color:#6b7280"> /mo</span></td>
+        <td style="background:${bg};text-align:right">${m.hours_included}h</td>
+        <td style="background:${bg};color:#6b7280">${m.contract_start ? m.contract_start.slice(0, 7) : '—'}</td>
+        <td style="background:${bg};color:#6b7280">${m.contract_end ? m.contract_end.slice(0, 7) : 'Open-ended'}</td>
+        <td style="background:${bg};color:#6b7280">${m.cms ?? '—'}</td>
+      </tr>`
+    }).join('')
+
+    const hostRows = hostingRows.map((h, i) => {
+      const bg = i % 2 === 0 ? '#fff' : '#fafaf9'
+      return `<tr>
+        <td style="background:${bg};font-weight:600">${inf(h.description)}</td>
+        <td style="background:${bg};color:#6b7280">${h.project_pn ?? '—'}</td>
+        <td style="background:${bg}">${h.cycle}</td>
+        <td style="background:${bg};text-align:right;font-weight:700;color:#16a34a">${eur(h.amount)}</td>
+        <td style="background:${bg}"><span style="display:inline-block;padding:1px 6px;border-radius:99px;font-size:8px;font-weight:700;background:${statusBg[h.status] ?? '#f9fafb'};color:${statusColor[h.status] ?? '#6b7280'}">${h.status.charAt(0).toUpperCase() + h.status.slice(1)}</span></td>
+      </tr>`
+    }).join('')
+
+    const domRows = clientDomains.map((d, i) => {
+      const bg = i % 2 === 0 ? '#fff' : '#fafaf9'
+      const days = daysUntil(d.expiry_date)
+      const expColor = days < 0 ? '#dc2626' : days <= 30 ? '#d97706' : '#16a34a'
+      return `<tr>
+        <td style="background:${bg};font-weight:600">${d.domain_name}</td>
+        <td style="background:${bg};color:${expColor};font-weight:${days <= 30 ? '700' : '400'}">${d.expiry_date.slice(0, 7)}</td>
+        <td style="background:${bg};text-align:right;color:#16a34a;font-weight:600">${eur(d.yearly_amount)}</td>
+        <td style="background:${bg};font-size:9px;color:${expColor}">${days < 0 ? 'Expired' : days <= 7 ? `${days}d left!` : days <= 30 ? `${days}d` : ''}</td>
+      </tr>`
+    }).join('')
+
+    const pipeRows = activePipelineItems.map((item, i) => {
+      const bg = i % 2 === 0 ? '#fff' : '#fafaf9'
+      return `<tr>
+        <td style="background:${bg};font-weight:600">${item.title ?? item.company_name ?? '—'}</td>
+        <td style="background:${bg};color:#6b7280">${item.deal_type ?? '—'}</td>
+        <td style="background:${bg};text-align:right;font-weight:600;color:#E85C1A">${eur(dealTotal(item))}</td>
+        <td style="background:${bg};color:#6b7280">${item.expected_month ? item.expected_month.slice(0, 7) : '—'}</td>
+      </tr>`
+    }).join('')
+
+    const section = (title: string, tableHtml: string) => tableHtml
+      ? `<div class="section-title">${title}</div>${tableHtml}`
+      : ''
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Figtree',sans-serif;background:#e8e8e5;color:#1a1a1a;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .page{width:210mm;min-height:297mm;margin:20px auto;padding:10mm 14mm;background:#fff;box-shadow:0 4px 40px rgba(0,0,0,.12)}
+  @media print{body{background:#fff}.page{margin:0;box-shadow:none;width:210mm}}
+  @page{size:A4 portrait;margin:0}
+  .header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6mm;border-bottom:2px solid #E85C1A;padding-bottom:5mm}
+  .client-name{font-size:22px;font-weight:800;color:#1a1a1a;letter-spacing:-.5px;margin-top:4px}
+  .contact-line{font-size:10px;color:#6b7280;margin-top:3px;line-height:1.8}
+  .meta{text-align:right;font-size:9px;color:#6b7280;line-height:1.7}
+  .stats{display:flex;gap:10px;margin-bottom:6mm}
+  .stat{background:#fafaf9;border:1px solid #e0e0dd;border-radius:6px;padding:6px 10px;flex:1;text-align:center}
+  .stat-val{font-size:14px;font-weight:800;color:#1a1a1a}
+  .stat-lbl{font-size:8px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-top:1px}
+  .section-title{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#6b7280;margin:5mm 0 2mm;border-top:1px solid #f0efed;padding-top:4mm}
+  .section-title:first-child{border-top:none;padding-top:0}
+  table{width:100%;border-collapse:collapse;margin-bottom:0}
+  th{background:#1a1a1a;color:#fff;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:4px 7px;text-align:left;white-space:nowrap}
+  th.r{text-align:right}
+  td{padding:4px 7px;border-bottom:1px solid #f5f4f2;font-size:10px;vertical-align:middle}
+  .notes-box{background:#fafaf9;border:1px solid #e0e0dd;border-radius:6px;padding:8px 10px;font-size:10px;color:#374151;line-height:1.6;margin-top:2mm}
+  .footer{margin-top:6mm;border-top:1px solid #e0e0dd;padding-top:3mm;display:flex;justify-content:space-between;font-size:8px;color:#94a3b8}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <div>
+      ${logoHtml}
+      <div class="client-name">${client.name}</div>
+      ${contactParts ? `<div class="contact-line">${contactParts}</div>` : ''}
+      ${addressLine ? `<div class="contact-line">${addressLine}</div>` : ''}
+    </div>
+    <div class="meta">
+      <div>Client profile</div>
+      <div>Exported ${today}</div>
+    </div>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="stat-val">${eur(invoicedYTD)}</div><div class="stat-lbl">Invoiced ${CURRENT_YEAR}</div></div>
+    <div class="stat"><div class="stat-val">${eur(prevYearInvoiced)}</div><div class="stat-lbl">Invoiced ${CURRENT_YEAR - 1}</div></div>
+    <div class="stat"><div class="stat-val" style="color:#E85C1A">${eur(totalValue)}</div><div class="stat-lbl">Total Value</div></div>
+    <div class="stat"><div class="stat-val">${projects.length}</div><div class="stat-lbl">Projects</div></div>
+    <div class="stat"><div class="stat-val">${maintenances.filter(m => m.status === 'active').length}</div><div class="stat-lbl">Retainers</div></div>
+  </div>
+  ${projects.length ? section('Projects', `<table><thead><tr><th>Project</th><th>PN</th><th>Type</th><th>Status</th><th class="r">Value</th></tr></thead><tbody>${projRows}</tbody></table>`) : ''}
+  ${maintenances.length ? section('Maintenance Contracts', `<table><thead><tr><th>Contract</th><th>Status</th><th class="r">Retainer</th><th class="r">Hrs/mo</th><th>Start</th><th>End</th><th>CMS</th></tr></thead><tbody>${maintRows}</tbody></table>`) : ''}
+  ${hostingRows.length ? section('Hosting', `<table><thead><tr><th>Description</th><th>Project #</th><th>Cycle</th><th class="r">Amount</th><th>Status</th></tr></thead><tbody>${hostRows}</tbody></table>`) : ''}
+  ${clientDomains.length ? section('Domains', `<table><thead><tr><th>Domain</th><th>Expiry</th><th class="r">Yearly</th><th>Alert</th></tr></thead><tbody>${domRows}</tbody></table>`) : ''}
+  ${activePipelineItems.length ? section('Open Pipeline', `<table><thead><tr><th>Deal</th><th>Type</th><th class="r">Value</th><th>Expected</th></tr></thead><tbody>${pipeRows}</tbody></table>`) : ''}
+  ${client.notes ? `<div class="section-title">Notes</div><div class="notes-box">${client.notes}</div>` : ''}
+  <div class="footer">
+    <div>${agencyName || 'Renderspace'} · support@renderspace.si</div>
+    <div>${today}</div>
+  </div>
+</div>
+<script>window.onload=function(){window.print()}</script>
+</body>
+</html>`
+
+    openHtmlAsPdf(html)
+  }
+
   return (
     <div>
       {/* ── Edit client modal ── */}
@@ -2141,6 +2297,7 @@ Client profile:
             </div>
           </div>
           <div className="flex gap-2 shrink-0">
+            <Button variant="outline" size="sm" onClick={exportPDF}>Export PDF</Button>
             <Button variant="outline" size="sm" onClick={openEdit}>Edit</Button>
             <Button size="sm" onClick={() => setShowAddProject(true)}>+ New Project</Button>
           </div>

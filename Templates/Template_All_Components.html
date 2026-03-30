@@ -1,0 +1,1775 @@
+<!DOCTYPE html>
+<html lang="sl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Template — Vse komponente</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,300;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --black: #0a0a0a;
+    --ink: #1a1a1a;
+    --gray-dark: #0a0a0a;
+    --gray-mid: #555550;
+    --gray-light: #888883;
+    --gray-bg: #f5f5f3;
+    --gray-rule: #e0e0dd;
+    --white: #ffffff;
+    --orange: #E85C1A;
+    --orange-light: #FDF0EA;
+    --orange-dark: #c94a0f;
+    --font: 'Figtree', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font);
+    background: var(--white);
+    color: var(--ink);
+    font-size: 12px;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* ── PAGE WRAPPER ── */
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto;
+    padding: 18mm 18mm 24mm;
+    position: relative;
+    background: var(--white);
+  }
+
+  @media screen {
+    body { background: #e8e8e5; }
+    .page {
+      margin: 20px auto;
+      box-shadow: 0 4px 40px rgba(0,0,0,0.12);
+    }
+    .page + .page { margin-top: 0; }
+  }
+
+  @media print {
+    body { background: white; }
+    .page {
+      margin: 0;
+      width: 210mm;
+      height: 297mm;
+      max-height: 297mm;
+      overflow: hidden;
+      page-break-after: always;
+      break-after: page;
+      box-shadow: none;
+    }
+    .page:last-child {
+      page-break-after: avoid;
+      break-after: avoid;
+    }
+  }
+
+  /* ── COVER PAGE ── */
+  .cover {
+    padding: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: #F2EAE0;
+    position: relative;
+    height: 297mm;
+    min-height: 297mm;
+    max-height: 297mm;
+  }
+  .cover::before {
+    content: '';
+    position: absolute;
+    bottom: -10mm;
+    right: -10mm;
+    width: 160mm;
+    height: 160mm;
+    background: radial-gradient(ellipse at center, #E8320A 0%, #F05A1A 30%, #F5956A 60%, transparent 80%);
+    border-radius: 50%;
+    filter: blur(18px);
+    opacity: 0.92;
+  }
+  .cover::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.08'/%3E%3C/svg%3E");
+    pointer-events: none;
+    mix-blend-mode: multiply;
+  }
+  .cover-header {
+    position: relative;
+    z-index: 2;
+    padding: 12mm 18mm 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+  .cover-wordmark img { height: 28px; width: auto; }
+  .cover-contact {
+    text-align: right;
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--black);
+    line-height: 1.6;
+  }
+  .cover-contact a { color: var(--black); text-decoration: underline; }
+  .cover-body {
+    position: relative;
+    z-index: 2;
+    flex: 1;
+    padding: 44mm 18mm 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+  }
+  .cover-eyebrow {
+    display: block;
+    width: fit-content;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--white);
+    background: var(--orange);
+    padding: 3px 8px;
+    margin-bottom: 5mm;
+  }
+  .cover-title {
+    font-size: 63px;
+    font-weight: 700;
+    color: var(--black);
+    line-height: 0.95;
+    letter-spacing: -0.03em;
+    margin-bottom: 5mm;
+    max-width: 170mm;
+  }
+  .cover-subtitle-main {
+    font-size: 30px;
+    font-weight: 700;
+    color: var(--black);
+    letter-spacing: -0.01em;
+    margin-bottom: 4mm;
+  }
+  .cover-meta-row {
+    position: relative;
+    z-index: 2;
+    padding: 7mm 18mm;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0;
+  }
+  .cover-meta-item { padding-right: 6mm; }
+  .cover-meta-item + .cover-meta-item {
+    padding-left: 6mm;
+    border-left: 1px solid rgba(0,0,0,0.15);
+  }
+  .cover-meta-label {
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--black);
+    margin-bottom: 3px;
+  }
+  .cover-meta-value {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--black);
+    line-height: 1.5;
+  }
+  .cover .page-footer { display: none !important; }
+
+  /* ── DOC HEADER ── */
+  .doc-header {
+    padding-bottom: 7mm;
+    display: flex;
+    flex-direction: column;
+  }
+  .doc-header-top {
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-start;
+    margin-bottom: 3mm;
+  }
+  .doc-header-logos { display: flex; align-items: center; gap: 8px; }
+  .doc-header-logos img { height: 20px; width: auto; }
+  .doc-header .label { display: none; }
+  .doc-header h1 {
+    font-size: 34px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    color: var(--black);
+  }
+
+  /* ── SECTION LABEL ── */
+  .section-label {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--black);
+    padding-bottom: 4px;
+    border-bottom: 2px solid var(--black);
+    margin-bottom: 5mm;
+    margin-top: 8mm;
+  }
+  .section-label:first-of-type { margin-top: 4mm; }
+  .section-label.sub {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    padding-bottom: 3px;
+    border-bottom: 1px solid var(--gray-rule);
+    margin-top: 6mm;
+  }
+  .section-label.orange { color: var(--orange); border-bottom-color: var(--orange); }
+
+  /* ── PAGE FOOTER ── */
+  .page-footer {
+    position: absolute;
+    bottom: 10mm;
+    left: 18mm;
+    right: 18mm;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 3mm;
+    z-index: 1;
+  }
+  .page-footer span { font-size: 8.5px; color: var(--gray-light); font-weight: 400; }
+  .page-footer .pn { font-weight: 600; color: var(--gray-mid); }
+
+  /* ── INTRO TEXT ── */
+  .intro-text {
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--gray-dark);
+    margin-bottom: 6mm;
+  }
+  .intro-text strong { color: var(--black); font-weight: 700; }
+
+  /* ── GOAL LIST ── */
+  .goal-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 6mm; }
+  .goal-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 10px;
+    background: #F2EAE0;
+    border-left: 3px solid var(--orange);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink);
+    line-height: 1.4;
+  }
+  .goal-item::before { content: '→'; color: var(--orange); font-weight: 800; font-size: 12px; flex-shrink: 0; }
+
+  /* ── AUDIENCE GRID ── */
+  .audience-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; margin-bottom: 6mm; }
+  .audience-card { background: #F2EAE0; padding: 5mm; }
+  .audience-card.highlight { background: var(--black); }
+  .audience-role { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--black); margin-bottom: 3mm; }
+  .audience-card.highlight .audience-role { color: var(--orange); }
+  .audience-need { font-size: 12px; color: var(--black); line-height: 1.5; }
+  .audience-card.highlight .audience-need { color: rgba(255,255,255,0.7); }
+
+  /* ── PILLAR BLOCKS ── */
+  .pillar-block { border: 1px solid var(--gray-rule); margin-bottom: 3mm; break-inside: avoid; }
+  .pillar-head { display: flex; align-items: stretch; background: var(--black); }
+  .pillar-num {
+    background: var(--orange);
+    color: var(--white);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 6px 10px;
+    display: flex;
+    align-items: center;
+    min-width: 10mm;
+    justify-content: center;
+  }
+  .pillar-head-info { padding: 6px 10px; flex: 1; }
+  .pillar-title { font-size: 12px; font-weight: 800; color: var(--white); line-height: 1.2; text-transform: uppercase; letter-spacing: 0.04em; }
+  .pillar-body { padding: 6px 10px 8px; display: flex; flex-direction: column; gap: 5px; }
+  .pillar-text { font-size: 11px; line-height: 1.65; color: var(--gray-dark); }
+  .pillar-text strong { color: var(--black); font-weight: 700; }
+  .pillar-bullets { margin-top: 5px; display: flex; flex-direction: column; gap: 2px; }
+  .pillar-bullet { font-size: 11px; color: var(--gray-dark); line-height: 1.5; display: flex; align-items: baseline; gap: 5px; }
+  .pillar-bullet::before { content: '·'; color: var(--orange); font-weight: 900; flex-shrink: 0; }
+  .pillar-aside { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--gray-rule); }
+  .pillar-aside-label { font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: var(--orange); margin-bottom: 4px; }
+  .pillar-aside-items { display: flex; flex-wrap: wrap; gap: 3px; }
+  .pillar-aside-item { font-size: 9.5px; font-weight: 600; background: var(--gray-bg); color: var(--black); border: 1px solid var(--gray-rule); padding: 2px 8px; border-left: 2px solid var(--orange); }
+
+  /* ── PHASE BLOCKS ── */
+  .phase-block { margin-bottom: 4mm; border: 1px solid var(--gray-rule); break-inside: avoid; }
+  .phase-head { display: flex; align-items: stretch; background: var(--black); }
+  .phase-tag {
+    background: var(--orange);
+    color: var(--white);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 6px 10px;
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+  }
+  .phase-head-info { padding: 6px 10px; flex: 1; }
+  .phase-title { font-size: 13px; font-weight: 800; color: var(--white); line-height: 1.2; }
+  .phase-deadline {
+    font-size: 8.5px;
+    font-weight: 700;
+    color: var(--white);
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.2);
+    padding: 3px 9px;
+    white-space: nowrap;
+    align-self: center;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+  .phase-body { padding: 5px 10px 7px; background: var(--white); }
+  .phase-items { display: grid; grid-template-columns: 1fr 1fr; gap: 1px 8mm; }
+  .phase-item { font-size: 12px; color: var(--gray-dark); line-height: 1.5; display: flex; align-items: baseline; gap: 5px; }
+  .phase-item::before { content: '·'; color: var(--orange); font-weight: 900; flex-shrink: 0; }
+  .phase-deliverables { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--gray-rule); }
+  .phase-deliverables-label { font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: var(--orange); margin-bottom: 4px; }
+  .phase-deliverables-items { display: flex; flex-wrap: wrap; gap: 3px; }
+  .phase-output { font-size: 9.5px; font-weight: 600; background: var(--gray-bg); color: var(--black); border: 1px solid var(--gray-rule); border-left: 2px solid var(--orange); padding: 2px 8px; }
+
+  /* ── SERVICE BLOCKS ── */
+  .service-block { margin-bottom: 5mm; break-inside: avoid; }
+  .service-head { background: var(--orange); padding: 7px 12px; margin-bottom: 4px; }
+  .service-title { font-size: 14px; font-weight: 800; color: var(--white); }
+  .service-body { padding: 2px 0 0 13px; }
+  .service-rich-items { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; margin-bottom: 4px; }
+  .service-rich-item { font-size: 11.5px; line-height: 1.55; color: var(--gray-dark); border-left: 2px solid var(--orange); padding-left: 8px; }
+  .service-rich-title { display: inline; font-weight: 700; color: var(--black); }
+  .service-rich-title::after { content: ' — '; font-weight: 400; color: var(--gray-mid); }
+  .service-rich-desc { display: inline; font-size: 11.5px; color: var(--gray-mid); }
+  .service-output-box { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--gray-rule); display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 6px; }
+  .service-output-label { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: var(--orange); margin-right: 6px; white-space: nowrap; }
+  .service-output-item { font-size: 10px; font-weight: 500; color: var(--gray-dark); line-height: 1.5; }
+  .service-output-item + .service-output-item::before { content: '·'; color: var(--orange); font-weight: 900; margin-right: 6px; }
+
+  /* ── FUNC CARDS ── */
+  .func-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; margin-bottom: 4mm; }
+  .func-card { border: 1px solid var(--gray-rule); break-inside: avoid; }
+  .func-card-head { background: var(--black); display: flex; align-items: stretch; }
+  .func-card-num { background: var(--orange); color: var(--white); font-size: 9px; font-weight: 800; padding: 5px 8px; display: flex; align-items: center; justify-content: center; min-width: 9mm; }
+  .func-card-title { font-size: 11px; font-weight: 800; color: var(--white); padding: 5px 8px; display: flex; align-items: center; flex: 1; line-height: 1.2; }
+  .func-card-body { padding: 5px 8px 7px; }
+  .func-card-desc { font-size: 10.5px; line-height: 1.55; color: var(--gray-dark); margin-bottom: 4px; }
+  .func-tags { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--gray-rule); }
+  .func-tag { font-size: 8px; font-weight: 600; color: var(--black); background: var(--gray-bg); border: 1px solid var(--gray-rule); padding: 1.5px 5px; }
+  .func-card.wide { grid-column: 1 / -1; }
+  .func-card.wide .func-card-body { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
+
+  /* ── PRICE TABLE ── */
+  .price-table { width: 100%; border-collapse: collapse; font-family: var(--font); margin-bottom: 5mm; }
+  .price-table thead tr { background: var(--black); }
+  .price-table thead th { font-size: 9px; font-weight: 700; color: var(--white); text-align: left; padding: 7px 10px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .price-table thead th:last-child { text-align: right; white-space: nowrap; }
+  .price-table tbody tr { background: var(--white); }
+  .price-table tbody tr:nth-child(even) { background: var(--gray-bg); }
+  .price-table tbody td { font-size: 12px; color: var(--gray-dark); padding: 8px 10px; border-bottom: 1px solid var(--gray-rule); line-height: 1.4; vertical-align: top; }
+  .price-table tbody td:first-child { color: var(--black); }
+  .price-table tbody td:last-child { text-align: right; font-weight: 700; color: var(--black); white-space: nowrap; vertical-align: middle; }
+  .price-table .td-name { font-size: 12px; font-weight: 700; color: var(--black); display: block; }
+  .price-table .td-desc { font-size: 10px; font-weight: 400; color: var(--gray-mid); display: block; margin-top: 1px; }
+  .price-table tfoot td { background: var(--black); color: var(--white); font-size: 12px; font-weight: 800; padding: 8px 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .price-table tfoot td:last-child { text-align: right; color: var(--white); font-size: 16px; white-space: nowrap; }
+
+  /* ── BADGE ── */
+  .badge { display: inline-block; font-size: 7.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 6px; border-radius: 2px; margin-left: 5px; vertical-align: middle; }
+  .badge-opt { background: var(--orange-light); color: var(--orange-dark); }
+  .badge-rec { background: var(--black); color: var(--white); }
+
+  /* ── EXTRA CARD ── */
+  .extra-card { border: 1px solid var(--gray-rule); margin-bottom: 4mm; break-inside: avoid; }
+  .extra-card-head { background: var(--black); padding: 6px 10px; display: flex; align-items: center; gap: 8px; }
+  .extra-card-title { font-size: 13px; font-weight: 800; color: var(--white); line-height: 1.2; }
+  .extra-card-price-tag { margin-left: auto; text-align: right; flex-shrink: 0; }
+  .extra-card-price { font-size: 14px; font-weight: 900; color: var(--orange); }
+  .extra-card-price-label { font-size: 7.5px; color: var(--white); text-align: right; opacity: 0.75; }
+  .extra-card-body { padding: 7px 10px 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; }
+  .extra-card-desc { font-size: 12px; line-height: 1.6; color: var(--gray-dark); }
+  .extra-card-value { background: var(--orange-light); padding: 6px 8px; border-left: 3px solid var(--orange); }
+  .extra-card-value-label { font-size: 7.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: var(--orange); margin-bottom: 3px; }
+  .extra-card-value-text { font-size: 10.5px; line-height: 1.5; color: var(--gray-dark); font-weight: 500; }
+  .extra-card-includes { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--gray-rule); display: flex; flex-wrap: wrap; gap: 3px; }
+  .extra-tag { font-size: 9px; font-weight: 600; color: var(--gray-dark); background: var(--gray-bg); border: 1px solid var(--gray-rule); padding: 2px 7px; }
+
+  /* ── MAINTENANCE CARDS ── */
+  .maint-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; margin-bottom: 5mm; }
+  .maint-card { border: 1px solid var(--gray-rule); display: flex; flex-direction: column; }
+  .maint-card.featured { border-color: var(--orange); }
+  .maint-card-head { padding: 5px 8px; background: var(--gray-bg); border-bottom: 1px solid var(--gray-rule); display: flex; justify-content: space-between; align-items: center; }
+  .maint-card.featured .maint-card-head { background: var(--orange); border-bottom-color: var(--orange); }
+  .maint-card-name { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--black); }
+  .maint-card.featured .maint-card-name { color: var(--white); }
+  .maint-card-price { font-size: 13px; font-weight: 900; color: var(--black); }
+  .maint-card.featured .maint-card-price { color: var(--white); }
+  .maint-card-body { padding: 6px 8px 7px; flex: 1; }
+  .maint-item { font-size: 10.5px; color: var(--gray-dark); line-height: 1.6; display: flex; gap: 5px; }
+  .maint-item::before { content: '·'; color: var(--orange); font-weight: 900; }
+
+  /* ── SLA TABLE ── */
+  .sla-table { width: 100%; border-collapse: collapse; margin-bottom: 5mm; font-family: var(--font); }
+  .sla-table thead tr { background: var(--black); }
+  .sla-table thead th { font-size: 9px; font-weight: 700; color: var(--white); padding: 6px 10px; text-align: left; letter-spacing: 0.08em; text-transform: uppercase; }
+  .sla-table tbody tr { background: var(--white); }
+  .sla-table tbody tr:nth-child(even) { background: var(--gray-bg); }
+  .sla-table tbody td { font-size: 11px; color: var(--gray-dark); padding: 7px 10px; border-bottom: 1px solid var(--gray-rule); vertical-align: top; line-height: 1.4; }
+  .sla-table tbody td:first-child { font-weight: 700; color: var(--black); }
+  .sla-priority { display: inline-block; font-size: 8px; font-weight: 800; padding: 2px 7px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .sla-priority.critical { background: #fee2e2; color: #b91c1c; }
+  .sla-priority.high { background: var(--orange-light); color: var(--orange-dark); }
+  .sla-priority.medium { background: #fef9c3; color: #92400e; }
+  .sla-priority.low { background: var(--gray-bg); color: var(--gray-mid); }
+
+  /* ── TEAM CARDS ── */
+  .team-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3mm; margin-bottom: 5mm; }
+  .team-card { border: 1px solid var(--gray-rule); break-inside: avoid; }
+  .team-card-head { background: var(--black); padding: 6px 8px; }
+  .team-card-role { font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: var(--orange); margin-bottom: 2px; }
+  .team-card-name { font-size: 12px; font-weight: 800; color: var(--white); line-height: 1.2; }
+  .team-card-body { padding: 5px 8px 6px; }
+  .team-card-resp { font-size: 10.5px; color: var(--gray-dark); line-height: 1.55; }
+
+  /* ── REFERENCE CARDS ── */
+  .ref-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; margin-bottom: 5mm; }
+  .ref-card { border: 1px solid var(--gray-rule); break-inside: avoid; }
+  .ref-card-img { width: 100%; height: 22mm; background: var(--gray-bg); display: flex; align-items: center; justify-content: center; }
+  .ref-card-img-placeholder { font-size: 9px; color: var(--gray-mid); letter-spacing: 0.06em; text-transform: uppercase; }
+  .ref-card-body { padding: 5px 8px 7px; }
+  .ref-card-client { font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: var(--orange); margin-bottom: 2px; }
+  .ref-card-title { font-size: 12px; font-weight: 800; color: var(--black); margin-bottom: 3px; line-height: 1.2; }
+  .ref-card-desc { font-size: 10px; color: var(--gray-mid); line-height: 1.5; }
+  .ref-tags { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 5px; padding-top: 4px; border-top: 1px solid var(--gray-rule); }
+  .ref-tag { font-size: 7.5px; font-weight: 600; color: var(--black); background: var(--gray-bg); border: 1px solid var(--gray-rule); padding: 1.5px 5px; }
+
+  /* ── SUMMARY BOX ── */
+  .summary-box { background: var(--black); padding: 8mm 10mm; margin-top: 5mm; }
+  .summary-box-label { font-size: 8px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--white); margin-bottom: 4mm; }
+  .summary-rows { display: flex; flex-direction: column; gap: 3px; margin-bottom: 5mm; }
+  .summary-row { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  .summary-row-name { font-size: 12px; color: var(--white); font-weight: 400; }
+  .summary-row-price { font-size: 11px; font-weight: 700; color: var(--white); }
+  .summary-row.opt .summary-row-name { opacity: 0.55; }
+  .summary-row.opt .summary-row-price { opacity: 0.55; }
+  .summary-total { display: flex; justify-content: space-between; align-items: baseline; padding-top: 5mm; border-top: 1px solid rgba(255,255,255,0.2); }
+  .summary-total-label { font-size: 12px; font-weight: 700; color: var(--white); text-transform: uppercase; letter-spacing: 0.04em; }
+  .summary-total-price { font-size: 28px; font-weight: 900; color: var(--orange); letter-spacing: -0.02em; }
+  .summary-total-sub { font-size: 9px; color: var(--white); font-weight: 300; margin-top: 2px; text-align: right; opacity: 0.5; }
+
+  /* ── CMS EXPLAINER ── */
+  .cms-explainer { background: var(--gray-bg); border-left: 3px solid var(--orange); padding: 6mm 8mm; margin-top: 4mm; }
+  .cms-explainer-title { font-size: 16px; font-weight: 800; color: var(--black); margin-bottom: 2mm; }
+  .cms-explainer-body { font-size: 12px; line-height: 1.65; color: var(--gray-dark); margin-bottom: 3mm; }
+  .cms-benefits { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; margin-top: 3mm; }
+  .cms-benefit { display: flex; align-items: baseline; gap: 6px; padding: 4px 6px; font-size: 10.5px; color: var(--gray-dark); line-height: 1.4; }
+  .cms-benefit::before { content: '✓'; color: var(--orange); font-weight: 900; font-size: 10px; flex-shrink: 0; }
+
+  /* ── LANG ROW ── */
+  .lang-row { display: flex; gap: 2px; margin-bottom: 5mm; }
+  .lang-pill { padding: 5px 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+  .lang-pill.primary { background: var(--black); color: var(--white); }
+  .lang-pill.required { background: var(--orange); color: var(--white); }
+  .lang-pill.recommended { background: var(--gray-bg); color: var(--gray-mid); border: 1px solid var(--gray-rule); }
+
+  /* ── CLOSING BLOCK ── */
+  .closing-block { background: var(--orange); padding: 8mm 10mm; margin-top: 6mm; }
+  .closing-title { font-size: 18px; font-weight: 900; color: var(--white); letter-spacing: -0.01em; margin-bottom: 3mm; }
+  .closing-body { font-size: 12px; color: rgba(255,255,255,0.85); line-height: 1.6; margin-bottom: 5mm; }
+  .closing-contacts { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
+  .closing-contact-label { font-size: 8px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255,255,255,0.5); margin-bottom: 2px; }
+  .closing-contact-name { font-size: 12px; font-weight: 800; color: var(--white); margin-bottom: 1px; }
+  .closing-contact-role { font-size: 10px; color: rgba(255,255,255,0.65); }
+
+  /* ── TS CARDS ── */
+  .ts-cards-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; }
+  .ts-card { border: 1px solid var(--gray-rule); display: flex; flex-direction: column; break-inside: avoid; }
+  .ts-card-head { display: flex; align-items: stretch; background: var(--black); }
+  .ts-card-num { font-size: 10px; font-weight: 800; color: var(--white); padding: 5px 7px; display: flex; align-items: center; justify-content: center; min-width: 22px; border-right: 1px solid rgba(255,255,255,0.1); }
+  .ts-card-title { font-size: 11.5px; font-weight: 700; color: var(--white); padding: 4px 7px; display: flex; align-items: center; flex: 1; }
+  .ts-card-body { padding: 4px 7px 5px; background: var(--white); flex: 1; }
+  .ts-card-desc { font-size: 9px; line-height: 1.45; color: var(--black); }
+  .ts-card-subs { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--gray-rule); display: flex; flex-wrap: wrap; gap: 2px; }
+  .ts-sub-tag { font-size: 7.5px; font-weight: 600; color: var(--black); background: var(--gray-bg); border: 1px solid var(--gray-rule); padding: 1.5px 5px; }
+
+  /* ── NOTE / DIVIDER / TWO-COL ── */
+  .note { font-size: 10px; color: var(--gray-mid); line-height: 1.5; font-style: italic; margin-top: 3mm; }
+  .divider { height: 1px; background: var(--gray-rule); margin: 5mm 0; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; }
+  .col-label { font-size: 8.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gray-mid); margin-bottom: 3mm; padding-bottom: 3px; border-bottom: 1px solid var(--gray-rule); }
+  .small-text { font-size: 10px; color: var(--gray-mid); line-height: 1.5; }
+
+  /* ── INFO BOX ── */
+  .info-box { background: var(--orange-light); border-left: 3px solid var(--orange); padding: 5px 10px; margin-bottom: 4mm; font-size: 11px; line-height: 1.6; color: var(--ink); }
+  .info-box strong { font-weight: 700; color: var(--black); }
+
+  /* ── TECH GRID ── */
+  .tech-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 3mm; margin-bottom: 4mm; }
+  .tech-item { background: var(--gray-bg); padding: 6px 8px; display: flex; align-items: center; gap: 7px; }
+  .tech-name { font-size: 10px; font-weight: 700; color: var(--black); line-height: 1.2; }
+  .tech-desc { font-size: 9.5px; color: var(--gray-mid); }
+</style>
+</head>
+<body>
+
+<!-- ══ 1. COVER ══ -->
+<div class="page cover">
+  <div class="cover-header">
+    <div class="cover-wordmark"><img src="../Logo/Primary logo_black.png" alt="Renderspace"></div>
+    <div class="cover-contact">
+      Vilharjeva cesta 36<br>
+      SI-1000 Ljubljana<br>
+      <a href="mailto:info@renderspace.si">info@renderspace.si</a><br>
+      +386 (1) 23 91 200
+    </div>
+  </div>
+  <div class="cover-body">
+    <div class="cover-eyebrow">Ponudba 26_XXX</div>
+    <div class="cover-title">Prenova spletnega mesta</div>
+    <div class="cover-subtitle-main">[Ime naročnika]</div>
+  </div>
+  <div class="cover-meta-row">
+    <div class="cover-meta-item">
+      <div class="cover-meta-label">Naročnik</div>
+      <div class="cover-meta-value">[Podjetje d.o.o.]<br>Ulica 1<br>1000 Ljubljana</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="cover-meta-label">Agencija</div>
+      <div class="cover-meta-value">Renderspace d.o.o.<br>Vilharjeva cesta 36<br>1000 Ljubljana</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="cover-meta-label">Datum · Verzija</div>
+      <div class="cover-meta-value">Marec 2026 · v1.0</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 2. UVOD & CILJI ══ -->
+<div class="page">
+  <div class="doc-header">
+    <div class="doc-header-top">
+      <div class="doc-header-logos"><img src="../Logo/Primary logo_black.png" alt="Renderspace"></div>
+    </div>
+    <h1>Uvod & cilji projekta</h1>
+  </div>
+
+  <div class="section-label" style="margin-top:0;">O projektu</div>
+  <p class="intro-text">[Naročnik] želi <strong>prenovo obstoječega spletnega mesta</strong>, ki bo postalo osrednje digitalno stičišče za stranke, partnerje in medije. Obstoječa platforma ne ustreza sodobnim standardom UX, hitrosti in mobilne prilagodljivosti. Renderspace pristopa celovito — od strategije in oblikovanja do razvoja in dolgoročnega vzdrževanja.</p>
+
+  <div class="section-label">Cilji platforme</div>
+  <div class="goal-list">
+    <div class="goal-item">Zagotoviti sodobno, hitro in mobilno prijazno spletno mesto</div>
+    <div class="goal-item">Izboljšati organsko vidnost (SEO) in dostopnost (WCAG 2.1 AA)</div>
+    <div class="goal-item">Omogočiti uredniški ekipi avtonomno upravljanje vsebin prek CMS</div>
+    <div class="goal-item">Integrirati ključne sisteme (CRM, obrazci, analitika)</div>
+    <div class="goal-item">Vzpostaviti osnovo za dolgoročno digitalno rast</div>
+  </div>
+
+  <div class="section-label">Ciljne publike</div>
+  <div class="audience-grid">
+    <div class="audience-card">
+      <div class="audience-role">Stranke & uporabniki</div>
+      <div class="audience-need">Informacije o produktih, kontakt, podpora</div>
+    </div>
+    <div class="audience-card highlight">
+      <div class="audience-role">Poslovni partnerji</div>
+      <div class="audience-need">Predstavitev, partnerski portal, dokumentacija</div>
+    </div>
+    <div class="audience-card">
+      <div class="audience-role">Mediji & novinarji</div>
+      <div class="audience-need">Press kit, sporočila za javnost, kontakt</div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span>Renderspace d.o.o.</span>
+    <span class="pn">2</span>
+  </div>
+</div>
+
+<!-- ══ 3. O AGENCIJI ══ -->
+<div class="page">
+  <div class="doc-header">
+    <div class="doc-header-top">
+      <div class="doc-header-logos"><img src="../Logo/Primary logo_black.png" alt="Renderspace"></div>
+    </div>
+    <h1>O agenciji Renderspace</h1>
+  </div>
+
+  <p class="intro-text" style="margin-bottom:6mm;">Renderspace je digitalna agencija s specializacijo za razvoj spletnih mest, digitalnih platform in interaktivnih izkušenj. Delujemo na presečišču oblikovanja in tehnologije — vsaka rešitev je skrbno zasnovana tako vizualno kot funkcionalno.</p>
+
+  <!-- Stat boxes -->
+  <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:3mm; margin-bottom:7mm;">
+    <div style="background:var(--black); padding:6mm 7mm;">
+      <div style="font-size:32px; font-weight:900; color:var(--orange); letter-spacing:-0.02em; line-height:1;">10+</div>
+      <div style="font-size:10px; font-weight:600; color:var(--white); margin-top:3px; text-transform:uppercase; letter-spacing:0.06em;">Let izkušenj</div>
+      <div style="font-size:9px; color:rgba(255,255,255,0.45); margin-top:2px;">v digitalnem razvoju</div>
+    </div>
+    <div style="background:var(--orange); padding:6mm 7mm;">
+      <div style="font-size:32px; font-weight:900; color:var(--white); letter-spacing:-0.02em; line-height:1;">50+</div>
+      <div style="font-size:10px; font-weight:600; color:var(--white); margin-top:3px; text-transform:uppercase; letter-spacing:0.06em;">Projektov</div>
+      <div style="font-size:9px; color:rgba(255,255,255,0.65); margin-top:2px;">uspešno zaključenih</div>
+    </div>
+    <div style="background:var(--gray-bg); border:1px solid var(--gray-rule); padding:6mm 7mm;">
+      <div style="font-size:32px; font-weight:900; color:var(--black); letter-spacing:-0.02em; line-height:1;">4</div>
+      <div style="font-size:10px; font-weight:600; color:var(--black); margin-top:3px; text-transform:uppercase; letter-spacing:0.06em;">Trgi</div>
+      <div style="font-size:9px; color:var(--gray-mid); margin-top:2px;">SLO · HR · AT · DE</div>
+    </div>
+  </div>
+
+  <div class="section-label">Naše kompetence</div>
+
+  <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:3mm; margin-bottom:7mm;">
+    <div style="border:1px solid var(--gray-rule); padding:5mm 6mm;">
+      <div style="font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:0.1em; color:var(--orange); margin-bottom:3px;">Oblikovanje</div>
+      <div style="font-size:11px; font-weight:700; color:var(--black); margin-bottom:4px;">UX/UI dizajn</div>
+      <div style="font-size:10px; color:var(--gray-mid); line-height:1.6;">Informacijska arhitektura, wireframes, UI dizajn sistemi, prototipiranje</div>
+    </div>
+    <div style="border:1px solid var(--gray-rule); padding:5mm 6mm;">
+      <div style="font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:0.1em; color:var(--orange); margin-bottom:3px;">Razvoj</div>
+      <div style="font-size:11px; font-weight:700; color:var(--black); margin-bottom:4px;">Spletna mesta & platforme</div>
+      <div style="font-size:10px; color:var(--gray-mid); line-height:1.6;">Next.js, Payload CMS, React, Node.js, PostgreSQL</div>
+    </div>
+    <div style="border:1px solid var(--gray-rule); padding:5mm 6mm;">
+      <div style="font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:0.1em; color:var(--orange); margin-bottom:3px;">E-commerce</div>
+      <div style="font-size:11px; font-weight:700; color:var(--black); margin-bottom:4px;">Spletne trgovine</div>
+      <div style="font-size:10px; color:var(--gray-mid); line-height:1.6;">WooCommerce, Shopify, Stripe integracije, B2B portali</div>
+    </div>
+    <div style="border:1px solid var(--gray-rule); padding:5mm 6mm;">
+      <div style="font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:0.1em; color:var(--orange); margin-bottom:3px;">Optimizacija</div>
+      <div style="font-size:11px; font-weight:700; color:var(--black); margin-bottom:4px;">SEO & dostopnost</div>
+      <div style="font-size:10px; color:var(--gray-mid); line-height:1.6;">Tehnični SEO, Core Web Vitals, WCAG 2.1 AA, večjezičnost</div>
+    </div>
+    <div style="border:1px solid var(--gray-rule); padding:5mm 6mm;">
+      <div style="font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:0.1em; color:var(--orange); margin-bottom:3px;">Marketing</div>
+      <div style="font-size:11px; font-weight:700; color:var(--black); margin-bottom:4px;">E-mail marketing</div>
+      <div style="font-size:10px; color:var(--gray-mid); line-height:1.6;">Mailchimp, Brevo, newsletter kampanje, segmentacija</div>
+    </div>
+    <div style="border:1px solid var(--gray-rule); padding:5mm 6mm;">
+      <div style="font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:0.1em; color:var(--orange); margin-bottom:3px;">Podpora</div>
+      <div style="font-size:11px; font-weight:700; color:var(--black); margin-bottom:4px;">Vzdrževanje & hosting</div>
+      <div style="font-size:10px; color:var(--gray-mid); line-height:1.6;">SLA pogodbe, tehnične posodobitve, monitoring, backupi</div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span>Renderspace d.o.o.</span>
+    <span class="pn">3</span>
+  </div>
+</div>
+
+<!-- ══ 4. STRATEGIJA ══
+     (page numbers below shift +1 from here) -->
+<div class="page">
+  <div class="doc-header">
+    <div class="doc-header-top">
+      <div class="doc-header-logos"><img src="../Logo/Primary logo_black.png" alt="Renderspace"></div>
+    </div>
+    <h1>Strategija pristopa</h1>
+  </div>
+
+  <p class="intro-text" style="margin-bottom:5mm;">Naš pristop temelji na <strong>štirih ključnih stebrih</strong>, ki zagotavljajo, da je rešitev ne le tehnično brezhibna, temveč tudi strateško usmerjena in dolgoročno vzdržna.</p>
+
+  <div class="section-label" style="margin-top:0;">Štirje stebri pristopa</div>
+
+  <div class="pillar-block">
+    <div class="pillar-head">
+      <div class="pillar-num">01</div>
+      <div class="pillar-head-info">
+        <div class="pillar-title">Razumevanje naročnika in ciljnih skupin</div>
+      </div>
+    </div>
+    <div class="pillar-body">
+      <div class="pillar-text">Vsak projekt začnemo z globinskim razumevanjem posla, ciljnih skupin in obstoječih digitalnih točk stika. Izvedemo hevrističen pregled obstoječe platforme, analizo konkurence in delavnice z naročnikovo ekipo.</div>
+      <div class="pillar-aside">
+        <div class="pillar-aside-label">Outputi faze</div>
+        <div class="pillar-aside-items">
+          <div class="pillar-aside-item">UX audit obstoječe rešitve</div>
+          <div class="pillar-aside-item">Uporabniški scenariji</div>
+          <div class="pillar-aside-item">Funkcionalna specifikacija</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pillar-block">
+    <div class="pillar-head">
+      <div class="pillar-num">02</div>
+      <div class="pillar-head-info">
+        <div class="pillar-title">Uporabniška izkušnja (UX) in oblikovanje (UI)</div>
+      </div>
+    </div>
+    <div class="pillar-body">
+      <div class="pillar-text">Zasnujemo <strong>jasno logično pot</strong> do informacije ali dejanja — hitro, intuitivno, brez nepotrebnih korakov. Posebna pozornost je namenjena mobilni izkušnji. Vizualna podoba odseva identiteto naročnika.</div>
+      <div class="pillar-aside">
+        <div class="pillar-aside-label">Vključeno</div>
+        <div class="pillar-aside-items">
+          <div class="pillar-aside-item">Sitemap + wireframes</div>
+          <div class="pillar-aside-item">Art direkcija</div>
+          <div class="pillar-aside-item">UI dizajn sistema</div>
+          <div class="pillar-aside-item">Desktop & mobile</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pillar-block">
+    <div class="pillar-head">
+      <div class="pillar-num">03</div>
+      <div class="pillar-head-info">
+        <div class="pillar-title">SEO, dostopnost in večjezičnost</div>
+      </div>
+    </div>
+    <div class="pillar-body">
+      <div class="pillar-text">Platforma bo zgrajena z mislijo na <strong>organsko vidnost in dostopnost</strong>. Zagotovimo WCAG 2.1 AA skladnost, semantičen HTML, strukturirane podatke, Open Graph in pravilne metapodatke.</div>
+      <div class="pillar-aside">
+        <div class="pillar-aside-label">Jeziki</div>
+        <div class="pillar-aside-items">
+          <div class="pillar-aside-item">🇸🇮 Slovenščina — privzeta</div>
+          <div class="pillar-aside-item">🇬🇧 Angleščina — obvezna</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pillar-block">
+    <div class="pillar-head">
+      <div class="pillar-num">04</div>
+      <div class="pillar-head-info">
+        <div class="pillar-title">Tehnična dovršenost in dolgoročna vzdržnost</div>
+      </div>
+    </div>
+    <div class="pillar-body">
+      <div class="pillar-text">Modularna arhitektura, headless CMS (Payload) in optimizacija Core Web Vitals zagotavljajo hitrost, varnost in enostavno nadgrajevanje. Platforma ostane vzdrževana in živa še leta po izvedbi.</div>
+      <div class="pillar-bullets">
+        <div class="pillar-bullet">Payload CMS — headless arhitektura za hitrost in varnost</div>
+        <div class="pillar-bullet">Core Web Vitals — optimizirano nalaganje na vseh napravah</div>
+        <div class="pillar-bullet">Modularna zasnova — enostavne nadgradnje v prihodnosti</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span>Renderspace d.o.o.</span>
+    <span class="pn">3</span>
+  </div>
+</div>
+
+<!-- ══ 4. FAZE PROJEKTA ══ -->
+<div class="page">
+  <div class="doc-header">
+    <div class="doc-header-top">
+      <div class="doc-header-logos"><img src="../Logo/Primary logo_black.png" alt="Renderspace"></div>
+    </div>
+    <h1>Faze projekta & časovnica</h1>
+  </div>
+
+  <div class="section-label" style="margin-top:0;">Projektne faze</div>
+
+  <div class="phase-block">
+    <div class="phase-head">
+      <div class="phase-tag">Faza 01</div>
+      <div class="phase-head-info">
+        <div class="phase-title">Vzpostavitev projekta & analiza</div>
+      </div>
+      <div class="phase-deadline">Teden 1–2</div>
+    </div>
+    <div class="phase-body">
+      <div class="phase-items">
+        <div class="phase-item">Kick-off delavnica z naročnikovo ekipo</div>
+        <div class="phase-item">Hevrističen pregled obstoječe platforme</div>
+        <div class="phase-item">Analiza ciljnih skupin in konkurence</div>
+        <div class="phase-item">Definicija funkcionalne specifikacije</div>
+      </div>
+      <div class="phase-deliverables">
+        <div class="phase-deliverables-label">Deliverables</div>
+        <div class="phase-deliverables-items">
+          <div class="phase-output">UX audit poročilo</div>
+          <div class="phase-output">Funkcionalna spec</div>
+          <div class="phase-output">Potrjen projektni plan</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="phase-block">
+    <div class="phase-head">
+      <div class="phase-tag">Faza 02</div>
+      <div class="phase-head-info">
+        <div class="phase-title">Načrtovanje & oblikovanje (UX/UI)</div>
+      </div>
+      <div class="phase-deadline">Teden 3–6</div>
+    </div>
+    <div class="phase-body">
+      <div class="phase-items">
+        <div class="phase-item">Informacijska arhitektura in sitemap</div>
+        <div class="phase-item">Wireframes za ključne strani</div>
+        <div class="phase-item">Art direkcija in vizualna identiteta</div>
+        <div class="phase-item">UI dizajn sistem + vse tipske strani</div>
+      </div>
+      <div class="phase-deliverables">
+        <div class="phase-deliverables-label">Deliverables</div>
+        <div class="phase-deliverables-items">
+          <div class="phase-output">Sitemap</div>
+          <div class="phase-output">Wireframes</div>
+          <div class="phase-output">UI dizajn (Figma)</div>
+          <div class="phase-output">Dizajn sistem</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="phase-block">
+    <div class="phase-head">
+      <div class="phase-tag">Faza 03</div>
+      <div class="phase-head-info">
+        <div class="phase-title">Razvoj spletnega mesta</div>
+      </div>
+      <div class="phase-deadline">Teden 7–14</div>
+    </div>
+    <div class="phase-body">
+      <div class="phase-items">
+        <div class="phase-item">Vzpostavitev Payload CMS + Next.js</div>
+        <div class="phase-item">Razvoj vseh tipskih strani in komponent</div>
+        <div class="phase-item">Integracije (obrazci, analitika, CRM)</div>
+        <div class="phase-item">SEO implementacija in optimizacija hitrosti</div>
+      </div>
+      <div class="phase-deliverables">
+        <div class="phase-deliverables-label">Deliverables</div>
+        <div class="phase-deliverables-items">
+          <div class="phase-output">Funkcionalno spletno mesto</div>
+          <div class="phase-output">CMS z vsebinami</div>
+          <div class="phase-output">Staging okolje</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="phase-block">
+    <div class="phase-head">
+      <div class="phase-tag">Faza 04</div>
+      <div class="phase-head-info">
+        <div class="phase-title">Testiranje, vsebine & lansiranje</div>
+      </div>
+      <div class="phase-deadline">Teden 15–16</div>
+    </div>
+    <div class="phase-body">
+      <div class="phase-items">
+        <div class="phase-item">QA testiranje (cross-browser, mobile)</div>
+        <div class="phase-item">Vnos vsebin in izobraževanje urednikov</div>
+        <div class="phase-item">Migracija obstoječih vsebin</div>
+        <div class="phase-item">Produkcijsko lansiranje</div>
+      </div>
+      <div class="phase-deliverables">
+        <div class="phase-deliverables-label">Deliverables</div>
+        <div class="phase-deliverables-items">
+          <div class="phase-output">Lansirana platforma</div>
+          <div class="phase-output">Izobraževanje</div>
+          <div class="phase-output">Dokumentacija</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span>Renderspace d.o.o.</span>
+    <span class="pn">4</span>
+  </div>
+</div>
+
+<!-- ══ 5. POPIS FUNKCIONALNOSTI ══ -->
+<div class="page">
+  <div class="doc-header">
+    <div class="doc-header-top">
+      <div class="doc-header-logos"><img src="../Logo/Primary logo_black.png" alt="Renderspace"></div>
+    </div>
+    <h1>Popis funkcionalnosti</h1>
+  </div>
+
+  <p class="intro-text" style="margin-bottom:5mm;">Spodaj je popis vseh funkcionalnih sklopov, ki so vključeni v obseg projekta. Vsak sklop je razvit po meri in v celoti integriran z Payload CMS ter ostalimi sistemi.</p>
+
+  <div class="section-label" style="margin-top:0;">Funkcionalni sklopi</div>
+
+  <div class="func-grid">
+    <div class="func-card">
+      <div class="func-card-head">
+        <div class="func-card-num">01</div>
+        <div class="func-card-title">Vsebinski del spletnega mesta</div>
+      </div>
+      <div class="func-card-body">
+        <div class="func-card-desc">Večjezična spletna stran z vsemi informacijami o podjetju, produktih, novicah in kontaktu. Celoten uredniški sistem za upravljanje vsebin prek Payload CMS.</div>
+        <div class="func-tags">
+          <span class="func-tag">Do 20 tipskih strani</span>
+          <span class="func-tag">SL / EN</span>
+          <span class="func-tag">Payload CMS</span>
+          <span class="func-tag">Block builder</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="func-card">
+      <div class="func-card-head">
+        <div class="func-card-num">02</div>
+        <div class="func-card-title">Prijavni obrazci & e-mail notifikacije</div>
+      </div>
+      <div class="func-card-body">
+        <div class="func-card-desc">Kontaktni obrazci z avtomatskimi potrditvenimi e-maili in vnosom v CMS. Kategorizacija povpraševanj in avtomatsko usmerjanje na prave prejemnike.</div>
+        <div class="func-tags">
+          <span class="func-tag">Kontakt</span>
+          <span class="func-tag">Auto e-mail</span>
+          <span class="func-tag">CMS admin vnos</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="func-card">
+      <div class="func-card-head">
+        <div class="func-card-num">03</div>
+        <div class="func-card-title">Analitika, piškotki & dostopnost</div>
+      </div>
+      <div class="func-card-body">
+        <div class="func-card-desc">Konfiguracija GA4, GTM in Meta Pixel. Implementacija Consent Mode v2 (GDPR). Zagotavljanje WCAG 2.1 AA in EU Accessibility Act 2025.</div>
+        <div class="func-tags">
+          <span class="func-tag">GA4 + GTM</span>
+          <span class="func-tag">Consent Mode v2</span>
+          <span class="func-tag">WCAG 2.1 AA</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="func-card">
+      <div class="func-card-head">
+        <div class="func-card-num">04</div>
+        <div class="func-card-title">SEO & tehnična optimizacija</div>
+      </div>
+      <div class="func-card-body">
+        <div class="func-card-desc">On-site SEO optimizacija vseh strani. Sitemap.xml, robots.txt, Core Web Vitals, strukturirani podatki (schema.org) in avtomatski OG image za novice.</div>
+        <div class="func-tags">
+          <span class="func-tag">Core Web Vitals</span>
+          <span class="func-tag">Strukturirani podatki</span>
+          <span class="func-tag">XML sitemap</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="func-card wide">
+      <div class="func-card-head">
+        <div class="func-card-num">05</div>
+        <div class="func-card-title">Migracija vsebin & izobraževanje urednikov</div>
+      </div>
+      <div class="func-card-body">
+        <div>
+          <div class="func-card-desc">Prenos obstoječih vsebin (besedila, slike, dokumenti) v novi CMS. Čiščenje in reorganizacija vsebine po novi informacijski arhitekturi.</div>
+          <div class="func-tags">
+            <span class="func-tag">Prenos besedil</span>
+            <span class="func-tag">Prenos slik & medijev</span>
+            <span class="func-tag">SEO redirect mapiranje</span>
+          </div>
+        </div>
+        <div>
+          <div class="func-card-desc">Izobraževanje uredniške ekipe za upravljanje CMS. Priprava pisne dokumentacije in navodil za vnos in urejanje vsebin.</div>
+          <div class="func-tags">
+            <span class="func-tag">4h izobraževanje</span>
+            <span class="func-tag">Pisna dokumentacija</span>
+            <span class="func-tag">Video posnetki</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span>Renderspace d.o.o.</span>
+    <span class="pn">5</span>
+  </div>
+</div>
+
+<!-- ══ 6. OBSEG STORITEV ══ -->
+<div class="page">
+  <div class="doc-header">
+    <div class="doc-header-top">
+      <div class="doc-header-logos"><img src="../Logo/Primary logo_black.png" alt="Renderspace"></div>
+    </div>
+    <h1>Obseg storitev & aktivnosti</h1>
+  </div>
+
+  <div class="section-label" style="margin-top:0;">Storitve</div>
+
+  <div class="service-block">
+    <div class="service-head"><div class="service-title">01 — Vzpostavitev projekta & analiza</div></div>
+    <div class="service-body">
+      <div class="service-rich-items">
+        <div class="service-rich-item"><span class="service-rich-title">Kick-off delavnica</span><span class="service-rich-desc">Skupni sestanek z naročnikovo ekipo za uskladitev ciljev, prioritet in projektnega plana.</span></div>
+        <div class="service-rich-item"><span class="service-rich-title">UX audit</span><span class="service-rich-desc">Hevrističen pregled obstoječe platforme, analiza tehničnih in vsebinskih pomanjkljivosti.</span></div>
+        <div class="service-rich-item"><span class="service-rich-title">Funkcionalna specifikacija</span><span class="service-rich-desc">Dokument, ki natančno opredeljuje vse zahtevane funkcionalnosti, integracije in omejitve.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="service-block">
+    <div class="service-head"><div class="service-title">02 — Načrtovanje & oblikovanje (UX/UI)</div></div>
+    <div class="service-body">
+      <div class="service-rich-items">
+        <div class="service-rich-item"><span class="service-rich-title">Informacijska arhitektura & sitemap</span><span class="service-rich-desc">Definicija strukture spletnega mesta, hierarhije strani in navigacijske logike.</span></div>
+        <div class="service-rich-item"><span class="service-rich-title">Wireframes</span><span class="service-rich-desc">Nizko-fidelitetni žičnati modeli ključnih strani za validacijo UX logike pred oblikovanjem.</span></div>
+        <div class="service-rich-item"><span class="service-rich-title">UI dizajn sistem</span><span class="service-rich-desc">Vizualna podoba, tipografija, barvna paleta, komponente in dizajn vseh tipskih strani.</span></div>
+      </div>
+      <div class="service-output-box">
+        <span class="service-output-label">Deliverables</span>
+        <span class="service-output-item">Sitemap (Figma)</span>
+        <span class="service-output-item">Wireframes</span>
+        <span class="service-output-item">UI dizajn sistema</span>
+        <span class="service-output-item">Dizajn tipskih strani</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="service-block">
+    <div class="service-head"><div class="service-title">03 — Razvoj spletnega mesta</div></div>
+    <div class="service-body">
+      <div class="service-rich-items">
+        <div class="service-rich-item"><span class="service-rich-title">Frontend razvoj</span><span class="service-rich-desc">Implementacija vseh tipskih strani v Next.js po odobrenem UI dizajnu. Pixel-perfect izvedba.</span></div>
+        <div class="service-rich-item"><span class="service-rich-title">CMS vzpostavitev</span><span class="service-rich-desc">Payload CMS konfiguracija, vsebinski tipi, block builder in dostopi za urednike.</span></div>
+        <div class="service-rich-item"><span class="service-rich-title">Integracije</span><span class="service-rich-desc">Povezava z GA4, GTM, e-mail servisom, CRM sistemom in ostalimi zahtevanimi orodji.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="service-block">
+    <div class="service-head"><div class="service-title">04 — Projektno vodenje</div></div>
+    <div class="service-body">
+      <div class="service-rich-items">
+        <div class="service-rich-item"><span class="service-rich-title">Vodenje projekta</span><span class="service-rich-desc">Koordinacija ekipe, komunikacija z naročnikom, sledenje rokom in reševanje morebitnih zapletov.</span></div>
+        <div class="service-rich-item"><span class="service-rich-title">Statusni sestanki</span><span class="service-rich-desc">Tedenski check-in klici in pisna poročila o napredku.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span>Renderspace d.o.o.</span>
+    <span class="pn">6</span>
+  </div>
+</div>
+
+<!-- ══ 7. TEHNIČNA ZASNOVA ══ -->
+<div class="page">
+  <div class="doc-header">
+    <div class="doc-header-top">
+      <div class="doc-header-logos"><img src="../Logo/Primary logo_black.png" alt="Renderspace"></div>
+    </div>
+    <h1>Tehnična zasnova</h1>
+  </div>
+
+  <div class="section-label" style="margin-top:0;">Tehnološki sklad</div>
+
+  <div class="cms-explainer">
+    <div class="cms-explainer-title">Payload CMS — zakaj headless?</div>
+    <div class="cms-explainer-body">Payload CMS je sodobna, odprtokodna headless CMS platforma, ki uredniški ekipi omogoča popolno avtonomijo pri upravljanju vsebin — brez posega razvijalcev. Vsebina je ločena od prikaza, kar zagotavlja hitrost, varnost in enostavno nadgrajevanje v prihodnosti.</div>
+    <div class="cms-benefits">
+      <div class="cms-benefit">Hitro delovanje na vseh napravah</div>
+      <div class="cms-benefit">Višja raven varnosti (headless arhitektura)</div>
+      <div class="cms-benefit">Modularna zasnova — enostavne nadgradnje</div>
+      <div class="cms-benefit">Uredniku prijazno vmesnik</div>
+      <div class="cms-benefit">API-first — enostavne integracije</div>
+      <div class="cms-benefit">Odprtokodna — brez licenčnih stroškov</div>
+    </div>
+  </div>
+
+  <div class="section-label">Tehnologije</div>
+  <div class="tech-grid">
+    <div class="tech-item">
+      <div>
+        <div class="tech-name">Next.js 14+</div>
+        <div class="tech-desc">React framework — SSR, SSG, optimizacija hitrosti</div>
+      </div>
+    </div>
+    <div class="tech-item">
+      <div>
+        <div class="tech-name">Payload CMS</div>
+        <div class="tech-desc">Headless CMS, block builder, večjezičnost</div>
+      </div>
+    </div>
+    <div class="tech-item">
+      <div>
+        <div class="tech-name">PostgreSQL</div>
+        <div class="tech-desc">Relacijska podatkovna baza, produkcijsko okolje</div>
+      </div>
+    </div>
+    <div class="tech-item">
+      <div>
+        <div class="tech-name">Vercel / Hetzner</div>
+        <div class="tech-desc">Hosting z avtomatskim deploymentom in CDN</div>
+      </div>
+    </div>
+    <div class="tech-item">
+      <div>
+        <div class="tech-name">Cloudflare</div>
+        <div class="tech-desc">CDN, DDoS zaščita, DNS upravljanje</div>
+      </div>
+    </div>
+    <div class="tech-item">
+      <div>
+        <div class="tech-name">Resend / Brevo</div>
+        <div class="tech-desc">Transakcijski e-maili in newsletter platforma</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Arhitektura & varnost</div>
+  <div class="two-col">
+    <div>
+      <div class="col-label">Arhitektura</div>
+      <div class="small-text" style="line-height:2;">
+        · JAMstack arhitektura (statično generiranje)<br>
+        · API-first zasnova za enostavne integracije<br>
+        · Ločena frontend in backend infrastruktura<br>
+        · Avtomatski deployment ob vsakem commitu<br>
+        · Staging in produkcijsko okolje
+      </div>
+    </div>
+    <div>
+      <div class="col-label">Varnost & zanesljivost</div>
+      <div class="small-text" style="line-height:2;">
+        · SSL/TLS šifriranje (HTTPS)<br>
+        · Redne varnostne posodobitve<br>
+        · Avtomatski backupi (dnevni)<br>
+        · Uptime monitoring 24/7<br>
+        · GDPR & ZVOP-2 skladnost
+      </div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span>Renderspace d.o.o.</span>
+    <span class="pn">7</span>
+  </div>
+</div>
+
+<!-- ══ 8. OPCIJSKE STORITVE ══ -->
+<div class="page">
+  <div class="doc-header">
+    <div class="doc-header-top">
+      <div class="doc-header-logos"><img src="../Logo/Primary logo_black.png" alt="Renderspace"></div>
+    </div>
+    <h1>Dodatne & opcijske storitve</h1>
+  </div>
+
+  <div class="section-label" style="margin-top:0;">Opcijske nadgradnje <span class="badge badge-opt">Opcijsko</span></div>
+
+  <div class="extra-card">
+    <div class="extra-card-head">
+      <div class="extra-card-head-text">
+        <div class="extra-card-title">E-mail marketing & Newsletter sistem</div>
+      </div>
+      <div class="extra-card-price-tag">
+        <div class="extra-card-price">1.200 EUR</div>
+        <div class="extra-card-price-label">enkratna vzpostavitev</div>
+      </div>
+    </div>
+    <div class="extra-card-body">
+      <div class="extra-card-desc">Vzpostavitev e-mail marketing orodja (Mailchimp ali Brevo). Integracija prijavnega obrazca z double opt-in tokom. Segmentacija baze. Oblikovna predloga v skladu z dizajn sistemom.</div>
+      <div class="extra-card-value">
+        <div class="extra-card-value-label">Vključeno</div>
+        <div class="extra-card-value-text">Double opt-in · GDPR soglasje · Segmentacija · SPF/DKIM/DMARC · Oblikovna predloga</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="extra-card">
+    <div class="extra-card-head">
+      <div class="extra-card-head-text">
+        <div class="extra-card-title">E-commerce / WooCommerce <span class="badge badge-opt">Opcijsko</span></div>
+      </div>
+      <div class="extra-card-price-tag">
+        <div class="extra-card-price">3.500 EUR</div>
+        <div class="extra-card-price-label">enkratna vzpostavitev</div>
+      </div>
+    </div>
+    <div class="extra-card-body">
+      <div class="extra-card-desc">Vzpostavitev spletne trgovine z do 50 produkti. Integracija plačilnih metod (Stripe, PayPal, UPN). Upravljanje zalog, naročil in pošiljanja prek CMS.</div>
+      <div class="extra-card-value">
+        <div class="extra-card-value-label">Vključeno</div>
+        <div class="extra-card-value-text">Stripe · PayPal · UPN · Upravljanje zalog · E-mail notifikacije naročil</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="extra-card">
+    <div class="extra-card-head">
+      <div class="extra-card-head-text">
+        <div class="extra-card-title">Donacijski sistem & uporabniški portal</div>
+      </div>
+      <div class="extra-card-price-tag">
+        <div class="extra-card-price">Po dogovoru</div>
+        <div class="extra-card-price-label">glede na obseg</div>
+      </div>
+    </div>
+    <div class="extra-card-body">
+      <div class="extra-card-desc">Razvoj sistema za enkratne in mesečne donacije. Uporabniški portal za člane/donatorje z zgodovino donacij, certifikati in upravljanjem nastavitev.</div>
+      <div class="extra-card-value">
+        <div class="extra-card-value-label">Primerno za</div>
+        <div class="extra-card-value-text">NVO, dobrodelne organizacije, klubi, članske organizacije</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="extra-card">
+    <div class="extra-card-head">
+      <div class="extra-card-head-text">
+        <div class="extra-card-title">AI iskanje & chatbot asistent</div>
+      </div>
+      <div class="extra-card-price-tag">
+        <div class="extra-card-price">2.400 EUR</div>
+        <div class="extra-card-price-label">enkratna vzpostavitev</div>
+      </div>
+    </div>
+    <div class="extra-card-body">
+      <div class="extra-card-desc">Semantični iskalnik na osnovi vektorske baze za inteligentno iskanje po vsebinah. AI chatbot asistent, ki odgovarja na vprašanja na podlagi vsebine spletnega mesta.</div>
+      <div class="extra-card-value">
+        <div class="extra-card-value-label">Tehnologije</div>
+        <div class="extra-card-value-text">OpenAI Embeddings · pgvector · RAG arhitektura · OpenAI GPT-4o</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span>Renderspace d.o.o.</span>
+    <span class="pn">8</span>
+  </div>
+</div>
+
+<!-- ══ 9. VZDRŽEVANJE & PODPORA ══ -->
+<div class="page">
+  <div class="doc-header">
+    <div class="doc-header-top">
+      <div class="doc-header-logos"><img src="../Logo/Primary logo_black.png" alt="Renderspace"></div>
+    </div>
+    <h1>Vzdrževanje & podpora</h1>
+  </div>
+
+  <div class="section-label" style="margin-top:0;">Paketi vzdrževanja</div>
+
+  <div class="maint-grid">
+    <div class="maint-card">
+      <div class="maint-card-head">
+        <div class="maint-card-name">Osnovni paket</div>
+        <div class="maint-card-price">150 EUR/mes</div>
+      </div>
+      <div class="maint-card-body">
+        <div class="maint-item">Tehnične posodobitve CMS in odvisnosti</div>
+        <div class="maint-item">Varnostni monitoring 24/7</div>
+        <div class="maint-item">Dnevni avtomatski backupi</div>
+        <div class="maint-item">1h razvijalskega dela / mesec</div>
+        <div class="maint-item">Odzivni čas: 48h (delovni dnevi)</div>
+      </div>
+    </div>
+    <div class="maint-card featured">
+      <div class="maint-card-head">
+        <div class="maint-card-name">Profesionalni paket <span class="badge badge-rec">Priporočamo</span></div>
+        <div class="maint-card-price">350 EUR/mes</div>
+      </div>
+      <div class="maint-card-body">
+        <div class="maint-item">Vse iz Osnovnega paketa</div>
+        <div class="maint-item">4h razvijalskega dela / mesec</div>
+        <div class="maint-item">Vsebinske posodobitve po naročilu</div>
+        <div class="maint-item">Mesečno SEO poročilo</div>
+        <div class="maint-item">Odzivni čas: 4h (delovni dnevi)</div>
+        <div class="maint-item">Prednostna obravnava</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">SLA — Odzivni časi in razrešitev napak</div>
+
+  <table class="sla-table">
+    <thead>
+      <tr>
+        <th>Prioriteta</th>
+        <th>Opis incidenta</th>
+        <th>Odzivni čas</th>
+        <th>Razrešitev</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="sla-priority critical">Kritično</span></td>
+        <td>Spletno mesto nedosegljivo ali popolna odpoved</td>
+        <td>2 uri</td>
+        <td>8 ur</td>
+      </tr>
+      <tr>
+        <td><span class="sla-priority high">Visoka</span></td>
+        <td>Kritična funkcionalnost ne deluje (obrazci, plačila)</td>
+        <td>4 ure</td>
+        <td>24 ur</td>
+      </tr>
+      <tr>
+        <td><span class="sla-priority medium">Srednja</span></td>
+        <td>Manjša napaka, ki vpliva na del uporabnikov</td>
+        <td>8 ur</td>
+        <td>3 dni</td>
+      </tr>
+      <tr>
+        <td><span class="sla-priority low">Nizka</span></td>
+        <td>Kozmetična napaka, manjše izboljšave</td>
+        <td>2 delovna dni</td>
+        <td>7 dni</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="section-label">Garancijska doba</div>
+  <div class="info-box">
+    Po uspešnem lansiranju zagotavljamo <strong>90-dnevno garancijsko dobo</strong>, v kateri odpravimo vse napake, ki so posledica naše izvedbe — brez dodatnih stroškov. Garancija ne pokriva sprememb vsebine, novih funkcionalnosti ali napak, ki so posledica posegov tretjih oseb.
+  </div>
+
+  <div class="page-footer">
+    <span>Renderspace d.o.o.</span>
+    <span class="pn">9</span>
+  </div>
+</div>
+
+<!-- ══ 10. CENIK DODATNIH DEL ══ -->
+<div class="page">
+  <div class="doc-header">
+    <div class="doc-header-top">
+      <div class="doc-header-logos"><img src="../Logo/Primary logo_black.png" alt="Renderspace"></div>
+    </div>
+    <h1>Cenik dodatnih del</h1>
+  </div>
+
+  <div class="section-label" style="margin-top:0;">Urne postavke (po garanciji)</div>
+
+  <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:3px; margin-bottom:8mm;">
+    <div style="border:1px solid var(--gray-rule); break-inside:avoid;">
+      <div style="background:var(--black); padding:6px 10px;">
+        <div style="font-size:8px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:var(--white);">Projektni vodja</div>
+      </div>
+      <div style="padding:8px 10px; background:var(--white);">
+        <div style="font-size:22px; font-weight:900; color:var(--black); letter-spacing:-0.02em;">65 <span style="font-size:11px; font-weight:600; color:var(--gray-mid);">EUR/h</span></div>
+      </div>
+    </div>
+    <div style="border:1px solid var(--gray-rule); break-inside:avoid;">
+      <div style="background:var(--black); padding:6px 10px;">
+        <div style="font-size:8px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:var(--white);">UX/UI oblikovalec</div>
+      </div>
+      <div style="padding:8px 10px; background:var(--white);">
+        <div style="font-size:22px; font-weight:900; color:var(--black); letter-spacing:-0.02em;">70 <span style="font-size:11px; font-weight:600; color:var(--gray-mid);">EUR/h</span></div>
+      </div>
+    </div>
+    <div style="border:1px solid var(--gray-rule); break-inside:avoid;">
+      <div style="background:var(--black); padding:6px 10px;">
+        <div style="font-size:8px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:var(--white);">Frontend razvijalec</div>
+      </div>
+      <div style="padding:8px 10px; background:var(--white);">
+        <div style="font-size:22px; font-weight:900; color:var(--black); letter-spacing:-0.02em;">75 <span style="font-size:11px; font-weight:600; color:var(--gray-mid);">EUR/h</span></div>
+      </div>
+    </div>
+    <div style="border:1px solid var(--gray-rule); break-inside:avoid;">
+      <div style="background:var(--black); padding:6px 10px;">
+        <div style="font-size:8px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:var(--white);">Backend razvijalec</div>
+      </div>
+      <div style="padding:8px 10px; background:var(--white);">
+        <div style="font-size:22px; font-weight:900; color:var(--black); letter-spacing:-0.02em;">80 <span style="font-size:11px; font-weight:600; color:var(--gray-mid);">EUR/h</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Letni OPEX stroški</div>
+
+  <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:3px;">
+    <div style="background:var(--gray-bg); padding:8px 10px; border-left:3px solid var(--orange);">
+      <div style="font-size:8px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:var(--orange); margin-bottom:4px;">Hosting</div>
+      <div style="font-size:13px; font-weight:900; color:var(--black);">30–80 EUR</div>
+      <div style="font-size:9px; color:var(--gray-mid); margin-top:3px;">/ mesec · Vercel / Hetzner</div>
+    </div>
+    <div style="background:var(--gray-bg); padding:8px 10px; border-left:3px solid var(--orange);">
+      <div style="font-size:8px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:var(--orange); margin-bottom:4px;">Cloudflare Pro</div>
+      <div style="font-size:13px; font-weight:900; color:var(--black);">20 EUR</div>
+      <div style="font-size:9px; color:var(--gray-mid); margin-top:3px;">/ mesec · CDN & zaščita</div>
+    </div>
+    <div style="background:var(--gray-bg); padding:8px 10px; border-left:3px solid var(--orange);">
+      <div style="font-size:8px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:var(--orange); margin-bottom:4px;">Domene</div>
+      <div style="font-size:13px; font-weight:900; color:var(--black);">15–30 EUR</div>
+      <div style="font-size:9px; color:var(--gray-mid); margin-top:3px;">/ leto · registracija & obnova</div>
+    </div>
+    <div style="background:var(--gray-bg); padding:8px 10px; border-left:3px solid var(--orange);">
+      <div style="font-size:8px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; color:var(--orange); margin-bottom:4px;">SSL certifikat</div>
+      <div style="font-size:13px; font-weight:900; color:var(--black);">Vključen</div>
+      <div style="font-size:9px; color:var(--gray-mid); margin-top:3px;">brez doplačila</div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span>Renderspace d.o.o.</span>
+    <span class="pn">10</span>
+  </div>
+</div>
+
+<!-- ══ 11. PROJEKTNA EKIPA ══ -->
+<div class="page">
+  <div class="doc-header">
+    <div class="doc-header-top">
+      <div class="doc-header-logos"><img src="../Logo/Primary logo_black.png" alt="Renderspace"></div>
+    </div>
+    <h1>Projektna ekipa &amp; vloge</h1>
+  </div>
+
+  <div class="section-label" style="margin-top:0;">Sestava projektne ekipe</div>
+
+  <div class="team-grid">
+    <div class="team-card">
+      <div class="team-card-head">
+        <div class="team-card-role">Projektni vodja</div>
+        <div class="team-card-name">[Ime Priimek]</div>
+      </div>
+      <div class="team-card-body">
+        <div class="team-card-resp">Koordinacija projekta, komunikacija z naročnikom, sledenje rokom in proračunu. Prva kontaktna točka skozi celoten projekt.</div>
+      </div>
+    </div>
+    <div class="team-card">
+      <div class="team-card-head">
+        <div class="team-card-role">UX/UI oblikovalec</div>
+        <div class="team-card-name">[Ime Priimek]</div>
+      </div>
+      <div class="team-card-body">
+        <div class="team-card-resp">Informacijska arhitektura, wireframes, vizualna identiteta in UI dizajn sistema. Odgovoren za celotno oblikovalsko izkušnjo.</div>
+      </div>
+    </div>
+    <div class="team-card">
+      <div class="team-card-head">
+        <div class="team-card-role">Frontend razvijalec</div>
+        <div class="team-card-name">[Ime Priimek]</div>
+      </div>
+      <div class="team-card-body">
+        <div class="team-card-resp">Implementacija dizajna v Next.js. Zagotavljanje pixel-perfect izvedbe, hitrosti in cross-browser kompatibilnosti.</div>
+      </div>
+    </div>
+    <div class="team-card">
+      <div class="team-card-head">
+        <div class="team-card-role">Backend razvijalec</div>
+        <div class="team-card-name">[Ime Priimek]</div>
+      </div>
+      <div class="team-card-body">
+        <div class="team-card-resp">Payload CMS vzpostavitev, API integracije, podatkovna baza in infrastruktura. Odgovoren za zanesljivost in varnost sistema.</div>
+      </div>
+    </div>
+    <div class="team-card">
+      <div class="team-card-head">
+        <div class="team-card-role">SEO specialist</div>
+        <div class="team-card-name">[Ime Priimek]</div>
+      </div>
+      <div class="team-card-body">
+        <div class="team-card-resp">Tehnična SEO optimizacija, strukturirani podatki, sitemap, redirect mapiranje in Core Web Vitals optimizacija.</div>
+      </div>
+    </div>
+    <div class="team-card">
+      <div class="team-card-head">
+        <div class="team-card-role">QA tester</div>
+        <div class="team-card-name">[Ime Priimek]</div>
+      </div>
+      <div class="team-card-body">
+        <div class="team-card-resp">Cross-browser in mobilno testiranje, dostopnost (WCAG), funkcijsko testiranje in regresijsko testiranje pred lansiranjem.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Vloga naročnika v projektu</div>
+  <div class="two-col">
+    <div>
+      <div class="col-label">Pričakovane naloge naročnika</div>
+      <div class="small-text" style="line-height:2;">
+        · Imenovanje projektnega vodje na strani naročnika<br>
+        · Pravočasna dostava vsebin, slik in materialov<br>
+        · Odobritve v dogovorjenih rokih (max 5 delovnih dni)<br>
+        · Dostop do obstoječih sistemov in dokumentacije<br>
+        · Sodelovanje na delavnicah in sestankih
+      </div>
+    </div>
+    <div>
+      <div class="col-label">Komunikacijska orodja</div>
+      <div class="small-text" style="line-height:2;">
+        · Tedenski statusni klici (30 min)<br>
+        · Projektno vodenje: Notion / Linear<br>
+        · Komunikacija: Slack / e-mail<br>
+        · Dizajn pregled: Figma komentarji<br>
+        · Dokumentacija: Notion wiki
+      </div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span>Renderspace d.o.o.</span>
+    <span class="pn">10</span>
+  </div>
+</div>
+
+<!-- ══ 12. REFERENCE ══ -->
+<div class="page">
+  <div class="doc-header">
+    <div class="doc-header-top">
+      <div class="doc-header-logos"><img src="../Logo/Primary logo_black.png" alt="Renderspace"></div>
+    </div>
+    <h1>Reference & izbrani projekti</h1>
+  </div>
+
+  <p class="intro-text" style="margin-bottom:5mm;">Spodaj je izbor projektov, ki so po obsegu in zahtevnosti primerljivi s predvidenim projektom.</p>
+
+  <div class="ref-grid">
+    <div class="ref-card">
+      <div class="ref-card-img"><div class="ref-card-img-placeholder">Slika projekta</div></div>
+      <div class="ref-card-body">
+        <div class="ref-card-client">Naročnik 1</div>
+        <div class="ref-card-title">Prenova korporativnega spletnega mesta</div>
+        <div class="ref-card-desc">Celostna prenova spletnega mesta z novim CMS sistemom, večjezičnostjo in integracijo z internim CRM. Lansiranje v roku 3 mesecev.</div>
+        <div class="ref-tags">
+          <span class="ref-tag">Next.js</span>
+          <span class="ref-tag">Payload CMS</span>
+          <span class="ref-tag">CRM integracija</span>
+          <span class="ref-tag">SL / EN / DE</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="ref-card">
+      <div class="ref-card-img"><div class="ref-card-img-placeholder">Slika projekta</div></div>
+      <div class="ref-card-body">
+        <div class="ref-card-client">Naročnik 2</div>
+        <div class="ref-card-title">Digitalna platforma za člane & donatorje</div>
+        <div class="ref-card-desc">Razvoj celostne platforme z donacijskim sistemom, uporabniškim portalom in e-mail marketing integriranjem za dobrodelno organizacijo.</div>
+        <div class="ref-tags">
+          <span class="ref-tag">Donacijski sistem</span>
+          <span class="ref-tag">Uporabniški portal</span>
+          <span class="ref-tag">Stripe</span>
+          <span class="ref-tag">Mailchimp</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="ref-card">
+      <div class="ref-card-img"><div class="ref-card-img-placeholder">Slika projekta</div></div>
+      <div class="ref-card-body">
+        <div class="ref-card-client">Naročnik 3</div>
+        <div class="ref-card-title">Intranet portal za 500+ zaposlenih</div>
+        <div class="ref-card-desc">Razvoj intranet portala z modulom za novice, dokumente, imenik zaposlenih in integracijo z Microsoft 365. AI iskanje na osnovi vektorske baze.</div>
+        <div class="ref-tags">
+          <span class="ref-tag">Intranet</span>
+          <span class="ref-tag">Microsoft 365</span>
+          <span class="ref-tag">AI iskanje</span>
+          <span class="ref-tag">500+ uporabnikov</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="ref-card">
+      <div class="ref-card-img"><div class="ref-card-img-placeholder">Slika projekta</div></div>
+      <div class="ref-card-body">
+        <div class="ref-card-client">Naročnik 4</div>
+        <div class="ref-card-title">E-commerce platforma z interaktivnimi kartami</div>
+        <div class="ref-card-desc">Spletna trgovina z WooCommerce integracijo, interaktivnimi Mapbox kartami in večjezično podporo za 4 trge.</div>
+        <div class="ref-tags">
+          <span class="ref-tag">WooCommerce</span>
+          <span class="ref-tag">Mapbox</span>
+          <span class="ref-tag">4 jeziki</span>
+          <span class="ref-tag">B2B portal</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span>Renderspace d.o.o.</span>
+    <span class="pn">11</span>
+  </div>
+</div>
+
+<!-- ══ 13. FINANČNI PREGLED ══ -->
+<div class="page">
+  <div class="doc-header">
+    <div class="doc-header-top">
+      <div class="doc-header-logos"><img src="../Logo/Primary logo_black.png" alt="Renderspace"></div>
+    </div>
+    <h1>Finančni pregled</h1>
+  </div>
+
+  <div class="section-label" style="margin-top:0;">Enkratni stroški vzpostavitve</div>
+
+  <table class="price-table">
+    <thead>
+      <tr>
+        <th>Storitev</th>
+        <th style="text-align:right; white-space:nowrap;">Neto EUR</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="td-name">Vzpostavitev projekta & analiza</span><span class="td-desc">Kick-off delavnica, UX audit, funkcionalna specifikacija</span></td>
+        <td>800,00</td>
+      </tr>
+      <tr>
+        <td><span class="td-name">UX/UI oblikovanje</span><span class="td-desc">Sitemap, wireframes, dizajn sistem, tipske strani</span></td>
+        <td>4.200,00</td>
+      </tr>
+      <tr>
+        <td><span class="td-name">Razvoj spletnega mesta</span><span class="td-desc">Frontend, CMS vzpostavitev, integracije</span></td>
+        <td>8.500,00</td>
+      </tr>
+      <tr>
+        <td><span class="td-name">SEO & dostopnost</span><span class="td-desc">Tehnična SEO optimizacija, WCAG 2.1 AA</span></td>
+        <td>600,00</td>
+      </tr>
+      <tr>
+        <td><span class="td-name">Analitika & piškotki</span><span class="td-desc">GA4, GTM, Consent Mode v2</span></td>
+        <td>350,00</td>
+      </tr>
+      <tr>
+        <td><span class="td-name">Migracija vsebin</span><span class="td-desc">Prenos besedil, slik in dokumentov v novi CMS</span></td>
+        <td>600,00</td>
+      </tr>
+      <tr>
+        <td><span class="td-name">Izobraževanje urednikov</span><span class="td-desc">4h izobraževanje + pisna dokumentacija</span></td>
+        <td>400,00</td>
+      </tr>
+      <tr>
+        <td><span class="td-name">Projektno vodenje</span><span class="td-desc">Koordinacija, statusni sestanki, komunikacija</span></td>
+        <td>800,00</td>
+      </tr>
+    </tbody>
+    <tfoot>
+      <tr>
+        <td>Skupaj neto cena</td>
+        <td>16.250,00 EUR</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <div class="section-label">Opcijske storitve</div>
+
+  <table class="price-table">
+    <thead>
+      <tr>
+        <th>Storitev</th>
+        <th style="text-align:right; white-space:nowrap;">Neto EUR</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="td-name">E-mail marketing vzpostavitev <span class="badge badge-opt">Opcijsko</span></span><span class="td-desc">Mailchimp/Brevo, predloga, double opt-in, segmentacija</span></td>
+        <td>1.200,00</td>
+      </tr>
+      <tr>
+        <td><span class="td-name">Newsletter (cena / oddaja) <span class="badge badge-opt">Opcijsko</span></span><span class="td-desc">Oblikovanje in pošiljanje posameznega newslettra</span></td>
+        <td>350,00</td>
+      </tr>
+      <tr>
+        <td><span class="td-name">E-commerce vzpostavitev <span class="badge badge-opt">Opcijsko</span></span><span class="td-desc">WooCommerce, do 50 produktov, Stripe/PayPal</span></td>
+        <td>3.500,00</td>
+      </tr>
+      <tr>
+        <td><span class="td-name">AI iskanje & chatbot <span class="badge badge-opt">Opcijsko</span></span><span class="td-desc">Semantični iskalnik, RAG arhitektura, GPT-4o</span></td>
+        <td>2.400,00</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- TOTAL HIGHLIGHT -->
+  <div style="background:var(--black); padding:8mm 10mm; display:flex; justify-content:space-between; align-items:center;">
+    <div style="font-size:12px; font-weight:700; color:var(--white);">Skupna vrednost projekta · brez DDV</div>
+    <div style="font-size:36px; font-weight:900; color:var(--orange); letter-spacing:-0.02em; line-height:1;">16.250 EUR</div>
+  </div>
+
+  <div class="page-footer">
+    <span>Renderspace d.o.o.</span>
+    <span class="pn">12</span>
+  </div>
+</div>
+
+<!-- ══ 14. SPLOŠNE OPOMBE & ZAKLJUČEK ══ -->
+<div class="page">
+  <div class="doc-header">
+    <div class="doc-header-top">
+      <div class="doc-header-logos"><img src="../Logo/Primary logo_black.png" alt="Renderspace"></div>
+    </div>
+    <h1>Splošne opombe & naslednji koraki</h1>
+  </div>
+
+  <div class="section-label" style="margin-top:0;">Pogoji ponudbe</div>
+
+  <div style="display:flex; flex-direction:column; gap:2px; margin-bottom:6mm;">
+    <div style="display:flex; align-items:baseline; gap:8px; padding:4px 0; font-size:12px; color:var(--black); line-height:1.5; border-bottom:1px solid var(--gray-rule);">
+      <span style="color:var(--orange); font-weight:800; flex-shrink:0;">—</span>
+      V cenah ni vključen DDV (22%).
+    </div>
+    <div style="display:flex; align-items:baseline; gap:8px; padding:4px 0; font-size:12px; color:var(--black); line-height:1.5; border-bottom:1px solid var(--gray-rule);">
+      <span style="color:var(--orange); font-weight:800; flex-shrink:0;">—</span>
+      Ponudba velja 30 dni od datuma izdaje.
+    </div>
+    <div style="display:flex; align-items:baseline; gap:8px; padding:4px 0; font-size:12px; color:var(--black); line-height:1.5; border-bottom:1px solid var(--gray-rule);">
+      <span style="color:var(--orange); font-weight:800; flex-shrink:0;">—</span>
+      Vsebine (besedila, slike, materiali) niso vključene v ponudbo. Obseg in cena se dogovorita posebej.
+    </div>
+    <div style="display:flex; align-items:baseline; gap:8px; padding:4px 0; font-size:12px; color:var(--black); line-height:1.5; border-bottom:1px solid var(--gray-rule);">
+      <span style="color:var(--orange); font-weight:800; flex-shrink:0;">—</span>
+      Naročnik se zavezuje, da bo pravočasno zagotovil potrebne materiale, reference in s projektom povezane dokumente.
+    </div>
+    <div style="display:flex; align-items:baseline; gap:8px; padding:4px 0; font-size:12px; color:var(--black); line-height:1.5; border-bottom:1px solid var(--gray-rule);">
+      <span style="color:var(--orange); font-weight:800; flex-shrink:0;">—</span>
+      Zamude pri odobritvah ali dostavi materialov s strani naročnika lahko vplivajo na rok izvedbe.
+    </div>
+    <div style="display:flex; align-items:baseline; gap:8px; padding:4px 0; font-size:12px; color:var(--black); line-height:1.5;">
+      <span style="color:var(--orange); font-weight:800; flex-shrink:0;">—</span>
+      Izvajalec in naročnik se zavezujeta varovati poslovne skrivnosti. Ta ponudba je zaupna.
+    </div>
+  </div>
+
+  <div class="section-label">Naslednji koraki</div>
+
+  <div class="goal-list" style="margin-bottom:8mm;">
+    <div class="goal-item">Pregled in odobritev ponudbe s strani naročnika</div>
+    <div class="goal-item">Podpis pogodbe o izvedbi storitev</div>
+    <div class="goal-item">Plačilo predračuna (30% ob podpisu)</div>
+    <div class="goal-item">Kick-off sestanek in začetek faze 01</div>
+  </div>
+
+  <div class="closing-block">
+    <div class="closing-title">Veseli se pričetka sodelovanja</div>
+    <div class="closing-body">Prepričani smo, da skupaj lahko zgradimo rešitev, ki bo ne le vizualno impresivna, temveč tudi strateško in tehnično superiorna. Renderspace je vaš dolgoročni digitalni partner.</div>
+    <div class="closing-contacts">
+      <div>
+        <div class="closing-contact-label">Kontaktna oseba</div>
+        <div class="closing-contact-name">[Ime Priimek]</div>
+        <div class="closing-contact-role">Projektni vodja · info@renderspace.si</div>
+      </div>
+      <div>
+        <div class="closing-contact-label">Agencija</div>
+        <div class="closing-contact-name">Renderspace d.o.o.</div>
+        <div class="closing-contact-role">Vilharjeva cesta 36 · +386 (1) 23 91 200</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span>Renderspace d.o.o.</span>
+    <span class="pn">13</span>
+  </div>
+</div>
+
+</body>
+</html>

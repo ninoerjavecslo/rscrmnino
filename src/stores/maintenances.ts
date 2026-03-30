@@ -8,6 +8,7 @@ export interface HostingPayload {
   cycle: 'monthly' | 'yearly'
   amount: number
   billing_since: string | null
+  contract_id?: string | null
   contract_expiry?: string | null
 }
 
@@ -124,6 +125,7 @@ async function syncHosting(maintenanceId: string, clientId: string, hosting: Hos
     cycle: hosting.cycle,
     amount: hosting.amount,
     billing_since: hosting.billing_since,
+    contract_id: hosting.contract_id || null,
     contract_expiry: hosting.contract_expiry || null,
     status: 'active' as const,
     maintenance_id: maintenanceId,

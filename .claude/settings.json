@@ -31,7 +31,8 @@
       "mcp__plugin_supabase_supabase__get_logs",
       "Bash(find /Users/nino/Documents/GitHub/rscrmnino/src/stores -type f -name *.ts -o -name *.js)",
       "Bash(find /Users/nino/Documents/GitHub/rscrmnino/src/lib -type f -name *.ts -o -name *.js)",
-      "Bash(find /Users/nino/Documents/GitHub/rscrmnino/src/views -type f -name *.ts -o -name *.js)"
+      "Bash(find /Users/nino/Documents/GitHub/rscrmnino/src/views -type f -name *.ts -o -name *.js)",
+      "Bash(find /Users/nino/Documents/GitHub/rscrmnino/supabase -name *.sql)"
     ],
     "additionalDirectories": [
       "/private/tmp"

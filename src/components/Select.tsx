@@ -13,9 +13,10 @@ interface Props {
   className?: string
   placeholder?: string
   searchable?: boolean
+  compact?: boolean
 }
 
-export function Select({ value, onChange, options, style, className, placeholder, searchable }: Props) {
+export function Select({ value, onChange, options, style, className, placeholder, searchable, compact }: Props) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const ref = useRef<HTMLDivElement>(null)
@@ -58,7 +59,7 @@ export function Select({ value, onChange, options, style, className, placeholder
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
-          height: 42,
+          height: compact ? 34 : 42,
           outline: 'none',
           fontFamily: 'inherit',
           position: 'relative',

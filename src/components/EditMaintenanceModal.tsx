@@ -12,6 +12,7 @@ export interface MaintenanceFormState {
   billing_month: string
   help_requests_included: string
   hours_included: string
+  contract_id: string
   contract_start: string
   contract_duration_months: string
   contract_url: string
@@ -161,6 +162,12 @@ export function EditMaintenanceModal({
       <div className="grid grid-cols-2 gap-4 mb-3">
         <div>
           <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
+            Contract ID <span className="text-xs text-muted-foreground ml-1">optional</span>
+          </label>
+          <input value={form.contract_id} onChange={(e) => onChange('contract_id', e.target.value)} placeholder="e.g. RS-2026-001" />
+        </div>
+        <div>
+          <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
             CMS / Technology <span className="text-xs text-muted-foreground ml-1">optional</span>
           </label>
           <Select
@@ -170,6 +177,9 @@ export function EditMaintenanceModal({
             options={cmsOptions}
           />
         </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 mb-3">
         <div>
           <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
             Contract URL <span className="text-xs text-muted-foreground ml-1">optional</span>

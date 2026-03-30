@@ -10,7 +10,7 @@ import type { OfferSection } from '../lib/types'
 export function OfferEditorView() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { currentOffer, versions, loading, saving, fetchById, fetchVersions, update, updateLocal, saveVersion, restoreVersion } = useOffersStore()
+  const { currentOffer, versions, saving, fetchById, fetchVersions, update, updateLocal, saveVersion, restoreVersion } = useOffersStore()
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -28,27 +28,24 @@ export function OfferEditorView() {
     }
   }, [currentOffer?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (loading || !currentOffer) {
-    return <div className="p-6 text-sm text-muted-foreground">Loading…</div>
-  }
-
-  const selectedSection = currentOffer.sections.find(s => s.id === selectedSectionId) ?? null
-
   const handleSectionChange = useCallback((updated: OfferSection) => {
-    const sections = currentOffer!.sections.map(s => s.id === updated.id ? updated : s)
+    if (!currentOffer) return
+    const sections = currentOffer.sections.map(s => s.id === updated.id ? updated : s)
     updateLocal({ sections })
   }, [currentOffer, updateLocal])
 
   const handleToggleSection = useCallback((sectionId: string) => {
-    const sections = currentOffer!.sections.map(s =>
+    if (!currentOffer) return
+    const sections = currentOffer.sections.map(s =>
       s.id === sectionId ? { ...s, enabled: !s.enabled } : s
     )
     updateLocal({ sections })
   }, [currentOffer, updateLocal])
 
   async function handleSave() {
+    if (!currentOffer) return
     try {
-      await update(currentOffer!.id, { sections: currentOffer!.sections, meta: currentOffer!.meta })
+      await update(currentOffer.id, { sections: currentOffer.sections, meta: currentOffer.meta })
       toast('success', 'Saved')
     } catch {
       toast('error', 'Save failed')
@@ -56,8 +53,9 @@ export function OfferEditorView() {
   }
 
   async function handleSaveVersion() {
+    if (!currentOffer) return
     try {
-      await saveVersion(currentOffer!.id)
+      await saveVersion(currentOffer.id)
       toast('success', 'Version saved')
     } catch {
       toast('error', 'Failed to save version')
@@ -74,12 +72,19 @@ export function OfferEditorView() {
   }
 
   const handlePreview = useCallback(() => {
-    const html = renderOfferToHtml(currentOffer!)
+    if (!currentOffer) return
+    const html = renderOfferToHtml(currentOffer)
     const blob = new Blob([html], { type: 'text/html' })
     const url = URL.createObjectURL(blob)
     window.open(url, '_blank')
     setTimeout(() => URL.revokeObjectURL(url), 10000)
   }, [currentOffer])
+
+  if (!currentOffer) {
+    return <div className="p-6 text-sm text-muted-foreground">Loading…</div>
+  }
+
+  const selectedSection = currentOffer.sections.find(s => s.id === selectedSectionId) ?? null
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">

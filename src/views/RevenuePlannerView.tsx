@@ -1,12 +1,15 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useProjectsStore } from '../stores/projects'
 import { useRevenuePlannerStore } from '../stores/revenuePlanner'
 import { useInfraStore } from '../stores/infrastructure'
 import { useDomainsStore } from '../stores/domains'
+import { useSettingsStore } from '../stores/settings'
 import type { Project, RevenuePlanner } from '../lib/types'
+import { buildLogoHtml, openHtmlAsPdf } from '../lib/pdfExport'
 import { hostingActiveInMonth } from '../lib/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import * as XLSX from 'xlsx'
 
 // ── Half-year helpers ──────────────────────────────────────────────────────────
 
@@ -93,6 +96,7 @@ export function RevenuePlannerView() {
   const rpStore = useRevenuePlannerStore()
   const infraStore = useInfraStore()
   const domainsStore = useDomainsStore()
+  const settingsStore = useSettingsStore()
 
   const currentYear = new Date().getFullYear()
   const currentMonth = new Date().getMonth() // 0-indexed
@@ -110,6 +114,20 @@ export function RevenuePlannerView() {
     domainsStore.fetchAll()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [half, year])
+
+  const [exportOpen, setExportOpen] = useState(false)
+  const exportRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!exportOpen) return
+    function handleOutside(e: MouseEvent) {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setExportOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleOutside)
+    return () => document.removeEventListener('mousedown', handleOutside)
+  }, [exportOpen])
 
   const activeProjects = pStore.projects.filter(p => p.status === 'active' && p.type !== 'internal')
 
@@ -325,7 +343,342 @@ export function RevenuePlannerView() {
 
   const domainsGrandTotal = months.reduce((sum, m) => sum + domainMonthTotal(m), 0)
 
+  const recurringTotalValue = recurringTotal()
+
   const isLoading = pStore.loading && activeProjects.length === 0
+
+  // ── Export ─────────────────────────────────────────────────────────────────
+
+  function exportExcel() {
+    type Row = (string | number | null)[]
+    const data: Row[] = []
+    const monthLabels = months.map(m => fmtMonthShort(m))
+
+    data.push([`Invoice Plan — ${half} ${year}`])
+    data.push([])
+    data.push(['SUMMARY'])
+    data.push(['Confirmed', 'Likely', 'Best Case', 'Actual Issued'])
+    data.push([
+      confirmedTotal + recurringTotalValue,
+      likelyTotal + recurringTotalValue,
+      bestCaseTotal + recurringTotalValue,
+      actualSum,
+    ])
+    data.push([])
+
+    // Projects
+    data.push(['PROJECTS'])
+    const projHeader: Row = ['Project', 'Client', 'Type']
+    for (const label of monthLabels) projHeader.push(`${label} Plan`, `${label} Actual`)
+    projHeader.push('Total')
+    data.push(projHeader)
+
+    for (const p of activeProjects) {
+      const row: Row = [p.name, p.client?.name ?? '', p.type]
+      let rowPlanned = 0
+      let rowActual = 0
+      for (const m of months) {
+        const cell = rowMap.get(`${p.id}:${m}`)
+        const planned = cell?.planned_amount ?? 0
+        const isIssuedPaid = cell?.status === 'issued' || cell?.status === 'paid'
+        const actual = isIssuedPaid ? (cell?.actual_amount ?? 0) : 0
+        row.push(planned || null, actual || null)
+        rowPlanned += planned
+        rowActual += actual
+      }
+      row.push(rowActual > 0 ? rowActual : rowPlanned || null)
+      data.push(row)
+
+      // Costs sub-row (only if any costs exist)
+      const costsData: (number | null)[] = []
+      let hasCosts = false
+      for (const m of months) {
+        const costEntry = rpStore.rows.find(r => r.project_id === p.id && r.month === m && r.status === 'cost')
+        const amt = costEntry?.actual_amount ?? null
+        costsData.push(null, amt)
+        if (amt) hasCosts = true
+      }
+      if (hasCosts) data.push(['  (costs)', '', '', ...costsData, null])
+    }
+
+    const totRow: Row = ['MONTHLY TOTAL', '', '']
+    for (const m of months) totRow.push(monthPlannedTotal(m) || null, monthActualTotal(m) || null)
+    totRow.push(totalPlanned || null)
+    data.push(totRow)
+
+    // Maintenance Retainers
+    if (retainerByMaint.size > 0) {
+      data.push([])
+      data.push(['MAINTENANCE RETAINERS'])
+      const retHeader: Row = ['Contract', 'Client']
+      for (const label of monthLabels) retHeader.push(`${label} Plan`, `${label} Actual`)
+      retHeader.push('Total')
+      data.push(retHeader)
+
+      for (const [mid, { name, clientName, rows: retRows }] of retainerByMaint) {
+        const linkedHosting = infraStore.hostingClients.find(h => h.maintenance_id === mid && h.cycle === 'monthly')
+        const hostingAmt = linkedHosting?.amount ?? 0
+        const rowByMonth = new Map(retRows.map(r => [r.month, r]))
+        const retRow: Row = [name, clientName]
+        let rowTotal = 0
+        for (const m of months) {
+          const r = rowByMonth.get(m)
+          const isIssued = r?.status === 'issued' || r?.status === 'paid'
+          const plan = r?.planned_amount ?? 0
+          const actual = isIssued ? Math.max(0, (r?.actual_amount ?? 0) - hostingAmt) : 0
+          retRow.push(plan || null, actual || null)
+          rowTotal += isIssued && actual > 0 ? actual : plan
+        }
+        retRow.push(rowTotal || null)
+        data.push(retRow)
+      }
+    }
+
+    // Hosting
+    if (activeHostingClients.length > 0) {
+      data.push([])
+      data.push(['HOSTING'])
+      data.push(['Client', 'Description', 'Cycle', ...monthLabels, 'Total'])
+      for (const h of activeHostingClients) {
+        const hostRow: Row = [h.client?.name ?? '', h.description ?? '', h.cycle]
+        for (const m of months) hostRow.push(hostingCellAmount(h.id, m) ?? null)
+        hostRow.push(hostingRowTotal(h.id) || null)
+        data.push(hostRow)
+      }
+      const hostTot: Row = ['HOSTING TOTAL', '', '']
+      for (const m of months) hostTot.push(hostingMonthTotal(m) || null)
+      hostTot.push(hostingGrandTotal || null)
+      data.push(hostTot)
+    }
+
+    // Domains
+    if (domainsInHalf.length > 0) {
+      data.push([])
+      data.push(['DOMAIN RENEWALS'])
+      data.push(['Domain', 'Client', 'Month', 'Amount'])
+      for (const d of domainsInHalf) {
+        data.push([d.domain_name, d.client?.name ?? '', fmtMonthShort(domainInvoiceMonth(d)), d.yearly_amount ?? null])
+      }
+    }
+
+    const ws = XLSX.utils.aoa_to_sheet(data)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Invoice Plan')
+    XLSX.writeFile(wb, `invoice-plan-${half}-${year}.xlsx`)
+    setExportOpen(false)
+  }
+
+  function exportPDF() {
+    setExportOpen(false)
+    const { agencyLogo, agencyName } = settingsStore
+    const logoHtml = buildLogoHtml(agencyLogo, agencyName)
+    const today = new Date().toLocaleDateString('en-GB')
+    const monthLabels = months.map(m => fmtMonthShort(m))
+    const rec = recurringTotal()
+
+    const typeColors: Record<string, { bg: string; color: string }> = {
+      fixed:       { bg: '#e0f2fe', color: '#0369a1' },
+      maintenance: { bg: '#dbeafe', color: '#1d4ed8' },
+      variable:    { bg: '#fef3c7', color: '#92400e' },
+      internal:    { bg: '#f4f2f6', color: '#374151' },
+    }
+    const typeLabels: Record<string, string> = { fixed: 'Fixed', maintenance: 'Recurring', variable: 'Variable', internal: 'Internal' }
+    function typePill(type: string) {
+      const c = typeColors[type] ?? { bg: '#f4f2f6', color: '#374151' }
+      return `<span style="display:inline-block;padding:1px 5px;border-radius:3px;font-size:8px;font-weight:700;background:${c.bg};color:${c.color}">${typeLabels[type] ?? type}</span>`
+    }
+
+    // ── Projects table ─────────────────────────────────────────────────────────
+    const projHeaderCols = monthLabels.flatMap(l =>
+      [`<th class="r">${l}<br>Plan</th>`, `<th class="r">${l}<br>Act</th>`]
+    ).join('')
+
+    let projGrandTotal = 0
+    const projRows = activeProjects.map((p, i) => {
+      const bg = i % 2 === 0 ? '#ffffff' : '#fafaf9'
+      let projPlanned = 0, projActual = 0
+      const cells = months.map(m => {
+        const c = rowMap.get(`${p.id}:${m}`)
+        const planned = c?.planned_amount ?? 0
+        const isIssuedPaid = c?.status === 'issued' || c?.status === 'paid'
+        const actual = isIssuedPaid ? (c?.actual_amount ?? 0) : 0
+        projPlanned += planned
+        projActual += actual
+        const planBg = getCellBg(c) !== 'transparent' ? getCellBg(c) : bg
+        return `<td style="background:${planBg};text-align:right">${planned || '—'}</td><td style="background:${actual ? '#f0fdf4' : bg};text-align:right;color:${actual ? '#16a34a' : '#94a3b8'}">${actual || '—'}</td>`
+      }).join('')
+      const total = projActual > 0 ? projActual : projPlanned
+      projGrandTotal += total
+      return `<tr>
+        <td style="background:${bg};font-weight:600">${p.name}</td>
+        <td style="background:${bg};color:#6b7280">${p.client?.name ?? ''}</td>
+        <td style="background:${bg}">${typePill(p.type)}</td>
+        ${cells}
+        <td style="background:${bg};font-weight:700;text-align:right;color:#16a34a">${total || '—'}</td>
+      </tr>`
+    }).join('')
+
+    const totCells = months.map(m => {
+      const plan = monthPlannedTotal(m)
+      const actual = monthActualTotal(m)
+      return `<td style="text-align:right;font-weight:700;background:#f0f4ff">${plan || '—'}</td><td style="text-align:right;font-weight:700;background:#f0f4ff;color:#16a34a">${actual || '—'}</td>`
+    }).join('')
+
+    const projHtml = `
+      <div class="section-title">Projects</div>
+      <table>
+        <thead><tr><th>Project</th><th>Client</th><th>Type</th>${projHeaderCols}<th class="r">Total</th></tr></thead>
+        <tbody>
+          ${projRows}
+          <tr>
+            <td colspan="3" style="font-weight:700;background:#f0f4ff">Monthly Total</td>
+            ${totCells}
+            <td style="text-align:right;font-weight:700;background:#f0f4ff;color:#16a34a">${projGrandTotal || '—'}</td>
+          </tr>
+        </tbody>
+      </table>`
+
+    // ── Maintenance Retainers ──────────────────────────────────────────────────
+    let retHtml = ''
+    if (retainerByMaint.size > 0) {
+      const retHeaderCols = monthLabels.flatMap(l =>
+        [`<th class="r">${l}<br>Plan</th>`, `<th class="r">${l}<br>Act</th>`]
+      ).join('')
+      const retRows = [...retainerByMaint.entries()].map(([mid, { name, clientName, rows: rr }], i) => {
+        const bg = i % 2 === 0 ? '#ffffff' : '#fafaf9'
+        const linkedHosting = infraStore.hostingClients.find(h => h.maintenance_id === mid && h.cycle === 'monthly')
+        const hostingAmt = linkedHosting?.amount ?? 0
+        const byMonth = new Map(rr.map(r => [r.month, r]))
+        let rowTotal = 0
+        const cells = months.map(m => {
+          const r = byMonth.get(m)
+          const isIssued = r?.status === 'issued' || r?.status === 'paid'
+          const plan = r?.planned_amount ?? 0
+          const actual = isIssued ? Math.max(0, (r?.actual_amount ?? 0) - hostingAmt) : 0
+          rowTotal += isIssued && actual > 0 ? actual : plan
+          return `<td style="background:${bg};text-align:right">${plan || '—'}</td><td style="background:${actual ? '#f0fdf4' : bg};text-align:right;color:${actual ? '#16a34a' : '#94a3b8'}">${actual || '—'}</td>`
+        }).join('')
+        return `<tr>
+          <td style="background:${bg};font-weight:600">${name}</td>
+          <td style="background:${bg};color:#6b7280">${clientName}</td>
+          ${cells}
+          <td style="background:${bg};font-weight:700;text-align:right;color:#16a34a">${rowTotal || '—'}</td>
+        </tr>`
+      }).join('')
+      retHtml = `
+        <div class="section-title">Maintenance Retainers</div>
+        <table>
+          <thead><tr><th>Contract</th><th>Client</th>${retHeaderCols}<th class="r">Total</th></tr></thead>
+          <tbody>${retRows}</tbody>
+        </table>`
+    }
+
+    // ── Hosting ────────────────────────────────────────────────────────────────
+    let hostHtml = ''
+    if (activeHostingClients.length > 0) {
+      const hostRows = activeHostingClients.map((h, i) => {
+        const bg = i % 2 === 0 ? '#ffffff' : '#fafaf9'
+        const cells = months.map(m => {
+          const amt = hostingCellAmount(h.id, m)
+          return `<td style="background:${bg};text-align:right">${amt != null ? amt : '—'}</td>`
+        }).join('')
+        return `<tr>
+          <td style="background:${bg};font-weight:600">${h.client?.name ?? ''}</td>
+          <td style="background:${bg};color:#6b7280">${h.description ?? ''}</td>
+          <td style="background:${bg}">${h.cycle}</td>
+          ${cells}
+          <td style="background:${bg};font-weight:700;text-align:right;color:#16a34a">${hostingRowTotal(h.id) || '—'}</td>
+        </tr>`
+      }).join('')
+      hostHtml = `
+        <div class="section-title">Hosting</div>
+        <table>
+          <thead><tr><th>Client</th><th>Description</th><th>Cycle</th>${monthLabels.map(l => `<th class="r">${l}</th>`).join('')}<th class="r">Total</th></tr></thead>
+          <tbody>${hostRows}</tbody>
+        </table>`
+    }
+
+    // ── Domains ────────────────────────────────────────────────────────────────
+    let domHtml = ''
+    if (domainsInHalf.length > 0) {
+      const domRows = domainsInHalf.map((d, i) => {
+        const bg = i % 2 === 0 ? '#ffffff' : '#fafaf9'
+        return `<tr>
+          <td style="background:${bg};font-weight:600">${d.domain_name}</td>
+          <td style="background:${bg};color:#6b7280">${d.client?.name ?? ''}</td>
+          <td style="background:${bg}">${fmtMonthShort(domainInvoiceMonth(d))}</td>
+          <td style="background:${bg};text-align:right;font-weight:700;color:#16a34a">${d.yearly_amount ?? '—'} €</td>
+        </tr>`
+      }).join('')
+      domHtml = `
+        <div class="section-title">Domain Renewals</div>
+        <table>
+          <thead><tr><th>Domain</th><th>Client</th><th>Month</th><th class="r">Amount</th></tr></thead>
+          <tbody>${domRows}</tbody>
+        </table>`
+    }
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Figtree',sans-serif;background:#e8e8e5;color:#1a1a1a;font-size:10px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .page{width:297mm;min-height:210mm;margin:20px auto;padding:8mm 12mm;background:#fff;box-shadow:0 4px 40px rgba(0,0,0,.12)}
+  @media print{body{background:#fff}.page{margin:0;box-shadow:none;width:297mm}}
+  @page{size:A4 landscape;margin:0}
+  .header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:5mm;border-bottom:2px solid #E85C1A;padding-bottom:4mm}
+  .doc-title{font-size:12px;font-weight:700;color:#1a1a1a;margin-top:3px}
+  .meta{text-align:right;font-size:9px;color:#6b7280;line-height:1.7}
+  .stats{display:flex;gap:10px;margin-bottom:5mm}
+  .stat{background:#fafaf9;border:1px solid #e0e0dd;border-radius:6px;padding:5px 10px;flex:1;text-align:center}
+  .stat-val{font-size:13px;font-weight:800;color:#1a1a1a}
+  .stat-lbl{font-size:8px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-top:1px}
+  .section-title{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#6b7280;margin:5mm 0 2mm}
+  table{width:100%;border-collapse:collapse;margin-bottom:1mm}
+  th{background:#1a1a1a;color:#fff;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:4px 6px;text-align:left;white-space:nowrap}
+  th.r{text-align:right}
+  td{padding:4px 6px;border-bottom:1px solid #f0efed;font-size:9.5px;vertical-align:middle}
+  .footer{margin-top:5mm;border-top:1px solid #e0e0dd;padding-top:2mm;display:flex;justify-content:space-between;font-size:8px;color:#94a3b8}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <div>
+      ${logoHtml}
+      <div class="doc-title">Invoice Plan — ${half} ${year}</div>
+    </div>
+    <div class="meta">
+      <div>Exported ${today}</div>
+      <div>support@renderspace.si</div>
+    </div>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="stat-val">${fmtAmt(confirmedTotal + rec)}</div><div class="stat-lbl">Confirmed</div></div>
+    <div class="stat"><div class="stat-val">${fmtAmt(likelyTotal + rec)}</div><div class="stat-lbl">Likely</div></div>
+    <div class="stat"><div class="stat-val">${fmtAmt(bestCaseTotal + rec)}</div><div class="stat-lbl">Best Case</div></div>
+    <div class="stat"><div class="stat-val" style="color:#16a34a">${fmtAmt(actualSum)}</div><div class="stat-lbl">Actual Issued</div></div>
+  </div>
+  ${projHtml}
+  ${retHtml}
+  ${hostHtml}
+  ${domHtml}
+  <div class="footer">
+    <div>${agencyName || 'Renderspace'} · support@renderspace.si · +386 (1) 23 91 200</div>
+    <div>${today}</div>
+  </div>
+</div>
+<script>window.onload=function(){window.print()}</script>
+</body>
+</html>`
+
+    openHtmlAsPdf(html)
+  }
 
   return (
     <div>
@@ -372,9 +725,29 @@ export function RevenuePlannerView() {
               ›
             </Button>
           </div>
-          <Button variant="outline" size="sm">
-            Export
-          </Button>
+          <div className="relative" ref={exportRef}>
+            <Button variant="outline" size="sm" onClick={() => setExportOpen(o => !o)}>
+              Export ▾
+            </Button>
+            {exportOpen && (
+              <div className="absolute right-0 top-full mt-1 bg-white border border-border rounded-[7px] shadow-md z-50 min-w-[160px] overflow-hidden">
+                <button
+                  onClick={exportExcel}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-[#f5f3f8] cursor-pointer"
+                  style={{ fontFamily: 'inherit', border: 'none', background: 'transparent', display: 'block' }}
+                >
+                  Export Excel (.xlsx)
+                </button>
+                <button
+                  onClick={exportPDF}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-[#f5f3f8] cursor-pointer"
+                  style={{ fontFamily: 'inherit', border: 'none', background: 'transparent', display: 'block' }}
+                >
+                  Export PDF
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -389,17 +762,17 @@ export function RevenuePlannerView() {
       <div className="grid grid-cols-4 gap-3 mb-4 px-6 pt-5">
         <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
           <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Confirmed</div>
-          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{fmtAmt(confirmedTotal + recurringTotal())}</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{fmtAmt(confirmedTotal + recurringTotalValue)}</div>
           <div className="text-xs text-muted-foreground mt-1">projects + hosting + retainers</div>
         </div>
         <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
           <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Likely</div>
-          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{fmtAmt(likelyTotal + recurringTotal())}</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{fmtAmt(likelyTotal + recurringTotalValue)}</div>
           <div className="text-xs text-muted-foreground mt-1">confirmed + 50% invoices</div>
         </div>
         <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
           <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">Best Case</div>
-          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{fmtAmt(bestCaseTotal + recurringTotal())}</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-foreground">{fmtAmt(bestCaseTotal + recurringTotalValue)}</div>
           <div className="text-xs text-muted-foreground mt-1">confirmed + 50% + 25%</div>
         </div>
         <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">

@@ -2,6 +2,8 @@
 //  Renderspace — shared TypeScript types (mirrors Supabase schema)
 // ============================================================
 
+export const OTHER_INCOME_PROJECT_NAME = 'Other Income'
+
 export interface Client {
   id: string
   name: string
@@ -122,6 +124,7 @@ export interface Maintenance {
   billing_month?: number | null  // 1-12, only for annual billing
   help_requests_included: number
   hours_included: number
+  contract_id?: string | null
   contract_start: string   // YYYY-MM-DD
   contract_end?: string | null
   contract_url?: string | null

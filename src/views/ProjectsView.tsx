@@ -7,6 +7,7 @@ import { useChangeRequestsStore } from '../stores/changeRequests'
 import { useSettingsStore } from '../stores/settings'
 import { supabase } from '../lib/supabase'
 import type { Project } from '../lib/types'
+import { OTHER_INCOME_PROJECT_NAME } from '../lib/types'
 import { Select } from '../components/Select'
 import { Modal } from '../components/Modal'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -286,16 +287,19 @@ export function ProjectsView() {
             return (
               <tr key={p.id}>
                 <td className="text-muted-foreground text-[11px] font-semibold whitespace-nowrap">{p.pn}</td>
-                <td className="font-medium text-primary hover:underline cursor-pointer font-bold" onClick={() => navigate(`/projects/${p.id}`)}>{p.name}</td>
+                <td className="font-medium text-primary hover:underline cursor-pointer font-bold" onClick={() => navigate(`/projects/${p.id}`)}>
+                  {p.name === OTHER_INCOME_PROJECT_NAME ? `${p.client?.name ?? 'Unknown'} — One time projects` : p.name}
+                </td>
                 <td className="text-sm text-muted-foreground" style={{cursor: p.client ? 'pointer' : 'default'}}
                   onClick={() => p.client && navigate(`/clients/${p.client!.id}`)}>{p.client?.name ?? '—'}</td>
                 <td><Badge variant={TYPE_BADGE[p.type] ?? 'gray'}>{TYPE_LABEL[p.type] ?? p.type}</Badge></td>
                 <td className="text-right font-semibold">
                   {(() => {
                     const isRecurring = p.type === 'maintenance' || p.type === 'variable'
+                    const isOtherIncome = p.name === OTHER_INCOME_PROJECT_NAME
                     const regularRows = rpStore.rows.filter(r => r.project_id === p.id && !r.notes?.startsWith('CR:') && r.status !== 'cost')
                     const crTotal = crStore.approvedCRs.filter(cr => cr.project_id === p.id).reduce((s, cr) => s + (cr.amount ?? 0), 0)
-                    const base = isRecurring
+                    const base = (isRecurring || isOtherIncome)
                       ? regularRows.reduce((s, r) => s + (r.planned_amount ?? 0), 0)
                       : (p.initial_contract_value ?? p.contract_value ?? null)
                     const val = base != null ? base + crTotal : null

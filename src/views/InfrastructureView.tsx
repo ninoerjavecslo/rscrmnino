@@ -349,7 +349,7 @@ export function InfrastructureView() {
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-3 mb-4 px-6 pt-4">
+      <div className="grid grid-cols-4 gap-3 mb-4 px-6 pt-4">
         <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
           <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">TOTAL REVENUE / YEAR</div>
           <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2 text-[#16a34a]">{totalRevenuePerYear.toLocaleString('en-EU', { maximumFractionDigits: 2 })} €</div>
@@ -366,6 +366,11 @@ export function InfrastructureView() {
           <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">YEARLY RENEWING SOON</div>
           <div className={`text-[28px] font-extrabold tracking-[-0.5px] mb-2 ${yearlyDueSoon.length > 0 ? 'text-[#d97706]' : 'text-foreground'}`}>{yearlyDueSoon.length}</div>
           <div className="text-xs text-muted-foreground mt-1">within 60 days</div>
+        </div>
+        <div className="bg-white rounded-[10px] border border-[#e8e3ea] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[18px_20px] flex flex-col">
+          <div className="text-[10px] text-[#64748b] font-bold uppercase tracking-[.09em] mb-2">HOSTING CLIENTS</div>
+          <div className="text-[28px] font-extrabold tracking-[-0.5px] mb-2">{store.hostingClients.filter(h => h.status === 'active').length}</div>
+          <div className="text-xs text-muted-foreground mt-1">active contracts</div>
         </div>
       </div>
 

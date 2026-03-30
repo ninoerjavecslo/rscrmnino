@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Website Technical Maintenance Report</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            color: #333;
+            background-color: #f5f5f5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 40px;
+        }
+
+        header {
+            margin-bottom: 40px;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 20px;
+        }
+
+        .header-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .header-info strong {
+            display: block;
+            margin-bottom: 3px;
+        }
+
+        h1 {
+            font-size: 20px;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 13px;
+        }
+
+        table th {
+            background-color: #f0f0f0;
+            padding: 10px;
+            text-align: left;
+            font-weight: bold;
+            border: 1px solid #ccc;
+        }
+
+        table td {
+            padding: 10px;
+            border: 1px solid #ccc;
+        }
+
+        table tr:hover {
+            background-color: #fafafa;
+        }
+
+        .total-row {
+            font-weight: bold;
+            background-color: #f9f9f9;
+        }
+
+        footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #ccc;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .footer-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        @media print {
+            body {
+                background-color: white;
+                padding: 0;
+            }
+            .container {
+                box-shadow: none;
+                padding: 0;
+            }
+            table {
+                page-break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Website Technical Maintenance Report</h1>
+            <div class="header-info">
+                <div>
+                    <strong>Client:</strong> [CLIENT_NAME]<br>
+                    <strong>Contact:</strong> [CLIENT_CONTACT]<br>
+                    <strong>Email:</strong> [CLIENT_EMAIL]
+                </div>
+                <div>
+                    <strong>Period:</strong> [START_DATE] – [END_DATE]<br>
+                    <strong>Provider:</strong> Renderspace d.o.o.<br>
+                    <strong>Report Date:</strong> [REPORT_DATE]
+                </div>
+            </div>
+        </header>
+
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 50%;">Task</th>
+                    <th style="width: 20%;">Hours</th>
+                    <th style="width: 30%;">Type</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>[TASK_1]</td>
+                    <td>[HOURS_1]</td>
+                    <td>[TYPE_1]</td>
+                </tr>
+                <tr>
+                    <td>[TASK_2]</td>
+                    <td>[HOURS_2]</td>
+                    <td>[TYPE_2]</td>
+                </tr>
+                <tr>
+                    <td>[TASK_3]</td>
+                    <td>[HOURS_3]</td>
+                    <td>[TYPE_3]</td>
+                </tr>
+                <tr>
+                    <td>[TASK_4]</td>
+                    <td>[HOURS_4]</td>
+                    <td>[TYPE_4]</td>
+                </tr>
+                <tr>
+                    <td>[TASK_5]</td>
+                    <td>[HOURS_5]</td>
+                    <td>[TYPE_5]</td>
+                </tr>
+                <tr class="total-row">
+                    <td>TOTAL</td>
+                    <td>[TOTAL_HOURS]</td>
+                    <td></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <footer>
+            <div class="footer-info">
+                <div>
+                    <strong>Next Report:</strong> [NEXT_REPORT_DATE]
+                </div>
+                <div>
+                    <strong>Support:</strong> support@renderspace.si
+                </div>
+                <div>
+                    <strong>Phone:</strong> +386 (1) 23 91 200
+                </div>
+            </div>
+        </footer>
+    </div>
+</body>
+</html>

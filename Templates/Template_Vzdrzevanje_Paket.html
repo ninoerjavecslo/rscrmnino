@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="sl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Paket tehničnega vzdrževanja — [Naročnik]</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,300;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --black: #0a0a0a;
+    --ink: #1a1a1a;
+    --gray-dark: #0a0a0a;
+    --gray-mid: #555550;
+    --gray-light: #888883;
+    --gray-bg: #f5f5f3;
+    --gray-rule: #e0e0dd;
+    --white: #ffffff;
+    --orange: #E85C1A;
+    --orange-light: #FDF0EA;
+    --orange-dark: #c94a0f;
+    --font: 'Figtree', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font);
+    background: var(--white);
+    color: var(--ink);
+    font-size: 12px;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto;
+    padding: 18mm 18mm 24mm;
+    position: relative;
+    background: var(--white);
+  }
+
+  @media screen {
+    body { background: #e8e8e5; }
+    .page { margin: 20px auto; box-shadow: 0 4px 40px rgba(0,0,0,0.12); }
+    .page + .page { margin-top: 0; }
+  }
+
+  @media print {
+    body { background: white; }
+    .page {
+      margin: 0; width: 210mm; height: 297mm; max-height: 297mm;
+      overflow: hidden; page-break-after: always; break-after: page; box-shadow: none;
+    }
+    .page:last-child { page-break-after: avoid; break-after: avoid; }
+  }
+
+  /* ── COVER ── */
+  .cover {
+    padding: 0; overflow: hidden; display: flex; flex-direction: column;
+    background: #F2EAE0; position: relative;
+    height: 297mm; min-height: 297mm; max-height: 297mm;
+  }
+  .cover::before {
+    content: ''; position: absolute; bottom: -10mm; right: -10mm;
+    width: 160mm; height: 160mm;
+    background: radial-gradient(ellipse at center, #E8320A 0%, #F05A1A 30%, #F5956A 60%, transparent 80%);
+    border-radius: 50%; filter: blur(18px); opacity: 0.92;
+  }
+  .cover::after {
+    content: ''; position: absolute; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.08'/%3E%3C/svg%3E");
+    pointer-events: none; mix-blend-mode: multiply;
+  }
+  .cover-header {
+    position: relative; z-index: 2; padding: 12mm 18mm 0;
+    display: flex; justify-content: space-between; align-items: flex-start;
+  }
+  .cover-wordmark img { height: 28px; width: auto; }
+  .cover-contact { text-align: right; font-size: 10px; font-weight: 400; color: var(--black); line-height: 1.6; }
+  .cover-contact a { color: var(--black); text-decoration: underline; }
+  .cover-body {
+    position: relative; z-index: 2; flex: 1; padding: 44mm 18mm 0;
+    display: flex; flex-direction: column; justify-content: flex-start;
+  }
+  .cover-eyebrow { display: block; width: fit-content; font-size: 9px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--white); background: var(--orange); padding: 3px 8px; margin-bottom: 5mm; }
+  .cover-title { font-size: 63px; font-weight: 700; color: var(--black); line-height: 0.95; letter-spacing: -0.03em; margin-bottom: 5mm; max-width: 170mm; }
+  .cover-subtitle-main { font-size: 30px; font-weight: 700; color: var(--black); letter-spacing: -0.01em; margin-bottom: 4mm; }
+  .cover-meta-row {
+    position: relative; z-index: 2; padding: 7mm 18mm;
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0;
+  }
+  .cover-meta-item { padding-right: 6mm; }
+  .cover-meta-item + .cover-meta-item { padding-left: 6mm; border-left: 1px solid rgba(0,0,0,0.15); }
+  .cover-meta-label { font-size: 9px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--black); margin-bottom: 3px; }
+  .cover-meta-value { font-size: 15px; font-weight: 600; color: var(--black); line-height: 1.5; }
+  .cover .page-footer { display: none !important; }
+
+  /* ── DOC HEADER ── */
+  .doc-header { padding-bottom: 7mm; display: flex; flex-direction: column; }
+  .doc-header-top { display: flex; justify-content: flex-end; align-items: flex-start; margin-bottom: 3mm; }
+  .doc-header-logos { display: flex; align-items: center; gap: 8px; }
+  .doc-header-logos img { height: 20px; width: auto; }
+  .doc-header h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; color: var(--black); }
+
+  /* ── SECTION LABEL ── */
+  .section-label {
+    font-size: 16px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--black); padding-bottom: 4px; border-bottom: 2px solid var(--black);
+    margin-bottom: 5mm; margin-top: 8mm;
+  }
+  .section-label:first-of-type { margin-top: 4mm; }
+  .section-label.sub { font-size: 10px; font-weight: 700; letter-spacing: 0.14em; padding-bottom: 3px; border-bottom: 1px solid var(--gray-rule); margin-top: 6mm; }
+  .section-label.orange { color: var(--orange); border-bottom-color: var(--orange); }
+
+  /* ── PAGE FOOTER ── */
+  .page-footer {
+    position: absolute; bottom: 10mm; left: 18mm; right: 18mm;
+    display: flex; justify-content: space-between; align-items: center; padding-top: 3mm;
+    z-index: 1;
+  }
+  .page-footer span { font-size: 8.5px; color: var(--gray-light); font-weight: 400; }
+  .page-footer .pn { font-weight: 600; color: var(--gray-mid); }
+
+  /* ── INTRO TEXT ── */
+  .intro-text { font-size: 12px; line-height: 1.7; color: var(--gray-dark); margin-bottom: 6mm; }
+  .intro-text strong { color: var(--black); font-weight: 700; }
+
+  /* ── PILLAR BLOCKS ── */
+  .pillar-block { border: 1px solid var(--gray-rule); margin-bottom: 3mm; break-inside: avoid; }
+  .pillar-head { display: flex; align-items: stretch; background: var(--black); }
+  .pillar-num { background: var(--orange); color: var(--white); font-size: 8px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; padding: 6px 10px; display: flex; align-items: center; min-width: 10mm; justify-content: center; }
+  .pillar-head-info { padding: 6px 10px; flex: 1; }
+  .pillar-title { font-size: 12px; font-weight: 800; color: var(--white); line-height: 1.2; text-transform: uppercase; letter-spacing: 0.04em; }
+  .pillar-sub { font-size: 9px; color: rgba(255,255,255,0.5); margin-top: 2px; }
+  .pillar-body { padding: 6px 10px 8px; display: flex; flex-direction: column; gap: 5px; }
+  .pillar-text { font-size: 11px; line-height: 1.65; color: var(--gray-dark); }
+  .pillar-text strong { color: var(--black); font-weight: 700; }
+  .pillar-bullets { display: flex; flex-direction: column; gap: 2px; }
+  .pillar-bullet { font-size: 11px; color: var(--gray-dark); line-height: 1.5; display: flex; align-items: baseline; gap: 5px; }
+  .pillar-bullet::before { content: '·'; color: var(--orange); font-weight: 900; flex-shrink: 0; }
+  .pillar-aside { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--gray-rule); }
+  .pillar-aside-label { font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: var(--orange); margin-bottom: 4px; }
+  .pillar-aside-items { display: flex; flex-wrap: wrap; gap: 3px; }
+  .pillar-aside-item { font-size: 9.5px; font-weight: 600; background: var(--gray-bg); color: var(--black); border: 1px solid var(--gray-rule); padding: 2px 8px; border-left: 2px solid var(--orange); }
+
+  /* ── SLA TABLE ── */
+  .sla-table { width: 100%; border-collapse: collapse; margin-bottom: 5mm; font-family: var(--font); }
+  .sla-table thead tr { background: var(--black); }
+  .sla-table thead th { font-size: 9px; font-weight: 700; color: var(--white); padding: 6px 10px; text-align: left; letter-spacing: 0.08em; text-transform: uppercase; }
+  .sla-table tbody tr { background: var(--white); }
+  .sla-table tbody tr:nth-child(even) { background: var(--gray-bg); }
+  .sla-table tbody td { font-size: 11px; color: var(--gray-dark); padding: 10px 10px; border-bottom: 1px solid var(--gray-rule); vertical-align: middle; line-height: 1.4; }
+  .sla-table tbody td:first-child { font-weight: 700; color: var(--black); }
+  .sla-priority { display: inline-block; font-size: 8px; font-weight: 800; padding: 2px 7px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .sla-priority.critical { background: #fee2e2; color: #b91c1c; }
+  .sla-priority.high { background: var(--orange-light); color: var(--orange-dark); }
+  .sla-priority.low { background: var(--gray-bg); color: var(--gray-mid); }
+
+  /* ── PRICE TABLE ── */
+  .price-table { width: 100%; border-collapse: collapse; font-family: var(--font); margin-bottom: 5mm; }
+  .price-table thead tr { background: var(--black); }
+  .price-table thead th { font-size: 9px; font-weight: 700; color: var(--white); text-align: left; padding: 7px 10px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .price-table thead th:last-child { text-align: right; }
+  .price-table tbody tr { background: var(--white); }
+  .price-table tbody tr:nth-child(even) { background: var(--gray-bg); }
+  .price-table tbody td { font-size: 12px; color: var(--gray-dark); padding: 7px 10px; border-bottom: 1px solid var(--gray-rule); vertical-align: middle; }
+  .price-table tbody td:first-child { font-weight: 700; color: var(--black); }
+  .price-table tbody td:last-child { text-align: right; font-weight: 700; color: var(--black); }
+  .price-table tfoot td { background: var(--black); color: var(--white); font-size: 12px; font-weight: 800; padding: 8px 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .price-table tfoot td:last-child { text-align: right; font-size: 16px; }
+
+  /* ── SUMMARY BOX ── */
+  .summary-box { background: var(--black); padding: 8mm 10mm; margin-top: 5mm; }
+  .summary-box-label { font-size: 8px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--white); margin-bottom: 4mm; }
+  .summary-rows { display: flex; flex-direction: column; gap: 3px; margin-bottom: 5mm; }
+  .summary-row { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  .summary-row-name { font-size: 12px; color: var(--white); font-weight: 400; }
+  .summary-row-price { font-size: 11px; font-weight: 700; color: var(--white); }
+  .summary-total { display: flex; justify-content: space-between; align-items: baseline; padding-top: 5mm; border-top: 1px solid rgba(255,255,255,0.2); }
+  .summary-total-label { font-size: 12px; font-weight: 700; color: var(--white); text-transform: uppercase; letter-spacing: 0.04em; }
+  .summary-total-price { font-size: 28px; font-weight: 900; color: var(--orange); letter-spacing: -0.02em; }
+  .summary-total-sub { font-size: 9px; color: var(--white); font-weight: 300; margin-top: 2px; text-align: right; opacity: 0.5; }
+
+  /* ── INFO BOX ── */
+  .info-box { background: var(--orange-light); border-left: 3px solid var(--orange); padding: 6px 10px; margin-bottom: 4mm; font-size: 11px; line-height: 1.6; color: var(--ink); }
+  .info-box strong { font-weight: 700; color: var(--black); }
+  .warn-box { background: #fff8f0; border-left: 3px solid var(--gray-mid); padding: 6px 10px; margin-bottom: 4mm; font-size: 11px; line-height: 1.6; color: var(--gray-mid); }
+
+  /* ── CLOSING BLOCK ── */
+  .closing-block { background: var(--orange); padding: 8mm 10mm; margin-top: 6mm; }
+  .closing-title { font-size: 18px; font-weight: 900; color: var(--white); letter-spacing: -0.01em; margin-bottom: 3mm; }
+  .closing-body { font-size: 12px; color: rgba(255,255,255,0.85); line-height: 1.6; margin-bottom: 5mm; }
+  .closing-contacts { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
+  .closing-contact-label { font-size: 8px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255,255,255,0.5); margin-bottom: 2px; }
+  .closing-contact-name { font-size: 12px; font-weight: 800; color: var(--white); margin-bottom: 1px; }
+  .closing-contact-role { font-size: 10px; color: rgba(255,255,255,0.65); }
+
+  /* ── NOTE ── */
+  .note { font-size: 10px; color: var(--gray-mid); line-height: 1.5; font-style: italic; margin-top: 3mm; }
+  .divider { height: 1px; background: var(--gray-rule); margin: 5mm 0; }
+
+  /* ── CHECK LIST ── */
+  .check-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 5mm; }
+  .check-item { display: flex; align-items: baseline; gap: 7px; padding: 5px 10px; font-size: 11.5px; color: var(--ink); line-height: 1.5; }
+  .check-item::before { content: '✓'; color: var(--orange); font-weight: 900; font-size: 11px; flex-shrink: 0; }
+  .check-item.no::before { content: '✕'; color: var(--gray-light); }
+  .check-item:nth-child(odd) { background: var(--gray-bg); }
+
+  /* ── STEP LIST ── */
+  .step-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 5mm; }
+  .step-item { display: flex; align-items: stretch; gap: 0; border-left: 3px solid var(--gray-rule); }
+  .step-item.active { border-left-color: var(--orange); }
+  .step-num { font-size: 11px; font-weight: 900; color: var(--orange); flex-shrink: 0; width: 22px; padding: 6px 0 6px 8px; display: flex; align-items: center; }
+  .step-body { padding: 6px 10px 6px 4px; flex: 1; }
+  .step-title { font-size: 12px; font-weight: 700; color: var(--black); margin-bottom: 1px; }
+  .step-desc { font-size: 10.5px; color: var(--gray-mid); line-height: 1.5; }
+
+  /* ── TYPE CARDS ── */
+  .type-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3mm; margin-bottom: 5mm; }
+  .type-card { border: 1px solid var(--gray-rule); display: flex; flex-direction: column; }
+  .type-card-head { padding: 6px 10px; display: flex; align-items: center; gap: 8px; }
+  .type-card-icon { width: 8mm; height: 8mm; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+  .type-card-name { font-size: 11px; font-weight: 800; color: var(--white); text-transform: uppercase; letter-spacing: 0.04em; }
+  .type-card-body { padding: 7px 10px 9px; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  .type-card-def { font-size: 11px; line-height: 1.6; color: var(--gray-dark); margin-bottom: 4px; }
+  .type-card-example { font-size: 9.5px; font-style: italic; color: var(--gray-mid); line-height: 1.5; padding: 4px 7px; background: var(--gray-bg); border-left: 2px solid var(--gray-rule); }
+  .type-card-tag { display: inline-block; font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; padding: 2px 7px; margin-top: 5px; align-self: flex-start; }
+  .tag-free { background: #dcfce7; color: #166534; }
+  .tag-quota { background: var(--orange-light); color: var(--orange-dark); }
+  .tag-extra { background: var(--gray-bg); color: var(--gray-mid); border: 1px solid var(--gray-rule); }
+
+  /* ── PACKAGE HEADER ── */
+  .pkg-header { display: flex; align-items: stretch; margin-bottom: 6mm; }
+  .pkg-label { background: var(--orange); padding: 8mm 10mm; min-width: 28mm; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; flex-shrink: 0; }
+  .pkg-label-name { font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: var(--white); opacity: 0.8; }
+  .pkg-label-tier { font-size: 16px; font-weight: 900; color: var(--white); margin-top: 3px; line-height: 1.1; }
+  .pkg-info { background: var(--black); padding: 8mm 10mm; flex: 1; display: flex; align-items: center; justify-content: space-between; }
+  .pkg-info-left { }
+  .pkg-info-client { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: rgba(255,255,255,0.4); margin-bottom: 3px; }
+  .pkg-info-name { font-size: 18px; font-weight: 900; color: var(--white); line-height: 1.1; }
+  .pkg-info-desc { font-size: 10px; color: rgba(255,255,255,0.55); margin-top: 4px; }
+  .pkg-price { text-align: right; flex-shrink: 0; }
+  .pkg-price-label { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(255,255,255,0.4); margin-bottom: 4px; }
+  .pkg-price-amount { font-size: 36px; font-weight: 900; color: var(--orange); letter-spacing: -0.02em; line-height: 1; }
+  .pkg-price-period { font-size: 12px; font-weight: 600; color: var(--white); }
+  .pkg-price-vat { font-size: 8.5px; color: rgba(255,255,255,0.35); margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<!-- ══ 1. NASLOVNICA ══ -->
+<div class="page cover">
+  <div class="cover-header">
+    <div class="cover-wordmark"><img src="../Logo/Primary logo_black.png" alt="Renderspace"></div>
+    <div class="cover-contact">
+      Vilharjeva cesta 36<br>
+      SI-1000 Ljubljana<br>
+      <a href="mailto:info@renderspace.si">info@renderspace.si</a><br>
+      +386 (1) 23 91 200
+    </div>
+  </div>
+  <div class="cover-body">
+    <div class="cover-eyebrow">Ponudba 26_XXX · Tehnično vzdrževanje</div>
+    <div class="cover-title">Paket vzdrževanja</div>
+    <div class="cover-subtitle-main">[Ime naročnika]</div>
+  </div>
+  <div class="cover-meta-row">
+    <div class="cover-meta-item">
+      <div class="cover-meta-label">Naročnik</div>
+      <div class="cover-meta-value">[Podjetje d.o.o.]<br>[Ulica, Kraj]</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="cover-meta-label">Agencija</div>
+      <div class="cover-meta-value">Renderspace d.o.o.<br>Vilharjeva cesta 36<br>1000 Ljubljana</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="cover-meta-label">Datum · Verzija</div>
+      <div class="cover-meta-value">[Mesec Leto] · v1.0</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 2. PAKET ══ -->
+<div class="page">
+  <div class="doc-header">
+    <div class="doc-header-top">
+      <div class="doc-header-logos"><img src="../Logo/Primary logo_black.png" alt="Renderspace"></div>
+    </div>
+    <h1>Vaš paket vzdrževanja</h1>
+  </div>
+
+  <!-- PACKAGE HERO -->
+  <div class="pkg-header">
+    <div class="pkg-label">
+      <div class="pkg-label-name">Paket</div>
+      <div class="pkg-label-tier">[OSNOVNI /<br>PROF. /<br>NAPREDNI]</div>
+    </div>
+    <div class="pkg-info">
+      <div class="pkg-info-left">
+        <div class="pkg-info-client">Naročnik</div>
+        <div class="pkg-info-name">[Ime naročnika]</div>
+        <div class="pkg-info-desc">Spletno mesto: [domena.si] · CMS: [Payload / WordPress / ...]</div>
+      </div>
+      <div class="pkg-price">
+        <div class="pkg-price-label">Mesečna cena</div>
+        <div class="pkg-price-amount">[XXX]</div>
+        <div class="pkg-price-period">EUR / mes</div>
+        <div class="pkg-price-vat">brez DDV</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label" style="margin-top:0;">Kaj je vključeno</div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:3mm; margin-bottom:5mm;">
+    <div>
+      <div class="check-list">
+        <div class="check-item">[Mesečni / Tedenski / Dnevni] pregled spletne strani</div>
+        <div class="check-item">[Mesečne / Tedenske] posodobitve in vzdrževanje</div>
+        <div class="check-item">Varnostno kopiranje podatkov</div>
+        <div class="check-item">Do [5 / 12 / 30] podpornih zahtevkov / mesec</div>
+      </div>
+    </div>
+    <div>
+      <div class="check-list">
+        <div class="check-item">Do [1h / 2h / 5h] reševanja težav / mesec</div>
+        <div class="check-item">Podpora [e-pošta &amp; portal / + telefon]</div>
+        <div class="check-item">Dosegljivost [pon–pet, 9–17 / 9–20]</div>
+        <div class="check-item">Odzivni čas: [24 ur / 8 ur / 2 uri]</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Ni vključeno v paket</div>
+  <div class="check-list">
+    <div class="check-item no">Razvoj novih funkcionalnosti ali nadgradnje</div>
+    <div class="check-item no">Večje UX/UI spremembe ali redesign</div>
+    <div class="check-item no">Integracije z zunanjimi sistemi</div>
+    <div class="check-item no">Obsežnejši vsebinski vnosi</div>
+    <div class="check-item no">[Proaktivno spremljanje in nočna podpora — samo pri Naprednem paketu]</div>
+  </div>
+
+  <p class="note">Dela, ki niso vključena v paket, se obravnavajo kot dodatne storitve in se obračunajo po veljavnem ceniku urnih postavk.</p>
+
+  <div class="page-footer">
+    <span>Renderspace d.o.o. · Tehnično vzdrževanje</span>
+    <span class="pn">2</span>
+  </div>
+</div>
+
+<!-- ══ 3. VRSTE ZAHTEVKOV ══ -->
+<div class="page">
+  <div class="doc-header">
+    <div class="doc-header-top">
+      <div class="doc-header-logos"><img src="../Logo/Primary logo_black.png" alt="Renderspace"></div>
+    </div>
+    <h1>Vrste zahtevkov</h1>
+  </div>
+
+  <p class="intro-text">V sklopu vzdrževanja ločimo tri vrste zahtevkov. Vrsta zahtevka določa, kako se obravnava, kdaj se obračuna in kakšen je pričakovani čas reševanja.</p>
+
+  <!-- THREE TYPE ROWS -->
+  <div style="display:flex; flex-direction:column; gap:3mm; margin-bottom:5mm;">
+
+    <!-- NAPAKA -->
+    <div style="border:1px solid var(--gray-rule); display:flex; align-items:stretch;">
+      <div style="background:var(--black); padding:6px 12px; min-width:38mm; display:flex; flex-direction:column; justify-content:center; flex-shrink:0;">
+        <div style="font-size:8px; font-weight:800; text-transform:uppercase; letter-spacing:0.1em; color:var(--orange); margin-bottom:3px;">01</div>
+        <div style="font-size:13px; font-weight:900; color:var(--white); line-height:1.1;">Napaka</div>
+        <div style="font-size:9px; font-weight:600; color:rgba(255,255,255,0.45); margin-top:2px;">Bug</div>
+      </div>
+      <div style="padding:7px 12px; flex:1; border-right:1px solid var(--gray-rule);">
+        <div style="font-size:11px; line-height:1.65; color:var(--gray-dark);">Nedelovanje ali <strong style="color:var(--black);">napačno delovanje</strong> funkcionalnosti, ki jo je implementiral izvajalec. Predstavlja reproducibilno odstopanje od potrjenega delovanja.</div>
+        <div style="font-size:9.5px; font-style:italic; color:var(--gray-mid); margin-top:5px; padding:3px 7px; background:var(--gray-bg); border-left:2px solid var(--gray-rule);">Primer: gumb za oddajo obrazca ne deluje, stran vrača napako 500, slika se ne naloži.</div>
+      </div>
+      <div style="padding:7px 12px; min-width:36mm; display:flex; flex-direction:column; justify-content:center; flex-shrink:0;">
+        <div style="font-size:7.5px; font-weight:800; text-transform:uppercase; letter-spacing:0.07em; color:var(--gray-mid); margin-bottom:4px;">Obračun</div>
+        <div style="font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; padding:2px 7px; background:#dcfce7; color:#166534; display:inline-block; margin-bottom:3px;">V garanciji brezplačno</div>
+        <div style="font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; padding:2px 7px; background:var(--orange-light); color:var(--orange-dark); display:inline-block;">Po garanciji: mesečne ure</div>
+      </div>
+    </div>
+
+    <!-- PODPORNI ZAHTEVEK -->
+    <div style="border:1px solid var(--gray-rule); display:flex; align-items:stretch;">
+      <div style="background:var(--black); padding:6px 12px; min-width:38mm; display:flex; flex-direction:column; justify-content:center; flex-shrink:0;">
+        <div style="font-size:8px; font-weight:800; text-transform:uppercase; letter-spacing:0.1em; color:var(--orange); margin-bottom:3px;">02</div>
+        <div style="font-size:13px; font-weight:900; color:var(--white); line-height:1.1;">Podporni</div>
+        <div style="font-size:9px; font-weight:600; color:rgba(255,255,255,0.45); margin-top:2px;">zahtevek</div>
+      </div>
+      <div style="padding:7px 12px; flex:1; border-right:1px solid var(--gray-rule);">
+        <div style="font-size:11px; line-height:1.65; color:var(--gray-dark);">Posamezna prijava za <strong style="color:var(--black);">tehnično pomoč, manjšo prilagoditev ali vprašanje</strong>. Vključuje koordinacijo, komunikacijo in vodenje procesa do zaključka.</div>
+        <div style="font-size:9.5px; font-style:italic; color:var(--gray-mid); margin-top:5px; padding:3px 7px; background:var(--gray-bg); border-left:2px solid var(--gray-rule);">Primer: posodobitev besedila, nastavitev novega uporabnika, vprašanje o delovanju CMS.</div>
+      </div>
+      <div style="padding:7px 12px; min-width:36mm; display:flex; flex-direction:column; justify-content:center; flex-shrink:0;">
+        <div style="font-size:7.5px; font-weight:800; text-transform:uppercase; letter-spacing:0.07em; color:var(--gray-mid); margin-bottom:4px;">Obračun</div>
+        <div style="font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; padding:2px 7px; background:var(--orange-light); color:var(--orange-dark); display:inline-block;">Iz mesečne kvote zahtevkov</div>
+      </div>
+    </div>
+
+    <!-- SPREMEMBA -->
+    <div style="border:1px solid var(--gray-rule); display:flex; align-items:stretch;">
+      <div style="background:var(--black); padding:6px 12px; min-width:38mm; display:flex; flex-direction:column; justify-content:center; flex-shrink:0;">
+        <div style="font-size:8px; font-weight:800; text-transform:uppercase; letter-spacing:0.1em; color:var(--orange); margin-bottom:3px;">03</div>
+        <div style="font-size:13px; font-weight:900; color:var(--white); line-height:1.1;">Sprememba</div>
+        <div style="font-size:9px; font-weight:600; color:rgba(255,255,255,0.45); margin-top:2px;">Change Request</div>
+      </div>
+      <div style="padding:7px 12px; flex:1; border-right:1px solid var(--gray-rule);">
+        <div style="font-size:11px; line-height:1.65; color:var(--gray-dark);">Nova zahteva po <strong style="color:var(--black);">funkcionalnosti, spremembi obstoječega delovanja</strong> ali novi integraciji. Pred izvedbo zahteva pisno oceno obsega in odobritev naročnika.</div>
+        <div style="font-size:9.5px; font-style:italic; color:var(--gray-mid); margin-top:5px; padding:3px 7px; background:var(--gray-bg); border-left:2px solid var(--gray-rule);">Primer: nova podstran, nova filtrirna funkcija, integracija z zunanjim sistemom.</div>
+      </div>
+      <div style="padding:7px 12px; min-width:36mm; display:flex; flex-direction:column; justify-content:center; flex-shrink:0;">
+        <div style="font-size:7.5px; font-weight:800; text-transform:uppercase; letter-spacing:0.07em; color:var(--gray-mid); margin-bottom:4px;">Obračun</div>
+        <div style="font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; padding:2px 7px; background:var(--gray-bg); color:var(--gray-mid); border:1px solid var(--gray-rule); display:inline-block;">Dodatna storitev — ločena ponudba</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="section-label">Kaj je napaka in kaj ni?</div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:3mm; margin-bottom:5mm;">
+    <div>
+      <div style="font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:0.1em; color:var(--orange); margin-bottom:3mm; padding-bottom:3px; border-bottom:1px solid var(--gray-rule);">Napaka (brezplačna odprava v garanciji)</div>
+      <div class="check-list">
+        <div class="check-item">Funkcionalnost, ki jo je razvil izvajalec, ne deluje</div>
+        <div class="check-item">Napaka je ponovljiva in dokumentirana</div>
+        <div class="check-item">Delovanje odstopa od potrjene specifikacije</div>
+      </div>
+    </div>
+    <div>
+      <div style="font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:0.1em; color:var(--gray-mid); margin-bottom:3mm; padding-bottom:3px; border-bottom:1px solid var(--gray-rule);">Ni napaka (obračunamo posebej)</div>
+      <div class="check-list">
+        <div class="check-item no">Poseg naročnika ali tretje osebe je povzročil težavo</div>
+        <div class="check-item no">Sprememba v zunanjem sistemu (API, brskalnik, OS)</div>
+        <div class="check-item no">Nova zahteva, ki ni bila del specifikacije</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="info-box">
+    <strong>Kako prijaviti napako?</strong> Pošlji opis napake, screenshot in korake za reprodukcijo na <strong>podpora@renderspace.si</strong> ali prek servisnega portala. Vsaka prijava dobi referenčno številko.
+  </div>
+
+  <div class="page-footer">
+    <span>Renderspace d.o.o. · Tehnično vzdrževanje</span>
+    <span class="pn">3</span>
+  </div>
+</div>
+
+<!-- ══ 4. GARANCIJA ══ -->
+<div class="page">
+  <div class="doc-header">
+    <div class="doc-header-top">
+      <div class="doc-header-logos"><img src="../Logo/Primary logo_black.png" alt="Renderspace"></div>
+    </div>
+    <h1>Garancija & odprava napak</h1>
+  </div>
+
+  <div class="section-label" style="margin-top:0;">Garancijska obdobja</div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:3mm; margin-bottom:5mm;">
+    <div style="border:1px solid var(--gray-rule); display:flex; align-items:stretch;">
+      <div style="background:var(--orange); padding:6mm 8mm; display:flex; flex-direction:column; justify-content:center; align-items:center; min-width:22mm; flex-shrink:0; text-align:center;">
+        <div style="font-size:32px; font-weight:900; color:var(--white); line-height:1;">6</div>
+        <div style="font-size:9px; font-weight:700; color:var(--white); text-transform:uppercase; letter-spacing:0.06em;">mesecev</div>
+      </div>
+      <div style="padding:6mm 8mm;">
+        <div style="font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; color:var(--black); margin-bottom:4px;">Produkcijsko lansiranje</div>
+        <div style="font-size:11px; color:var(--gray-dark); line-height:1.6;">Garancija od dneva produkcijskega lansiranja sistema.</div>
+      </div>
+    </div>
+    <div style="border:1px solid var(--gray-rule); display:flex; align-items:stretch;">
+      <div style="background:var(--gray-bg); border-right:1px solid var(--gray-rule); padding:6mm 8mm; display:flex; flex-direction:column; justify-content:center; align-items:center; min-width:22mm; flex-shrink:0; text-align:center;">
+        <div style="font-size:32px; font-weight:900; color:var(--black); line-height:1;">3</div>
+        <div style="font-size:9px; font-weight:700; color:var(--black); text-transform:uppercase; letter-spacing:0.06em;">mesece</div>
+      </div>
+      <div style="padding:6mm 8mm;">
+        <div style="font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; color:var(--black); margin-bottom:4px;">Vsaka nadgradnja</div>
+        <div style="font-size:11px; color:var(--gray-dark); line-height:1.6;">Garancija za vsako nadaljnjo nadgradnjo ali novo funkcionalnost, šteto od implementacije.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">V garanciji odpravljamo brezplačno</div>
+  <div class="check-list" style="margin-bottom:5mm;">
+    <div class="check-item">Napake, ki izhajajo iz izvajalčeve implementacije</div>
+    <div class="check-item">Odstopanje od dogovorjene funkcionalnosti ali potrjene specifikacije</div>
+    <div class="check-item">Reproducibilne napake, ki so bile jasno opisane in potrjene</div>
+  </div>
+
+  <div class="section-label">Garancija ne velja za</div>
+  <div class="check-list" style="margin-bottom:5mm;">
+    <div class="check-item no">Napake zaradi posegov naročnika ali tretjih oseb</div>
+    <div class="check-item no">Spremembe v zunanjih sistemih (API-ji, integracije, hosting, infrastruktura)</div>
+    <div class="check-item no">Spremembe v brskalnikih, operacijskih sistemih ali napravah</div>
+    <div class="check-item no">Spremembe vsebine ali uporabe, ki odstopajo od prvotnega namena</div>
+    <div class="check-item no">Elemente ali integracije, ki niso bili razviti s strani izvajalca</div>
+  </div>
+
+  <div class="section-label">Po poteku garancije</div>
+  <div class="pillar-block">
+    <div class="pillar-head">
+      <div class="pillar-num">!</div>
+      <div class="pillar-head-info">
+        <div class="pillar-title">Odprava napak se obračuna po vzdrževalni pogodbi</div>
+      </div>
+    </div>
+    <div class="pillar-body">
+      <div class="pillar-text">Po poteku garancijskega obdobja se vse aktivnosti — vključno z odpravo napak — izvajajo <strong>v okviru vzdrževalne pogodbe</strong> (mesečna kvota ur) ali kot <strong>dodatna storitev</strong>. Izvajalec ne prevzema neomejene odgovornosti za brezplačno odpravo napak izven garancijskega obdobja.</div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span>Renderspace d.o.o. · Tehnično vzdrževanje</span>
+    <span class="pn">4</span>
+  </div>
+</div>
+
+<!-- ══ 5. SLA & ODZIVNI ČASI ══ -->
+<div class="page">
+  <div class="doc-header">
+    <div class="doc-header-top">
+      <div class="doc-header-logos"><img src="../Logo/Primary logo_black.png" alt="Renderspace"></div>
+    </div>
+    <h1>Odzivni časi & SLA</h1>
+  </div>
+
+  <div class="section-label" style="margin-top:0;">Klasifikacija napak</div>
+
+  <table class="sla-table">
+    <thead>
+      <tr>
+        <th>Tip napake</th>
+        <th>Opis</th>
+        <th>Odzivni čas</th>
+        <th>Čas odprave</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="sla-priority critical">Kritična</span></td>
+        <td>Popolna odpoved sistema ali bistveno zmanjšanje kakovosti storitve za večino uporabnikov. Sistem je nedosegljiv ali nedelujoč.</td>
+        <td><strong>1 ura</strong></td>
+        <td><strong>4 ure</strong></td>
+      </tr>
+      <tr>
+        <td><span class="sla-priority high">Večja</span></td>
+        <td>Onemogočena uporaba določenih funkcij. Workaround ni učinkovit ali ustrezen. Sistem je delno delujoč.</td>
+        <td><strong>8 ur</strong></td>
+        <td><strong>24 ur</strong></td>
+      </tr>
+      <tr>
+        <td><span class="sla-priority low">Manjša</span></td>
+        <td>Vizualne nepravilnosti ali manjša odstopanja, ki ne ovirajo ključnih funkcionalnosti. Sistem je v celoti uporaben.</td>
+        <td><strong>24 ur</strong></td>
+        <td><strong>do 48 ur</strong></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="info-box" style="margin-bottom:5mm;">
+    <strong>Delovni čas:</strong> ponedeljek–petek, 9:00–17:00. Prijave izven tega časa se evidentirajo in obravnavajo naslednji delovni dan. Prijave ob vikendih in praznikih se obračunajo po <strong>dvojni urni postavki</strong>.
+  </div>
+
+  <div class="section-label">Urne postavke za dodatna dela</div>
+
+  <table class="price-table">
+    <thead>
+      <tr>
+        <th>Profil</th>
+        <th style="text-align:right;">Urna postavka</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Direktor projektov / Tehnični direktor / Vodja razvoja</td><td>100 EUR / uro</td></tr>
+      <tr><td>Vodja projektov / Senior razvijalec / Art direktor / Senior UX/UI / Senior SEO</td><td>90 EUR / uro</td></tr>
+      <tr><td>Analitik</td><td>80 EUR / uro</td></tr>
+      <tr><td>Junior razvijalec / Junior UX/UI / Tekstopisec</td><td>70 EUR / uro</td></tr>
+      <tr><td>Spletni urednik</td><td>60 EUR / uro</td></tr>
+    </tbody>
+    <tfoot>
+      <tr>
+        <td>Popust pri obsegu 40+ ur</td>
+        <td>−10%</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <p class="note">Minimalna obračunska enota: 1 ura (60 minut). Dela izven rednega delovnega časa se obračunajo po dvojni urni postavki.</p>
+
+  <div class="closing-block">
+    <div class="closing-title">Smo tu, ko nas potrebujete.</div>
+    <div class="closing-body">Za vse zahtevke, vprašanja ali prijave napak se obrnite na našo ekipo. Vsaka prijava dobi referenčno številko in je sistematično evidentirana.</div>
+    <div class="closing-contacts">
+      <div>
+        <div class="closing-contact-label">Tehnična podpora</div>
+        <div class="closing-contact-name">podpora@renderspace.si</div>
+        <div class="closing-contact-role">Servisni portal · pon–pet, 9:00–17:00</div>
+      </div>
+      <div>
+        <div class="closing-contact-label">Skrbnik pogodbe</div>
+        <div class="closing-contact-name">[Ime skrbnika]</div>
+        <div class="closing-contact-role">[email] · [telefon]</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span>Renderspace d.o.o. · Tehnično vzdrževanje</span>
+    <span class="pn">5</span>
+  </div>
+</div>
+
+</body>
+</html>

@@ -16,6 +16,7 @@ import type { VariantProps } from 'class-variance-authority'
 type BadgeVariant = VariantProps<typeof badgeVariants>['variant']
 import { Card } from '@/components/ui/card'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { ToolsTab } from '../components/ToolsTab'
 
 function safeUrl(url: string | null | undefined): string | undefined {
   if (!url) return undefined
@@ -285,7 +286,7 @@ export function ProjectDetailView() {
   const [removeMemberTarget, setRemoveMemberTarget] = useState<{ id: string; name: string } | null>(null)
 
   // tabs
-  const [tab, setTab] = useState<'overview' | 'invoice' | 'orders' | 'resource'>('overview')
+  const [tab, setTab] = useState<'overview' | 'invoice' | 'orders' | 'resource' | 'tools'>('overview')
 
   // project allocations (for resource planning tab)
   const [projectAllocations, setProjectAllocations] = useState<ResourceAllocation[]>([])
@@ -1792,6 +1793,7 @@ export function ProjectDetailView() {
           ...(project.type !== 'internal' ? [['invoice', 'Invoice Planning']] as const : []),
           ...(project.type === 'variable' ? [['orders', 'Orders']] as const : []),
           ['resource', 'Resource Planning'],
+          ['tools', 'Tools'],
         ] as const).map(([key, label]) => (
           <button
             key={key}
@@ -2551,6 +2553,11 @@ export function ProjectDetailView() {
               )}
             </Card>
           </div>
+        )}
+
+        {/* ── Tools tab ── */}
+        {tab === 'tools' && project && (
+          <ToolsTab projectId={project.id} />
         )}
 
         {/* ── Remove Team Member Confirm ─── */}

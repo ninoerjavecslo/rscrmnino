@@ -1,0 +1,2047 @@
+<!DOCTYPE html>
+<html lang="sl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Design Thinking Poročilo – Hisense Europe Intranet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --black: #0a0a0a;
+    --ink: #1a1a1a;
+    --gray-dark: #444;
+    --gray-mid: #777;
+    --gray-light: #bbb;
+    --gray-bg: #f5f5f3;
+    --gray-rule: #e0e0dd;
+    --white: #ffffff;
+    --orange: #E85C1A;
+    --orange-light: #FDF0EA;
+    --orange-dark: #c94a0f;
+    --navy: #1B2B4B;
+    --navy-light: #eef1f7;
+    --font: 'Figtree', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font);
+    background: #e8e8e5;
+    color: var(--ink);
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 20px auto;
+    padding: 18mm 18mm 22mm;
+    position: relative;
+    background: var(--white);
+    box-shadow: 0 4px 40px rgba(0,0,0,0.12);
+  }
+  .page + .page { margin-top: 0; }
+
+  @media print {
+    body { background: white; }
+    .page {
+      margin: 0;
+      width: 210mm;
+      height: 297mm;
+      max-height: 297mm;
+      overflow: hidden;
+      page-break-after: always;
+      break-after: page;
+      box-shadow: none;
+    }
+    .page:last-child { page-break-after: avoid; break-after: avoid; }
+  }
+
+  /* ── COVER ── */
+  .cover {
+    padding: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .cover-top {
+    background: var(--black);
+    padding: 14mm 18mm 12mm;
+    flex: 1;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .cover-top::before {
+    content: '';
+    position: absolute;
+    bottom: 0; right: 0;
+    width: 90mm;
+    height: 90mm;
+    background: var(--orange);
+    opacity: 0.07;
+    border-radius: 50%;
+    transform: translate(35%, 35%);
+  }
+
+  .cover-top::after {
+    content: '';
+    position: absolute;
+    top: 20mm; right: 18mm;
+    width: 40mm;
+    height: 40mm;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 50%;
+  }
+
+  .cover-badge {
+    display: inline-block;
+    background: var(--orange);
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 2px;
+    margin-bottom: 6mm;
+    width: fit-content;
+  }
+
+  .cover-eyebrow {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.4);
+    margin-bottom: 3mm;
+  }
+
+  .cover-title {
+    font-size: 38px;
+    font-weight: 900;
+    color: var(--white);
+    line-height: 1.0;
+    letter-spacing: -0.02em;
+    margin-bottom: 4mm;
+  }
+
+  .cover-title span { color: var(--orange); }
+
+  .cover-subtitle {
+    font-size: 13px;
+    font-weight: 300;
+    color: rgba(255,255,255,0.45);
+    line-height: 1.6;
+    max-width: 120mm;
+  }
+
+  .cover-meta {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    padding-top: 5mm;
+    gap: 0;
+  }
+
+  .cover-meta-item { padding-right: 8mm; }
+  .cover-meta-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--orange);
+    margin-bottom: 2px;
+  }
+  .cover-meta-value {
+    font-size: 12px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.75);
+    line-height: 1.4;
+  }
+
+  .cover-bottom {
+    background: var(--orange);
+    padding: 6mm 18mm;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .cover-bottom-text {
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.85);
+    letter-spacing: 0.04em;
+  }
+
+  .cover-bottom-logo {
+    font-size: 15px;
+    font-weight: 900;
+    color: white;
+    letter-spacing: -0.02em;
+  }
+
+  /* ── PAGE HEADER ── */
+  .page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 2px solid var(--gray-rule);
+    padding-bottom: 4mm;
+    margin-bottom: 8mm;
+  }
+  .page-header-logo {
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--black);
+    letter-spacing: -0.01em;
+  }
+  .page-header-section {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--orange);
+  }
+
+  /* ── SECTION TITLE ── */
+  .section-number {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--orange);
+    margin-bottom: 2mm;
+    display: block;
+  }
+
+  h2 {
+    font-size: 22px;
+    font-weight: 900;
+    color: var(--black);
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    margin-bottom: 6mm;
+  }
+
+  h3 {
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--navy);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 3mm;
+    margin-top: 6mm;
+  }
+
+  h4 {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 2mm;
+    margin-top: 4mm;
+  }
+
+  p {
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--gray-dark);
+    line-height: 1.65;
+    margin-bottom: 3mm;
+  }
+
+  /* ── INTRO BOX ── */
+  .intro-box {
+    background: var(--black);
+    color: white;
+    border-radius: 4px;
+    padding: 6mm 7mm;
+    margin-bottom: 7mm;
+  }
+  .intro-box p {
+    color: rgba(255,255,255,0.75);
+    font-size: 11.5px;
+    line-height: 1.7;
+    margin: 0;
+  }
+  .intro-box strong { color: white; }
+
+  /* ── HIGHLIGHT BOX ── */
+  .highlight-box {
+    background: var(--orange-light);
+    border-left: 3px solid var(--orange);
+    border-radius: 0 4px 4px 0;
+    padding: 4mm 5mm;
+    margin: 4mm 0;
+  }
+  .highlight-box p { margin: 0; color: var(--ink); font-size: 11px; }
+  .highlight-box strong { color: var(--orange-dark); }
+
+  .navy-box {
+    background: var(--navy-light);
+    border-left: 3px solid var(--navy);
+    border-radius: 0 4px 4px 0;
+    padding: 4mm 5mm;
+    margin: 4mm 0;
+  }
+  .navy-box p { margin: 0; color: var(--ink); font-size: 11px; }
+
+  /* ── STAT CARDS ── */
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4mm;
+    margin: 5mm 0;
+  }
+
+  .stat-card {
+    background: var(--gray-bg);
+    border-radius: 4px;
+    padding: 5mm;
+    text-align: center;
+  }
+
+  .stat-card.orange { background: var(--orange); }
+  .stat-card.navy { background: var(--navy); }
+  .stat-card.dark { background: var(--black); }
+
+  .stat-number {
+    font-size: 28px;
+    font-weight: 900;
+    color: var(--black);
+    letter-spacing: -0.03em;
+    line-height: 1;
+    margin-bottom: 1mm;
+  }
+  .stat-card.orange .stat-number,
+  .stat-card.navy .stat-number,
+  .stat-card.dark .stat-number { color: white; }
+
+  .stat-label {
+    font-size: 9.5px;
+    font-weight: 600;
+    color: var(--gray-mid);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    line-height: 1.3;
+  }
+  .stat-card.orange .stat-label,
+  .stat-card.navy .stat-label,
+  .stat-card.dark .stat-label { color: rgba(255,255,255,0.65); }
+
+  /* ── AGENDA TABLE ── */
+  .agenda-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 4mm 0;
+    font-size: 10.5px;
+  }
+  .agenda-table thead tr {
+    background: var(--navy);
+    color: white;
+  }
+  .agenda-table thead th {
+    padding: 3mm 4mm;
+    text-align: left;
+    font-weight: 700;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .agenda-table tbody tr:nth-child(even) { background: var(--gray-bg); }
+  .agenda-table tbody tr:nth-child(odd) { background: white; }
+  .agenda-table tbody td {
+    padding: 3mm 4mm;
+    vertical-align: top;
+    border-bottom: 1px solid var(--gray-rule);
+    color: var(--gray-dark);
+    line-height: 1.5;
+  }
+  .agenda-table tbody td:first-child {
+    font-weight: 700;
+    color: var(--orange);
+    white-space: nowrap;
+    font-size: 10px;
+  }
+  .agenda-table .item-title {
+    font-weight: 700;
+    color: var(--ink);
+    display: block;
+    margin-bottom: 1mm;
+  }
+
+  /* ── TWO COL ── */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5mm;
+    margin: 4mm 0;
+  }
+
+  .two-col-thirds {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 5mm;
+    margin: 4mm 0;
+  }
+
+  /* ── USER GROUPS ── */
+  .user-group-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4mm;
+    margin: 5mm 0;
+  }
+
+  .user-group-card {
+    border: 1.5px solid var(--gray-rule);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .user-group-header {
+    background: var(--navy);
+    color: white;
+    padding: 3mm 4mm;
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+  }
+
+  .user-group-body {
+    padding: 3mm 4mm;
+    font-size: 10px;
+    color: var(--gray-dark);
+    line-height: 1.55;
+  }
+
+  .user-group-tag {
+    display: inline-block;
+    background: var(--orange-light);
+    color: var(--orange-dark);
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 2px;
+    margin-bottom: 2mm;
+  }
+
+  /* ── WHAT WORKS GRID ── */
+  .works-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 3mm;
+    margin: 4mm 0;
+  }
+
+  .works-item {
+    background: var(--gray-bg);
+    border-radius: 4px;
+    padding: 4mm;
+  }
+
+  .works-item-icon {
+    width: 7mm;
+    height: 7mm;
+    background: var(--orange);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 2mm;
+    font-size: 11px;
+    color: white;
+    font-weight: 900;
+  }
+
+  .works-item-title {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 1mm;
+  }
+
+  .works-item-reason {
+    font-size: 9.5px;
+    color: var(--orange-dark);
+    font-weight: 600;
+  }
+
+  .works-item-desc {
+    font-size: 9.5px;
+    color: var(--gray-mid);
+    line-height: 1.5;
+  }
+
+  /* ── PROBLEM CARDS ── */
+  .problem-card {
+    border: 1.5px solid var(--gray-rule);
+    border-radius: 4px;
+    padding: 4mm;
+    margin-bottom: 3mm;
+  }
+
+  .problem-card-header {
+    display: flex;
+    align-items: center;
+    gap: 3mm;
+    margin-bottom: 2mm;
+  }
+
+  .problem-dot {
+    width: 6mm;
+    height: 6mm;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .problem-dot.red { background: #E53935; }
+  .problem-dot.amber { background: #F57C00; }
+  .problem-dot.blue { background: #1565C0; }
+
+  .problem-card-title {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--ink);
+  }
+
+  .problem-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .problem-list li {
+    font-size: 10px;
+    color: var(--gray-dark);
+    line-height: 1.55;
+    padding: 1.5mm 0;
+    border-bottom: 1px solid var(--gray-rule);
+    display: flex;
+    gap: 2mm;
+    align-items: flex-start;
+    margin: 0;
+  }
+
+  .problem-list li:last-child { border-bottom: none; }
+
+  .problem-list li::before {
+    content: '—';
+    color: var(--orange);
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 0.5px;
+  }
+
+  /* ── VISION PILLARS ── */
+  .vision-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4mm;
+    margin: 5mm 0;
+  }
+
+  .vision-card {
+    background: var(--navy);
+    border-radius: 4px;
+    padding: 5mm;
+    color: white;
+  }
+
+  .vision-card-num {
+    font-size: 24px;
+    font-weight: 900;
+    color: var(--orange);
+    line-height: 1;
+    margin-bottom: 2mm;
+    letter-spacing: -0.03em;
+  }
+
+  .vision-card-title {
+    font-size: 11px;
+    font-weight: 800;
+    color: white;
+    margin-bottom: 2mm;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .vision-card-desc {
+    font-size: 9.5px;
+    color: rgba(255,255,255,0.6);
+    line-height: 1.55;
+  }
+
+  /* ── PRIORITY TABLE ── */
+  .priority-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10.5px;
+    margin: 4mm 0;
+  }
+  .priority-table thead tr {
+    background: var(--navy);
+    color: white;
+  }
+  .priority-table thead th {
+    padding: 3mm 4mm;
+    text-align: left;
+    font-weight: 700;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .priority-table tbody tr:nth-child(even) { background: var(--gray-bg); }
+  .priority-table tbody td {
+    padding: 2.5mm 4mm;
+    border-bottom: 1px solid var(--gray-rule);
+    color: var(--gray-dark);
+    line-height: 1.45;
+    vertical-align: middle;
+  }
+  .priority-table tbody td:first-child {
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .badge-must { background: #FFEBEE; color: #B71C1C; }
+  .badge-high { background: #FFF8E1; color: #E65100; }
+  .badge-medium { background: #F1F8E9; color: #2E7D32; }
+
+  /* ── TONE TABLE ── */
+  .tone-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10.5px;
+    margin: 4mm 0;
+  }
+  .tone-table thead tr { background: var(--navy); color: white; }
+  .tone-table thead th {
+    padding: 3mm 4mm;
+    text-align: left;
+    font-weight: 700;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .tone-table tbody tr:nth-child(even) { background: var(--gray-bg); }
+  .tone-table tbody td {
+    padding: 2.5mm 4mm;
+    border-bottom: 1px solid var(--gray-rule);
+    color: var(--gray-dark);
+    font-size: 10.5px;
+    vertical-align: middle;
+  }
+  .tone-table .current { color: var(--gray-mid); font-style: italic; }
+  .tone-table .desired { color: var(--navy); font-weight: 600; }
+
+  /* ── PHASE BLOCKS ── */
+  .phase-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4mm;
+    margin: 5mm 0;
+  }
+
+  .phase-block {
+    border-radius: 4px;
+    padding: 5mm;
+  }
+  .phase-block.p1 { background: var(--orange); }
+  .phase-block.p2 { background: var(--navy); }
+
+  .phase-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.65);
+    margin-bottom: 1mm;
+  }
+
+  .phase-title {
+    font-size: 14px;
+    font-weight: 900;
+    color: white;
+    margin-bottom: 3mm;
+    letter-spacing: -0.01em;
+  }
+
+  .phase-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .phase-list li {
+    font-size: 9.5px;
+    color: rgba(255,255,255,0.8);
+    padding: 1mm 0;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    display: flex;
+    gap: 2mm;
+    align-items: flex-start;
+    margin: 0;
+    line-height: 1.45;
+  }
+  .phase-list li:last-child { border-bottom: none; }
+  .phase-list li::before {
+    content: '→';
+    color: rgba(255,255,255,0.5);
+    flex-shrink: 0;
+  }
+
+  /* ── PERSONALIZATION DIMS ── */
+  .dim-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10.5px;
+    margin: 4mm 0;
+  }
+  .dim-table thead tr { background: var(--navy); color: white; }
+  .dim-table thead th {
+    padding: 3mm 4mm;
+    text-align: left;
+    font-weight: 700;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .dim-table tbody tr:nth-child(even) { background: var(--gray-bg); }
+  .dim-table tbody td {
+    padding: 2.5mm 4mm;
+    border-bottom: 1px solid var(--gray-rule);
+    color: var(--gray-dark);
+    vertical-align: middle;
+    line-height: 1.45;
+  }
+  .dim-table tbody td:first-child {
+    font-weight: 700;
+    color: var(--ink);
+  }
+
+  /* ── GOVERNANCE ── */
+  .gov-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4mm;
+    margin: 5mm 0;
+  }
+
+  .gov-card {
+    border: 1.5px solid var(--gray-rule);
+    border-radius: 4px;
+    padding: 4mm;
+  }
+
+  .gov-card-num {
+    font-size: 18px;
+    font-weight: 900;
+    color: var(--orange);
+    line-height: 1;
+    margin-bottom: 1mm;
+    letter-spacing: -0.02em;
+  }
+
+  .gov-card-title {
+    font-size: 10.5px;
+    font-weight: 800;
+    color: var(--ink);
+    margin-bottom: 2mm;
+  }
+
+  .gov-card-desc {
+    font-size: 9.5px;
+    color: var(--gray-mid);
+    line-height: 1.5;
+  }
+
+  /* ── RISK CARDS ── */
+  .risk-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3mm;
+    margin: 4mm 0;
+  }
+
+  .risk-card {
+    border-left: 3px solid var(--orange);
+    background: var(--gray-bg);
+    border-radius: 0 4px 4px 0;
+    padding: 3.5mm 4mm;
+  }
+
+  .risk-card-title {
+    font-size: 10.5px;
+    font-weight: 800;
+    color: var(--ink);
+    margin-bottom: 1.5mm;
+  }
+
+  .risk-card-desc {
+    font-size: 9.5px;
+    color: var(--gray-dark);
+    line-height: 1.5;
+    margin-bottom: 1.5mm;
+  }
+
+  .risk-mitigation {
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--orange-dark);
+  }
+  .risk-mitigation::before { content: 'Obvladovanje: '; }
+
+  /* ── VALJEVO ── */
+  .valjevo-header {
+    background: var(--navy);
+    border-radius: 4px;
+    padding: 5mm;
+    margin-bottom: 5mm;
+  }
+
+  .valjevo-header h3 {
+    color: white;
+    margin: 0 0 2mm 0;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .valjevo-header p {
+    color: rgba(255,255,255,0.6);
+    margin: 0;
+    font-size: 10.5px;
+  }
+
+  .compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10.5px;
+    margin: 4mm 0;
+  }
+  .compare-table thead tr { background: var(--navy); color: white; }
+  .compare-table thead th {
+    padding: 3mm 4mm;
+    text-align: left;
+    font-weight: 700;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .compare-table tbody tr:nth-child(even) { background: var(--gray-bg); }
+  .compare-table tbody td {
+    padding: 2.5mm 4mm;
+    border-bottom: 1px solid var(--gray-rule);
+    color: var(--gray-dark);
+    vertical-align: top;
+    line-height: 1.5;
+  }
+  .compare-table tbody td:first-child {
+    font-weight: 700;
+    color: var(--ink);
+    width: 30%;
+  }
+
+  /* ── CONCLUSIONS ── */
+  .conclusion-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4mm;
+    margin: 5mm 0;
+  }
+
+  .conclusion-card {
+    background: var(--gray-bg);
+    border-radius: 4px;
+    padding: 4mm;
+    border-top: 3px solid var(--orange);
+  }
+
+  .conclusion-card-title {
+    font-size: 10.5px;
+    font-weight: 800;
+    color: var(--ink);
+    margin-bottom: 2mm;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .conclusion-card-desc {
+    font-size: 9.5px;
+    color: var(--gray-dark);
+    line-height: 1.55;
+  }
+
+  /* ── FINAL BOX ── */
+  .final-box {
+    background: var(--black);
+    border-radius: 4px;
+    padding: 7mm;
+    margin-top: 5mm;
+  }
+
+  .final-box h3 {
+    color: var(--orange);
+    margin: 0 0 3mm 0;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .final-box p {
+    color: rgba(255,255,255,0.75);
+    font-size: 11.5px;
+    line-height: 1.7;
+    margin-bottom: 2mm;
+  }
+  .final-box p:last-child { margin-bottom: 0; }
+
+  /* ── FOOTER LINE ── */
+  .page-footer {
+    position: absolute;
+    bottom: 8mm;
+    left: 18mm;
+    right: 18mm;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid var(--gray-rule);
+    padding-top: 3mm;
+  }
+
+  .page-footer-left {
+    font-size: 8.5px;
+    color: var(--gray-light);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+  }
+
+  .page-footer-right {
+    font-size: 8.5px;
+    color: var(--gray-light);
+    font-weight: 500;
+  }
+
+  /* ── DIVIDER ── */
+  .divider {
+    height: 1px;
+    background: var(--gray-rule);
+    margin: 5mm 0;
+  }
+
+  /* ── QUOTE ── */
+  .quote {
+    border-left: 3px solid var(--orange);
+    padding: 3mm 5mm;
+    margin: 3mm 0;
+  }
+  .quote-text {
+    font-size: 11.5px;
+    font-style: italic;
+    color: var(--ink);
+    font-weight: 500;
+    line-height: 1.6;
+  }
+  .quote-attr {
+    font-size: 9.5px;
+    color: var(--gray-mid);
+    margin-top: 1mm;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  ul.simple-list {
+    list-style: none;
+    padding: 0;
+    margin: 2mm 0 3mm;
+  }
+  ul.simple-list li {
+    font-size: 10.5px;
+    color: var(--gray-dark);
+    padding: 1mm 0;
+    border-bottom: 1px solid var(--gray-rule);
+    display: flex;
+    gap: 2mm;
+    align-items: flex-start;
+    line-height: 1.5;
+    margin: 0;
+  }
+  ul.simple-list li:last-child { border-bottom: none; }
+  ul.simple-list li::before {
+    content: '•';
+    color: var(--orange);
+    font-weight: 900;
+    flex-shrink: 0;
+  }
+
+  .spacer { height: 4mm; }
+
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════
+     PAGE 1 — COVER
+══════════════════════════════════════════ -->
+<div class="page cover">
+
+  <div class="cover-top">
+    <div>
+      <div class="cover-badge">Zaupno · Interni dokument</div>
+      <div class="cover-eyebrow">Renderspace · Hisense Europe</div>
+      <div class="cover-title">Poročilo<br><span>Design Thinking</span><br>delavnice</div>
+      <div class="cover-subtitle">Strateška analiza potreb zaposlenih in vizija prenove intraneta Hisense Europe — osnova za vse nadaljnje projektne odločitve.</div>
+    </div>
+
+    <!-- Key stats strip -->
+    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:0; border:1px solid rgba(255,255,255,0.08); border-radius:6px; overflow:hidden; margin:10mm 0;">
+      <div style="padding:5mm 6mm; border-right:1px solid rgba(255,255,255,0.08);">
+        <div style="font-size:28px; font-weight:900; color:var(--orange); line-height:1;">2</div>
+        <div style="font-size:9px; font-weight:600; color:rgba(255,255,255,0.45); margin-top:1mm; text-transform:uppercase; letter-spacing:0.06em;">Delavnici</div>
+      </div>
+      <div style="padding:5mm 6mm; border-right:1px solid rgba(255,255,255,0.08);">
+        <div style="font-size:28px; font-weight:900; color:var(--orange); line-height:1;">4</div>
+        <div style="font-size:9px; font-weight:600; color:rgba(255,255,255,0.45); margin-top:1mm; text-transform:uppercase; letter-spacing:0.06em;">Delovne skupine</div>
+      </div>
+      <div style="padding:5mm 6mm; border-right:1px solid rgba(255,255,255,0.08);">
+        <div style="font-size:28px; font-weight:900; color:var(--orange); line-height:1;">50%</div>
+        <div style="font-size:9px; font-weight:600; color:rgba(255,255,255,0.45); margin-top:1mm; text-transform:uppercase; letter-spacing:0.06em;">Zaposlenih brez dostopa</div>
+      </div>
+      <div style="padding:5mm 6mm;">
+        <div style="font-size:28px; font-weight:900; color:var(--orange); line-height:1;">2</div>
+        <div style="font-size:9px; font-weight:600; color:rgba(255,255,255,0.45); margin-top:1mm; text-transform:uppercase; letter-spacing:0.06em;">Fazi prenove</div>
+      </div>
+    </div>
+
+    <!-- TOC -->
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:2mm; margin-bottom:10mm;">
+      <div style="display:flex; align-items:center; gap:3mm; padding:2.5mm 0; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="font-size:9px; font-weight:700; color:var(--orange); width:6mm; flex-shrink:0;">01</div>
+        <div style="font-size:9.5px; color:rgba(255,255,255,0.5);">O Renderspace &amp; Uvod</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:3mm; padding:2.5mm 0; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="font-size:9px; font-weight:700; color:var(--orange); width:6mm; flex-shrink:0;">06</div>
+        <div style="font-size:9.5px; color:rgba(255,255,255,0.5);">Vizija novega intraneta</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:3mm; padding:2.5mm 0; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="font-size:9px; font-weight:700; color:var(--orange); width:6mm; flex-shrink:0;">02</div>
+        <div style="font-size:9.5px; color:rgba(255,255,255,0.5);">Struktura delavnice</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:3mm; padding:2.5mm 0; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="font-size:9px; font-weight:700; color:var(--orange); width:6mm; flex-shrink:0;">07</div>
+        <div style="font-size:9.5px; color:rgba(255,255,255,0.5);">Mobilni MVP</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:3mm; padding:2.5mm 0; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="font-size:9px; font-weight:700; color:var(--orange); width:6mm; flex-shrink:0;">03</div>
+        <div style="font-size:9.5px; color:rgba(255,255,255,0.5);">Ciljne skupine</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:3mm; padding:2.5mm 0; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="font-size:9px; font-weight:700; color:var(--orange); width:6mm; flex-shrink:0;">08</div>
+        <div style="font-size:9.5px; color:rgba(255,255,255,0.5);">Funkcionalnosti</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:3mm; padding:2.5mm 0; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="font-size:9px; font-weight:700; color:var(--orange); width:6mm; flex-shrink:0;">04</div>
+        <div style="font-size:9.5px; color:rgba(255,255,255,0.5);">Analiza — kaj deluje</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:3mm; padding:2.5mm 0; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="font-size:9px; font-weight:700; color:var(--orange); width:6mm; flex-shrink:0;">09</div>
+        <div style="font-size:9.5px; color:rgba(255,255,255,0.5);">Personalizacija</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:3mm; padding:2.5mm 0; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="font-size:9px; font-weight:700; color:var(--orange); width:6mm; flex-shrink:0;">05</div>
+        <div style="font-size:9.5px; color:rgba(255,255,255,0.5);">Boleče točke</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:3mm; padding:2.5mm 0; border-bottom:1px solid rgba(255,255,255,0.06);">
+        <div style="font-size:9px; font-weight:700; color:var(--orange); width:6mm; flex-shrink:0;">10–13</div>
+        <div style="font-size:9.5px; color:rgba(255,255,255,0.5);">Upravljanje · Tveganja · Valjevo · Zaključki</div>
+      </div>
+    </div>
+
+    <div class="cover-meta">
+      <div class="cover-meta-item">
+        <div class="cover-meta-label">Klient</div>
+        <div class="cover-meta-value">Hisense Gorenje Europe, d.o.o.<br>Hrvaška ulica 4, Ljubljana</div>
+      </div>
+      <div class="cover-meta-item">
+        <div class="cover-meta-label">Agencija</div>
+        <div class="cover-meta-value">Renderspace d.o.o.<br>Vilharjeva cesta 36, Ljubljana</div>
+      </div>
+      <div class="cover-meta-item">
+        <div class="cover-meta-label">Datum</div>
+        <div class="cover-meta-value">27. januarja 2026</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cover-bottom">
+    <div class="cover-bottom-text">Hisense Europe · Intranet · Faza 0 — Research</div>
+    <div class="cover-bottom-logo">renderspace</div>
+  </div>
+
+</div>
+
+
+<!-- ══════════════════════════════════════════
+     PAGE 2 — UVOD + OSNOVNE INFO
+══════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-header">
+    <div class="page-header-logo">renderspace</div>
+    <div class="page-header-section">Uvod in struktura delavnice</div>
+  </div>
+
+  <span class="section-number">01 — Kdo smo</span>
+  <h2>O Renderspace</h2>
+
+  <div style="display:grid; grid-template-columns:2fr 1fr; gap:5mm; margin-bottom:5mm; align-items:start;">
+    <div>
+      <p style="margin-bottom:2mm;">Renderspace je digitalna agencija, specializirana za <strong>strateško digitalno komunikacijo, UX dizajn in razvoj digitalnih produktov</strong>. Podjetjem pomagamo ustvarjati digitalne izkušnje, ki so uporabne, estetske in merljivo učinkovite.</p>
+      <p style="margin-bottom:2mm;">Z ekipo Hisense Europe smo izvedli celovit Design Thinking proces — od analize obstoječega stanja in potreb zaposlenih do soustvarjanja vizije novega intraneta. To poročilo je rezultat tega procesa.</p>
+    </div>
+    <div style="background:var(--navy); border-radius:4px; padding:5mm; color:white;">
+      <div style="font-size:9px; font-weight:700; color:rgba(255,255,255,0.5); letter-spacing:0.08em; text-transform:uppercase; margin-bottom:2mm;">Renderspace d.o.o.</div>
+      <div style="font-size:10px; color:rgba(255,255,255,0.75); line-height:1.6;">Vilharjeva cesta 36<br>1000 Ljubljana<br>renderspace.si</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <span class="section-number">02 — Uvod</span>
+  <h2>Zakaj ta delavnica?</h2>
+
+  <div class="intro-box">
+    <p>V okviru priprave na prenovo intraneta <strong>Hisense Europe</strong> je bila izvedena strateška Design Thinking delavnica, katere glavni namen je bil pridobiti poglobljen vpogled v dejanske potrebe zaposlenih, obstoječe izzive ter soustvariti jasno in dolgoročno vizijo novega intraneta.</p>
+  </div>
+
+  <p>To poročilo dokumentira ugotovitve delavnice, izvedene v okviru projekta prenove intraneta Hisense Europe. Služi kot osnova za vse nadaljnje projektne odločitve — od definicije obsega in prioritet do oblikovanja uporabniške izkušnje in tehnične implementacije.</p>
+
+  <p>Je strateški dokument, ki pretvarja surove vpoglede udeležencev v strukturirane ugotovitve in konkretna priporočila. Omogoča, da vsi deležniki delijo skupno razumevanje potreb zaposlenih, trenutnih izzivov in priložnosti za izboljšave.</p>
+
+  <div class="divider"></div>
+
+  <span class="section-number">03 — Osnove</span>
+  <h2>Delavnica v številkah</h2>
+
+  <div class="stat-row">
+    <div class="stat-card orange">
+      <div class="stat-number">2</div>
+      <div class="stat-label">Delavnici</div>
+    </div>
+    <div class="stat-card navy">
+      <div class="stat-number">4</div>
+      <div class="stat-label">Delovne skupine</div>
+    </div>
+    <div class="stat-card dark">
+      <div class="stat-number">7</div>
+      <div class="stat-label">Vsebinskih sklopov</div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div>
+      <h3>Datum in format</h3>
+      <p>Osrednja delavnica je potekala <strong>9. decembra 2024</strong> v prostorih Hisense Europe v Velenju (9:00–15:00). Dopolnilni klic z ekipo iz Srbije (Valjevo) je bil izveden <strong>20. januarja 2025</strong> v obliki video klica.</p>
+      <p>Udeleženci so bili razdeljeni v štiri delovne skupine z reprezentativnimi profili iz vseh oddelkov — od proizvodnje, IT, HR do marketinga in korporativnega komuniciranja.</p>
+    </div>
+    <div>
+      <h3>Tematski sklopi</h3>
+      <ul class="simple-list">
+        <li>Analiza obstoječega stanja</li>
+        <li>Organizacijski kontekst</li>
+        <li>Ciljne skupine in potrebe</li>
+        <li>Vizija novega intraneta</li>
+        <li>Mobilna aplikacija (MVP)</li>
+        <li>Funkcionalnosti in prioritizacija</li>
+        <li>Upravljanje in tveganja</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+  <h3>Potek delavnice (9. december 2024, 9:00–15:00)</h3>
+  <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:3mm; margin-top:3mm;">
+    <div style="background:var(--gray-bg); border-radius:4px; padding:3mm 4mm;">
+      <div style="font-size:9px; font-weight:700; color:var(--orange); margin-bottom:1mm;">9:00–9:45</div>
+      <div style="font-size:10px; font-weight:700; color:var(--ink);">Pregled obstoječega stanja</div>
+    </div>
+    <div style="background:var(--gray-bg); border-radius:4px; padding:3mm 4mm;">
+      <div style="font-size:9px; font-weight:700; color:var(--orange); margin-bottom:1mm;">9:45–11:30</div>
+      <div style="font-size:10px; font-weight:700; color:var(--ink);">Analiza ciljnih skupin</div>
+    </div>
+    <div style="background:var(--gray-bg); border-radius:4px; padding:3mm 4mm;">
+      <div style="font-size:9px; font-weight:700; color:var(--orange); margin-bottom:1mm;">12:30–13:00</div>
+      <div style="font-size:10px; font-weight:700; color:var(--ink);">Pregled dobrih praks</div>
+    </div>
+    <div style="background:var(--gray-bg); border-radius:4px; padding:3mm 4mm;">
+      <div style="font-size:9px; font-weight:700; color:var(--orange); margin-bottom:1mm;">13:00–13:45</div>
+      <div style="font-size:10px; font-weight:700; color:var(--ink);">Prioritizacija funkcionalnosti</div>
+    </div>
+    <div style="background:var(--navy); border-radius:4px; padding:3mm 4mm;">
+      <div style="font-size:9px; font-weight:700; color:rgba(255,255,255,0.5); margin-bottom:1mm;">13:45–14:00</div>
+      <div style="font-size:10px; font-weight:700; color:white;">Vizualna usmeritev</div>
+    </div>
+    <div style="background:var(--navy); border-radius:4px; padding:3mm 4mm;">
+      <div style="font-size:9px; font-weight:700; color:rgba(255,255,255,0.5); margin-bottom:1mm;">14:00–14:30</div>
+      <div style="font-size:10px; font-weight:700; color:white;">Smernice za MVP</div>
+    </div>
+    <div style="background:var(--navy); border-radius:4px; padding:3mm 4mm;">
+      <div style="font-size:9px; font-weight:700; color:rgba(255,255,255,0.5); margin-bottom:1mm;">14:30–15:00</div>
+      <div style="font-size:10px; font-weight:700; color:white;">Integracije in zaključek</div>
+    </div>
+    <div style="background:var(--orange); border-radius:4px; padding:3mm 4mm;">
+      <div style="font-size:9px; font-weight:700; color:rgba(255,255,255,0.7); margin-bottom:1mm;">20. jan 2025</div>
+      <div style="font-size:10px; font-weight:700; color:white;">Klic Gorenje Valjevo</div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <div class="page-footer-left">Zaupno · Hisense Intranet</div>
+    <div class="page-footer-right">stran 2</div>
+  </div>
+</div>
+
+
+
+
+
+
+<!-- ══════════════════════════════════════════
+     PAGE 5 — KDO UPORABLJA INTRANET
+══════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-header">
+    <div class="page-header-logo">renderspace</div>
+    <div class="page-header-section">Ciljne skupine</div>
+  </div>
+
+  <span class="section-number">04.3 — Ciljne skupine</span>
+  <h2>Kdo uporablja intranet?</h2>
+
+  <p>Ena najpomembnejših ugotovitev delavnice: zaposleni se delijo na <strong>dva svetova</strong> — tiste z računalnikom in tiste brez. Ta razdelitev fundamentalno določa, kako mora biti intranet zasnovan.</p>
+
+  <div class="user-group-row">
+    <div class="user-group-card">
+      <div class="user-group-header" style="background: var(--navy);">Pisarniški zaposleni</div>
+      <div class="user-group-body">
+        <div class="user-group-tag">Poln dostop</div>
+        <p style="font-size:10px; margin:0; color:var(--gray-dark); line-height:1.5;">Delo za računalnikom. Intranet je del vsakdana — odprejo ga ob prihodu v službo, uporabljajo kot delovni pripomoček čez dan. Dostop tudi od doma.</p>
+      </div>
+    </div>
+    <div class="user-group-card">
+      <div class="user-group-header" style="background: #B71C1C;">Proizvodnja</div>
+      <div class="user-group-body">
+        <div class="user-group-tag" style="background:#FFEBEE; color:#B71C1C;">Brez dostopa</div>
+        <p style="font-size:10px; margin:0; color:var(--gray-dark); line-height:1.5;">Delo na liniji. Nimajo računalnikov, večina nima AD računa. Dobivajo tiskano verzijo novic 1× tedensko. <strong>Praktično brez dostopa do intraneta.</strong></p>
+        <p style="font-size:9.5px; margin-top:1.5mm; color:var(--gray-mid); line-height:1.4;">Tovarne: KA, PMS, PSA, TV tovarna (Hisense Europe Electronics) · Digitalizacija · ConnectLife · PM · sindikat SKEI</p>
+      </div>
+    </div>
+    <div class="user-group-card">
+      <div class="user-group-header" style="background: var(--gray-dark);">Gorenje Valjevo (Srbija)</div>
+      <div class="user-group-body">
+        <div class="user-group-tag" style="background:#E3F2FD; color:#1565C0;">Omejen dostop</div>
+        <p style="font-size:10px; margin:0; color:var(--gray-dark); line-height:1.5;">Zaposleni podjetja Gorenje Valjevo (1.700 proizvodnih + 180 režijskih delavcev) gledajo angleško verzijo. Malo lokalnih vsebin v srbščini. Večina nima AD računa.</p>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:3mm; margin: 5mm 0;">
+    <div style="background: #B71C1C; border-radius:4px; padding:5mm;">
+      <div style="font-size:28px; font-weight:900; color:white; line-height:1; margin-bottom:2mm;">50 %</div>
+      <div style="font-size:10.5px; font-weight:600; color:rgba(255,255,255,0.85); margin-bottom:2mm;">zaposlenih nima dostopa do intraneta</div>
+      <div style="font-size:9.5px; color:rgba(255,255,255,0.6); line-height:1.55;">To ni tehnični problem — je strateški problem interne komunikacije. Prav ta ugotovitev je utrdila odločitev, da mora prva faza projekta vključevati mobilno aplikacijo.</div>
+    </div>
+    <div style="background:var(--black); border-radius:4px; padding:5mm;">
+      <div style="font-size:28px; font-weight:900; color:var(--orange); line-height:1; margin-bottom:2mm;">1</div>
+      <div style="font-size:10.5px; font-weight:600; color:white; margin-bottom:2mm;">oseba v oddelku korporativnega komuniciranja</div>
+      <div style="font-size:9.5px; color:rgba(255,255,255,0.6); line-height:1.55;">Ena zaposlena pokriva ustvarjanje vsebin, interno komuniciranje, korporativno identiteto in vzdrževanje portala. Kadrovska okrepitev je predpogoj za uspeh — več v poglavju o upravljanju.</div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <div class="page-footer-left">Zaupno · Hisense Intranet</div>
+    <div class="page-footer-right">stran 5</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════
+     PAGE 6 — ANALIZA STANJA: KAJ DELUJE
+══════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-header">
+    <div class="page-header-logo">renderspace</div>
+    <div class="page-header-section">Analiza trenutnega stanja</div>
+  </div>
+
+  <span class="section-number">05 — Analiza trenutnega stanja</span>
+  <h2>Kaj deluje dobro?</h2>
+
+  <p>Kljub kritikam trenutni intranet ni brez vrednosti. Udeleženci delavnice so identificirali več elementov, ki jih cenijo in ki naj se ohranijo ali nadgradijo v novi verziji.</p>
+
+  <div class="works-grid">
+    <div class="works-item">
+      <div class="works-item-title">Osebni portal</div>
+      <div class="works-item-reason">Zakaj deluje: Neposredna osebna korist</div>
+      <div class="works-item-desc">Bližnjica do osebnega portala je najpogosteje omenjena pozitivna funkcionalnost. Hiter dostop do prijave odsotnosti, pregleda plačilnih list in koriščenja ur.</div>
+    </div>
+    <div class="works-item">
+      <div class="works-item-title">Naročanje malice</div>
+      <div class="works-item-reason">Zakaj deluje: Vsakodnevna praktična vrednost</div>
+      <div class="works-item-desc">»Najbolj iskano je malica!« Zaposleni dnevno preverjajo tedenski jedilnik in naročajo obroke. Jasna funkcija brez zmede.</div>
+    </div>
+    <div class="works-item">
+      <div class="works-item-title">Karierna točka</div>
+      <div class="works-item-reason">Zakaj deluje: Relevantnost za osebni razvoj</div>
+      <div class="works-item-desc">Prosta delovna mesta so objavljena na prvi strani med delovnimi informacijami in v karierni točki. Občutek priložnosti znotraj podjetja.</div>
+    </div>
+    <div class="works-item">
+      <div class="works-item-title">Novice in obvestila</div>
+      <div class="works-item-reason">Zakaj deluje: Občutek povezanosti</div>
+      <div class="works-item-desc">Ko zaposleni najdejo novice, jih cenijo. Sprotno objavljanje informacij, vizualno privlačne slike in pogosta objava so pozitivni.</div>
+    </div>
+    <div class="works-item">
+      <div class="works-item-title">Arhiv informacij</div>
+      <div class="works-item-reason">Zakaj deluje: Zanesljivost</div>
+      <div class="works-item-desc">Možnost iskanja starejših informacij. Arhiv predstavlja institucionalni spomin organizacije.</div>
+    </div>
+    <div class="works-item">
+      <div class="works-item-title">Organizacijska shema</div>
+      <div class="works-item-reason">Zakaj deluje: Orientacija v kompleksni org.</div>
+      <div class="works-item-desc">Podatki o strukturi podjetja. Zaposleni cenijo možnost preveriti, kdo je zadolžen za kaj — čeprav je shema pogosto skrita.</div>
+    </div>
+  </div>
+
+  <div class="navy-box">
+    <p><strong>Skupni imenovalec uspešnih funkcionalnosti:</strong> Vse funkcionalnosti, ki jih zaposleni cenijo, imajo neposredno, praktično vrednost za vsakodnevno delo ali osebne potrebe. Niso abstraktne »korporativne vsebine« — so orodja, ki zaposlenim olajšajo življenje.</p>
+  </div>
+
+  <div class="page-footer">
+    <div class="page-footer-left">Zaupno · Hisense Intranet</div>
+    <div class="page-footer-right">stran 6</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════
+     PAGE 7 — KAJ NE DELUJE
+══════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-header">
+    <div class="page-header-logo">renderspace</div>
+    <div class="page-header-section">Analiza trenutnega stanja — Problemi</div>
+  </div>
+
+  <span class="section-number">05.2 — Kaj ne deluje</span>
+  <h2>Ključne boleče točke</h2>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:3mm;">
+
+    <div style="background:var(--gray-bg); border-radius:4px; padding:4mm 5mm;">
+      <div style="font-size:8.5px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:#B71C1C; margin-bottom:3mm;">Dostopnost</div>
+      <div style="display:flex; flex-direction:column; gap:2.5mm;">
+        <div style="border-left:3px solid #E53935; padding-left:3mm;">
+          <div style="font-size:10px; font-weight:700; color:var(--ink);">Proizvodnja brez dostopa</div>
+          <div style="font-size:9px; color:var(--gray-mid); line-height:1.5; margin-top:0.5mm;">Delavci nimajo računalnikov niti AD računov. Novice dobivajo tiskane 1× tedensko.</div>
+        </div>
+        <div style="border-left:3px solid #E53935; padding-left:3mm;">
+          <div style="font-size:10px; font-weight:700; color:var(--ink);">Ni mobilne verzije</div>
+          <div style="font-size:9px; color:var(--gray-mid); line-height:1.5; margin-top:0.5mm;">Intranet ni prilagojen za mobilne naprave — danes pričakovani standard.</div>
+        </div>
+        <div style="border-left:3px solid #E53935; padding-left:3mm;">
+          <div style="font-size:10px; font-weight:700; color:var(--ink);">Dostop samo v omrežju</div>
+          <div style="font-size:9px; color:var(--gray-mid); line-height:1.5; margin-top:0.5mm;">Intranet ni dostopen izven podjetja. Za delo od doma ali na poti ga ni mogoče odpreti.</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="background:var(--gray-bg); border-radius:4px; padding:4mm 5mm;">
+      <div style="font-size:8.5px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:#E65100; margin-bottom:3mm;">Vsebina</div>
+      <div style="display:flex; flex-direction:column; gap:2.5mm;">
+        <div style="border-left:3px solid #F57C00; padding-left:3mm;">
+          <div style="font-size:10px; font-weight:700; color:var(--ink);">Skrite pomembne vsebine</div>
+          <div style="font-size:9px; color:var(--gray-mid); line-height:1.5; margin-top:0.5mm;">Kolektivna pogodba, navodila, prosta delovna mesta — zahtevajo poznavanje strukture strani.</div>
+        </div>
+        <div style="border-left:3px solid #F57C00; padding-left:3mm;">
+          <div style="font-size:10px; font-weight:700; color:var(--ink);">Mešanje vrst vsebin</div>
+          <div style="font-size:9px; color:var(--gray-mid); line-height:1.5; margin-top:0.5mm;">Novice, delovne informacije in kadrovske vsebine so pomešane. Ni jasno, kje iskati kaj.</div>
+        </div>
+        <div style="border-left:3px solid #F57C00; padding-left:3mm;">
+          <div style="font-size:10px; font-weight:700; color:var(--ink);">Neažuren imenik</div>
+          <div style="font-size:9px; color:var(--gray-mid); line-height:1.5; margin-top:0.5mm;">Telefonske številke napačne, stari zaposleni v sistemu, novi manjkajo — sinhronizirano s SAP, a z zamudo.</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="background:var(--gray-bg); border-radius:4px; padding:4mm 5mm;">
+      <div style="font-size:8.5px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:#1565C0; margin-bottom:3mm;">Uporabniška izkušnja</div>
+      <div style="display:flex; flex-direction:column; gap:2.5mm;">
+        <div style="border-left:3px solid #1565C0; padding-left:3mm;">
+          <div style="font-size:10px; font-weight:700; color:var(--ink);">Ni iskalnika</div>
+          <div style="font-size:9px; color:var(--gray-mid); line-height:1.5; margin-top:0.5mm;">»Ga sploh ni, oziroma skrit v imeniku.« Uporabniki morajo brskati po strukturi namesto iskati.</div>
+        </div>
+        <div style="border-left:3px solid #1565C0; padding-left:3mm;">
+          <div style="font-size:10px; font-weight:700; color:var(--ink);">Preobremenjena prva stran</div>
+          <div style="font-size:9px; color:var(--gray-mid); line-height:1.5; margin-top:0.5mm;">»Preveč informacij na prvi pogled.« Ni vizualne hierarhije — kaos, ne jasnost.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="page-footer">
+    <div class="page-footer-left">Zaupno · Hisense Intranet</div>
+    <div class="page-footer-right">stran 7</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════
+     PAGE 8 — VIZIJA
+══════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-header">
+    <div class="page-header-logo">renderspace</div>
+    <div class="page-header-section">Vizija novega intraneta</div>
+  </div>
+
+  <span class="section-number">06 — Vizija novega intraneta</span>
+  <h2>Kakšen naj bo nov intranet?</h2>
+
+  <p>Na delavnici smo udeležence povabili, da za trenutek pozabijo na omejitve in si zamislijo intranet, kakršnega si želijo. Iz teh vizij smo izluščili skupne teme, ki bodo vodile načrtovanje.</p>
+
+  <div class="vision-grid">
+    <div class="vision-card">
+      <div class="vision-card-num">01</div>
+      <div class="vision-card-title">Takojšnja relevantnost</div>
+      <div class="vision-card-desc">V prvih 10 sekundah mora uporabnik videti, kar je zanj relevantno — ne splošnih korporativnih novic, ampak informacije, ki zadevajo njegovo delo, oddelek, lokacijo.</div>
+    </div>
+    <div class="vision-card">
+      <div class="vision-card-num">02</div>
+      <div class="vision-card-title">Aktualnost</div>
+      <div class="vision-card-desc">Uporabnik mora takoj vedeti, da gleda sveže informacije. Datum objave, oznaka »novo«, dinamična vsebina, ki se spreminja — ne arhiv izpred mesecev.</div>
+    </div>
+    <div class="vision-card">
+      <div class="vision-card-num">03</div>
+      <div class="vision-card-title">Jasna hierarhija</div>
+      <div class="vision-card-desc">»Top 3 novice so poudarjene, ostale so v nadaljevanju.« Najpomembnejše stvari morajo izstopati vizualno, prostorsko, hierarhično.</div>
+    </div>
+    <div class="vision-card">
+      <div class="vision-card-num">04</div>
+      <div class="vision-card-title">Zanesljiv vir resnice</div>
+      <div class="vision-card-desc">Intranet mora biti kraj, kjer veš, da boš našel pravilno, veljavno, ažurno informacijo. Ni dvoma, ni strahu, da gledaš zastarelo verzijo.</div>
+    </div>
+    <div class="vision-card">
+      <div class="vision-card-num">05</div>
+      <div class="vision-card-title">Delovni pripomoček</div>
+      <div class="vision-card-desc">Ne dodatek k delu, ampak del dela. Vstopna točka do orodij: osebni portal, malica, IT podpora, obrazci, navodila. Eno vstopno točko namesto desetih zaznamkov.</div>
+    </div>
+    <div class="vision-card">
+      <div class="vision-card-num">06</div>
+      <div class="vision-card-title">Občutek enotnosti</div>
+      <div class="vision-card-desc">»Brez delitve na pisarniške delavce in proizvodnjo.« Intranet mora sporočati, da smo vsi del iste skupine Hisense Europe — ne ustvarjati vtisa razredov.</div>
+    </div>
+  </div>
+
+  <div class="highlight-box">
+    <p><strong>Povzetek vizije:</strong> Nov intranet naj bo — personaliziran · aktualen · zanesljiv · dostopen za vse zaposlene, na vseh napravah · profesionalen, a človeški · vizualno sodoben in privlačen.</p>
+  </div>
+
+  <h3>Ton komunikacije — Premik</h3>
+  <table class="tone-table">
+    <thead>
+      <tr><th>Dimenzija</th><th>Trenutno</th><th>Želeno</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Uradno ↔ Sproščeno</td><td class="current">Bolj uradno</td><td class="desired">Rahel premik k sproščenemu, a profesionalnemu</td></tr>
+      <tr><td>Resno ↔ Zabavno</td><td class="current">Resno</td><td class="desired">Prostor za lažje vsebine (čestitke, nagrade, obljetnice, upokojitve) — brez »šale dneva«</td></tr>
+      <tr><td>Stvarno ↔ Navdušeno</td><td class="current">Stvarno</td><td class="desired">Več navdušenja pri dosežkih in priznanjih</td></tr>
+      <tr><td>Formalno ↔ Dostopno</td><td class="current">Formalno</td><td class="desired">Bolj dostopno, razumljivo tudi za delavce v proizvodnji</td></tr>
+    </tbody>
+  </table>
+
+  <div class="page-footer">
+    <div class="page-footer-left">Zaupno · Hisense Intranet</div>
+    <div class="page-footer-right">stran 8</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════
+     PAGE 9 — MOBILNA APLIKACIJA
+══════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-header">
+    <div class="page-header-logo">renderspace</div>
+    <div class="page-header-section">Mobilna aplikacija — MVP</div>
+  </div>
+
+  <span class="section-number">07 — Mobilna aplikacija</span>
+  <h2>Mobilni novičarski portal (MVP)</h2>
+
+  <p>Prva faza prenove intraneta se osredotoča na mobilno spletno aplikacijo — novičarski portal. Ta odločitev ni naključna — izhaja iz ključnih ugotovitev delavnice. <strong>Aplikacije ne bo potrebno nameščati</strong> — deluje kot spletna stran, optimizirana za mobilne naprave.</p>
+
+  <div class="three-reasons" style="display:grid; grid-template-columns:repeat(3,1fr); gap:4mm; margin:5mm 0;">
+    <div style="border-top:3px solid var(--orange); padding-top:4mm;">
+      <div style="font-size:13px; font-weight:900; color:var(--orange); margin-bottom:2mm;">📱</div>
+      <div style="font-size:11px; font-weight:800; color:var(--ink); margin-bottom:1.5mm;">Doseg delavcev</div>
+      <div style="font-size:9.5px; color:var(--gray-mid); line-height:1.5;">Proizvodni delavci nimajo računalnikov. Edini način, da jih dosežemo, je naprava, ki jo že imajo — mobilni telefon. Ni namestitve, dostop prek brskalnika.</div>
+    </div>
+    <div style="border-top:3px solid var(--navy); padding-top:4mm;">
+      <div style="font-size:13px; font-weight:900; color:var(--navy); margin-bottom:2mm;">🔔</div>
+      <div style="font-size:11px; font-weight:800; color:var(--ink); margin-bottom:1.5mm;">Takojšnje obveščanje</div>
+      <div style="font-size:9.5px; color:var(--gray-mid); line-height:1.5;">Potisna obvestila omogočajo, da informacija pride do zaposlenega, ne da mora zaposleni iti po njo.</div>
+    </div>
+    <div style="border-top:3px solid var(--gray-dark); padding-top:4mm;">
+      <div style="font-size:13px; font-weight:900; color:var(--gray-dark); margin-bottom:2mm;">🌐</div>
+      <div style="font-size:11px; font-weight:800; color:var(--ink); margin-bottom:1.5mm;">Dostop kadarkoli</div>
+      <div style="font-size:9.5px; color:var(--gray-mid); line-height:1.5;">Mobilna spletna aplikacija deluje zunaj podjetja, brez VPN-ja, brez omejitev omrežja — doma, na poti v službo, med odmorom.</div>
+    </div>
+  </div>
+
+  <h3>Identificirane vsebine za prvo fazo</h3>
+
+  <table class="priority-table">
+    <thead>
+      <tr>
+        <th>Vsebina</th>
+        <th>Opis</th>
+        <th>Prioriteta MVP</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Novice in obvestila</td><td>Korporativne + lokalne novice, dva nivoja; podpora za besedilo, slike in <strong>video vsebine</strong></td><td><span class="badge badge-must">Nujno</span></td></tr>
+      <tr><td>Potisna sporočila</td><td>Takojšnja obvestila o nujnih zadevah</td><td><span class="badge badge-must">Nujno</span></td></tr>
+      <tr><td>Jedilnik / malica</td><td>Pregled menija, povezava na naročanje</td><td><span class="badge badge-must">Nujno</span></td></tr>
+      <tr><td>Karierna točka</td><td>Prosta delovna mesta, prijava</td><td><span class="badge badge-must">Nujno</span></td></tr>
+      <tr><td>Osebni portal</td><td>Povezava na portal za prijavo odsotnosti, plače, koriščenje ur (za zaposlene z AD)</td><td><span class="badge badge-high">Visoka</span></td></tr>
+      <tr><td>Hitri linki</td><td>Povezave do drugih aplikacij</td><td><span class="badge badge-high">Visoka</span></td></tr>
+      <tr><td>Iskanje</td><td>Osnovno iskanje po vsebinah</td><td><span class="badge badge-high">Visoka</span></td></tr>
+      <tr><td>Prevozi</td><td>Vozni red, obvestila o spremembah</td><td><span class="badge badge-medium">Srednja</span></td></tr>
+      <tr><td>Koledar</td><td>Terminski koledar z dogodki</td><td><span class="badge badge-medium">Srednja</span></td></tr>
+    </tbody>
+  </table>
+
+  <div class="page-footer">
+    <div class="page-footer-left">Zaupno · Hisense Intranet</div>
+    <div class="page-footer-right">stran 9</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════
+     PAGE 10 — FUNKCIONALNOSTI
+══════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-header">
+    <div class="page-header-logo">renderspace</div>
+    <div class="page-header-section">Ključne funkcionalnosti</div>
+  </div>
+
+  <span class="section-number">08 — Funkcionalnosti in potrebe</span>
+  <h2>Ključne funkcionalnosti celotnega sistema</h2>
+
+  <!-- Row label -->
+  <div style="display:flex; align-items:center; gap:3mm; margin-bottom:3mm;">
+    <div style="background:var(--orange); color:white; font-size:8.5px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; padding:1.5mm 4mm; border-radius:2px;">Nujno</div>
+    <div style="font-size:10px; color:var(--gray-mid);">Brez katerih intranet ne more opravljati svojih osnovnih vlog</div>
+  </div>
+  <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:3mm; margin-bottom:5mm;">
+    <div style="border:1.5px solid var(--orange); border-radius:4px; padding:4mm;">
+      <div style="font-size:10.5px; font-weight:800; color:var(--ink); margin-bottom:1.5mm;">Novičarski sistem</div>
+      <div style="font-size:9px; color:var(--gray-mid); line-height:1.5;">Dva nivoja (korporativni + lokalni); besedilo, slike, <strong style="color:var(--orange-dark);">video</strong> (SharePoint trenutno neustrezen)</div>
+    </div>
+    <div style="border:1.5px solid var(--orange); border-radius:4px; padding:4mm;">
+      <div style="font-size:10.5px; font-weight:800; color:var(--ink); margin-bottom:1.5mm;">Potisna sporočila</div>
+      <div style="font-size:9px; color:var(--gray-mid); line-height:1.5;">Takojšnje obveščanje; segmentacija prejemnikov po lokaciji</div>
+    </div>
+    <div style="border:1.5px solid var(--orange); border-radius:4px; padding:4mm;">
+      <div style="font-size:10.5px; font-weight:800; color:var(--ink); margin-bottom:1.5mm;">Iskalnik</div>
+      <div style="font-size:9px; color:var(--gray-mid); line-height:1.5;">Po novicah, dokumentih in kontaktih — viden, ne skrit</div>
+    </div>
+    <div style="border:1.5px solid var(--orange); border-radius:4px; padding:4mm;">
+      <div style="font-size:10.5px; font-weight:800; color:var(--ink); margin-bottom:1.5mm;">Osebni portal</div>
+      <div style="font-size:9px; color:var(--gray-mid); line-height:1.5;">Prijava odsotnosti, pregled plač, koriščenje ur</div>
+    </div>
+    <div style="border:1.5px solid var(--orange); border-radius:4px; padding:4mm;">
+      <div style="font-size:10.5px; font-weight:800; color:var(--ink); margin-bottom:1.5mm;">Mobilni dostop</div>
+      <div style="font-size:9px; color:var(--gray-mid); line-height:1.5;">Odzivna spletna aplikacija — brez namestitve</div>
+    </div>
+    <div style="border:1.5px solid var(--orange); border-radius:4px; padding:4mm;">
+      <div style="font-size:10.5px; font-weight:800; color:var(--ink); margin-bottom:1.5mm;">Večjezičnost</div>
+      <div style="font-size:9px; color:var(--gray-mid); line-height:1.5;">Slovenščina · Angleščina · Srbščina</div>
+    </div>
+  </div>
+
+  <!-- Row label -->
+  <div style="display:flex; align-items:center; gap:3mm; margin-bottom:3mm;">
+    <div style="background:var(--navy); color:white; font-size:8.5px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; padding:1.5mm 4mm; border-radius:2px;">Visoka vrednost</div>
+    <div style="font-size:10px; color:var(--gray-mid);">Neposredno podpirajo poslovne cilje in zadovoljstvo zaposlenih</div>
+  </div>
+  <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:3mm; margin-bottom:5mm;">
+    <div style="background:var(--navy-light); border-radius:4px; padding:4mm;">
+      <div style="font-size:10.5px; font-weight:800; color:var(--navy); margin-bottom:1.5mm;">Karierna točka</div>
+      <div style="font-size:9px; color:var(--gray-mid); line-height:1.5;">Interna objava delovnih mest; znižanje stroškov rekrutiranja</div>
+    </div>
+    <div style="background:var(--navy-light); border-radius:4px; padding:4mm;">
+      <div style="font-size:10.5px; font-weight:800; color:var(--navy); margin-bottom:1.5mm;">Onboarding</div>
+      <div style="font-size:9px; color:var(--gray-mid); line-height:1.5;">Vodena izkušnja za nove zaposlene</div>
+    </div>
+    <div style="background:var(--navy-light); border-radius:4px; padding:4mm;">
+      <div style="font-size:10.5px; font-weight:800; color:var(--navy); margin-bottom:1.5mm;">Org. shema</div>
+      <div style="font-size:9px; color:var(--gray-mid); line-height:1.5;">Interaktivna, ažurna, s kontaktnimi podatki</div>
+    </div>
+    <div style="background:var(--navy-light); border-radius:4px; padding:4mm;">
+      <div style="font-size:10.5px; font-weight:800; color:var(--navy); margin-bottom:1.5mm;">Obvestila o izpadih</div>
+      <div style="font-size:9px; color:var(--gray-mid); line-height:1.5;">Izpadi linije, spremembe načrta</div>
+    </div>
+    <div style="background:var(--navy-light); border-radius:4px; padding:4mm;">
+      <div style="font-size:10.5px; font-weight:800; color:var(--navy); margin-bottom:1.5mm;">Iskrice</div>
+      <div style="font-size:9px; color:var(--gray-mid); line-height:1.5;">Predlogi izboljšav — že obstajajo, niso integrirane v nov. del</div>
+    </div>
+    <div style="background:var(--navy-light); border-radius:4px; padding:4mm;">
+      <div style="font-size:10.5px; font-weight:800; color:var(--navy); margin-bottom:1.5mm;">Personalizacija</div>
+      <div style="font-size:9px; color:var(--gray-mid); line-height:1.5;">Vsebine glede na lokacijo in vlogo</div>
+    </div>
+    <div style="background:var(--navy-light); border-radius:4px; padding:4mm;">
+      <div style="font-size:10.5px; font-weight:800; color:var(--navy); margin-bottom:1.5mm;">Kolektivna pogodba</div>
+      <div style="font-size:9px; color:var(--gray-mid); line-height:1.5;">Dokumenti hitro dostopni vsem</div>
+    </div>
+    <div style="background:var(--navy-light); border-radius:4px; padding:4mm;">
+      <div style="font-size:10.5px; font-weight:800; color:var(--navy); margin-bottom:1.5mm;">Praznovanje uspehov</div>
+      <div style="font-size:9px; color:var(--gray-mid); line-height:1.5;">Dosežki, nagrade, jubileji, upokojitve</div>
+    </div>
+  </div>
+
+  <div style="background:var(--gray-bg); border-radius:4px; padding:4mm 5mm; display:grid; grid-template-columns:1fr 1fr; gap:4mm;">
+    <div>
+      <div style="font-size:8.5px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:var(--orange); margin-bottom:1.5mm;">Faza 1 — MVP</div>
+      <div style="font-size:9.5px; color:var(--ink); line-height:1.55;">Novice + video, push notifikacije, jedilnik, karierna točka, povezave na portale, osnovno iskanje, večjezičnost (SI/EN/SR)</div>
+    </div>
+    <div>
+      <div style="font-size:8.5px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:var(--navy); margin-bottom:1.5mm;">Faza 2 — Prenova</div>
+      <div style="font-size:9.5px; color:var(--ink); line-height:1.55;">Personalizacija, onboarding, interaktivna org. shema, integracija Iskric, napredni iskalnik, anonimni kanali</div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <div class="page-footer-left">Zaupno · Hisense Intranet</div>
+    <div class="page-footer-right">stran 10</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════
+     PAGE 11 — PERSONALIZACIJA
+══════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-header">
+    <div class="page-header-logo">renderspace</div>
+    <div class="page-header-section">Personalizacija in ciljne skupne</div>
+  </div>
+
+  <span class="section-number">09 — Personalizacija</span>
+  <h2>Personalizacija in ciljne skupine</h2>
+
+  <p>Ena od najpogostejših pritožb je bila preobremenjenost z informacijami. Rešitev je personalizacija: prikaz prave vsebine pravemu človeku ob pravem času.</p>
+
+  <div class="quote">
+    <div class="quote-text">»Obvestilo o spremembi avtobusnega prevoza v Velenju ne zadeva zaposlenega v Gorenje Valjevo.«</div>
+    <div class="quote-attr">— citat z delavnice (delovne informacije, ne korporativne novice)</div>
+  </div>
+
+  <div class="navy-box" style="margin-bottom:4mm;">
+    <p><strong>Opomba:</strong> Korporativne novice zadevajo vse zaposlene — vse objavljene novice so relevantne za celotno skupino. Segmentacija po »programih« (TV, HVAC...) <strong>ni primerna</strong> — programi niso organizacijska enota za komunikacijo, poleg tega program HVAC ne obstaja. Intranet ni namenjen mikro-vsebinam po produktnih linijah, ampak celostni sliki podjetja. Potrjena segmentacija poteka <strong>po lokaciji</strong>: Hisense Europe (Velenje) vs. Gorenje Valjevo (Valjevo).</p>
+  </div>
+
+  <h3>Dimenzije personalizacije</h3>
+
+  <table class="dim-table">
+    <thead>
+      <tr>
+        <th>Dimenzija</th>
+        <th>Kaj se personalizira</th>
+        <th>Tehnična izvedba</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Lokacija</td>
+        <td>Jezik, lokalne novice, lokalni kontakti, lokalni dogodki, prevozi, menza</td>
+        <td>Atribut uporabnika (lokacija) ali izbira ob registraciji</td>
+      </tr>
+      <tr>
+        <td>Vloga</td>
+        <td>Razdelki za pisarniške zaposlene in proizvodne delavce (delovne informacije, izmene, obvestila o izpadih)</td>
+        <td>Atribut (tip zaposlenega) ali skupina v AD</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Dvo-nivojski model novic</h3>
+
+  <div class="two-col">
+    <div class="gov-card" style="border-color: var(--navy);">
+      <div class="gov-card-num" style="color:var(--navy);">Nivo 1</div>
+      <div class="gov-card-title">Korporativne novice (vsi)</div>
+      <div class="gov-card-desc">Novice, ki zadevajo celotno skupino Hisense Europe. Strateške objave, nagrade, dogodki. Vidijo jih vsi — ohranjanje občutka enotnosti.</div>
+    </div>
+    <div class="gov-card" style="border-color: var(--orange);">
+      <div class="gov-card-num" style="color:var(--orange);">Nivo 2</div>
+      <div class="gov-card-title">Lokalne novice</div>
+      <div class="gov-card-desc">Novice za specifično lokacijo (Velenje / Gorenje Valjevo). Objavljene v lokalnem jeziku. Vidijo jih samo relevantni uporabniki — zmanjšanje šuma in preobremenjenosti z nerelevantnimi vsebinami.</div>
+    </div>
+  </div>
+
+  <div class="navy-box" style="margin-top:4mm;">
+    <p><strong>Uporabniško nastavljiva personalizacija:</strong> Priljubljene vsebine, sledenje temam, skrivanje razdelkov, ki uporabnika ne zanimajo. »Da, mogoče da si lahko uporabnik prilagodi priljubljeno vsebino.«</p>
+  </div>
+
+  <div class="page-footer">
+    <div class="page-footer-left">Zaupno · Hisense Intranet</div>
+    <div class="page-footer-right">stran 11</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════
+     PAGE 12 — UPRAVLJANJE
+══════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-header">
+    <div class="page-header-logo">renderspace</div>
+    <div class="page-header-section">Upravljanje intraneta</div>
+  </div>
+
+  <span class="section-number">10 — Upravljanje intraneta</span>
+  <h2>Upravljanje in kadrovska realnost</h2>
+
+  <p>Intranet je živ organizem — potrebuje stalno skrb in sveže vsebine. Hkrati mora biti model upravljanja realen glede na obstoječe kadrovske vire.</p>
+
+  <!-- Current state callout -->
+  <div style="display:grid; grid-template-columns:1fr 2fr; gap:4mm; margin:4mm 0;">
+    <div style="background:var(--black); border-radius:4px; padding:5mm 6mm; display:flex; flex-direction:column; justify-content:center;">
+      <div style="font-size:36px; font-weight:900; color:var(--orange); line-height:1;">1</div>
+      <div style="font-size:11px; font-weight:700; color:white; margin-top:1mm;">oseba</div>
+      <div style="font-size:9px; color:rgba(255,255,255,0.5); margin-top:1mm; line-height:1.4;">oddelek korporativnega komuniciranja</div>
+    </div>
+    <div style="background:var(--orange-light); border-left:3px solid var(--orange); border-radius:0 4px 4px 0; padding:5mm 6mm;">
+      <div style="font-size:10.5px; font-weight:800; color:var(--ink); margin-bottom:2mm;">Ena oseba pokriva vse</div>
+      <div style="font-size:9.5px; color:var(--gray-dark); line-height:1.65;">Ustvarjanje in objava vsebin · Odnosi z mediji · Korporativna identiteta · Koordinacija z oddelki · Vzdrževanje portala. <strong>»Če mene ni, intraneta ni«</strong> — to je strukturni problem, ki ga tehnična rešitev sama ne more odpraviti. Kadrovska okrepitev oddelka je predpogoj za dolgoročni uspeh intraneta.</div>
+    </div>
+  </div>
+
+  <h3>Kaj je realno danes — in kaj je cilj</h3>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:3mm; margin:3mm 0 5mm;">
+    <div>
+      <div style="font-size:8.5px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:var(--gray-mid); margin-bottom:2mm; padding-bottom:1mm; border-bottom:1px solid var(--gray-rule);">Danes — ena oseba</div>
+      <ul class="simple-list">
+        <li>Sama pripravi, uredi in objavi vsebine</li>
+        <li>Ni formalnega uredniškega pregleda</li>
+        <li>Ni oddelčnih urednikov — vsebine pridejo ad hoc</li>
+        <li>Ažurnost je odvisna od razpoložljivosti ene osebe</li>
+        <li>Za Gorenje Valjevo: lokalne vsebine pokriva tamkajšnja ekipa</li>
+      </ul>
+    </div>
+    <div>
+      <div style="font-size:8.5px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:var(--orange); margin-bottom:2mm; padding-bottom:1mm; border-bottom:1px solid var(--orange);">Cilj — vzporedno s projektom</div>
+      <ul class="simple-list">
+        <li>Jasno definirano lastništvo intraneta (strateška raven)</li>
+        <li>Vsaj ena dodatna oseba za operativno urejanje</li>
+        <li>Oddelki (HR, IT) prevzamejo vsebine svojega področja</li>
+        <li>Enostaven CMS, ki ne zahteva tehničnega znanja</li>
+        <li>Za Gorenje Valjevo: lokalni urednik za srbske vsebine</li>
+      </ul>
+    </div>
+  </div>
+
+  <div style="background:var(--navy); border-radius:4px; padding:4mm 5mm; color:white;">
+    <div style="font-size:9px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:rgba(255,255,255,0.5); margin-bottom:1.5mm;">Ključno priporočilo</div>
+    <div style="font-size:10.5px; color:white; line-height:1.6;">Kadrovska okrepitev oddelka korporativnega komuniciranja ni opcija — je <strong style="color:var(--orange);">pogoj za uspeh projekta</strong>. Nov intranet brez ustreznih virov za vsebine ne bo dosegel svojega namena.</div>
+  </div>
+
+  <div class="page-footer">
+    <div class="page-footer-left">Zaupno · Hisense Intranet</div>
+    <div class="page-footer-right">stran 12</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════
+     PAGE 13 — TVEGANJA IN IZZIVI
+══════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-header">
+    <div class="page-header-logo">renderspace</div>
+    <div class="page-header-section">Tveganja in izzivi</div>
+  </div>
+
+  <span class="section-number">11 — Tveganja, izzivi in odvisnosti</span>
+  <h2>Identificirana tveganja</h2>
+
+  <p>Vsak projekt prinaša tveganja. Na delavnici smo z metaforo ladje (sidra, skrite čeri) udeležence spodbudili k razmišljanju o ovirah in tveganjih.</p>
+
+  <div class="risk-grid">
+    <div class="risk-card">
+      <div class="risk-card-title">Uporaba osebnih telefonov</div>
+      <div class="risk-card-desc">Nekateri zaposleni ne želijo imeti službenih zadev na lastnem telefonu. Ločevanje dela in zasebnosti je legitimna skrb.</div>
+      <div class="risk-mitigation">Aplikacija (spletna, brez namestitve) mora biti prostovoljna, ne prisilna. Jasna komunikacija o tem, da se ne zbirajo osebni podatki ali lokacija. Vsebine dostopne brez registracije.</div>
+    </div>
+    <div class="risk-card">
+      <div class="risk-card-title">Zastarelost podstrani SharePoint</div>
+      <div class="risk-card-desc">Novičarski del portala je ažurno vzdrževan. Zastarelost se pojavlja na podstraneh (HR, IT, pravilniki) — to je znana omejitev, ki ni del tega projekta. Projekt naslavlja izključno novičarski del.</div>
+      <div class="risk-mitigation">Jasno razmejevanje obsega: ta projekt = novičarski portal. Podstrani SharePoint ostanejo odgovornost posameznih oddelkov in so zunaj obsega tega projekta.</div>
+    </div>
+    <div class="risk-card">
+      <div class="risk-card-title">Zaščita internih vsebin</div>
+      <div class="risk-card-desc">Interne novice niso namenjene zunanjemu deljenju. Tveganje, da zaposleni posnamejo zaslon in vsebino delijo navzven.</div>
+      <div class="risk-mitigation">Tehnična rešitev: zajem zaslona onemogoči prikaz vsebine (screenshot protection — zaslon ostane prazen). Skupaj z jasno politiko o internih vsebinah.</div>
+    </div>
+    <div class="risk-card">
+      <div class="risk-card-title">Kompleksnost večjezičnosti</div>
+      <div class="risk-card-desc">Slovenščina, angleščina in srbščina zahtevajo prevode vmesnika, vsebin in dokumentacije.</div>
+      <div class="risk-mitigation">Jasna odgovornost za prevode. Ločevanje korporativnih (prevedenih) in lokalnih (avtohtonih) vsebin. Večjezična arhitektura od začetka.</div>
+    </div>
+    <div class="risk-card">
+      <div class="risk-card-title">Odvisnost od ene osebe</div>
+      <div class="risk-card-desc">Celoten uredniški proces sloni na eni osebi. Odsotnost, bolezni ali kadrovska zamenjava neposredno ustavi delovanje intraneta.</div>
+      <div class="risk-mitigation">Vzpostaviti vsaj minimalno delitev dela (npr. HR prevzame kadrovske vsebine). Dokumentirani procesi zmanjšajo odvisnost od posameznika. Kadrovska okrepitev je dolgoročna rešitev — glej poglavje o upravljanju.</div>
+    </div>
+    <div class="risk-card">
+      <div class="risk-card-title">Tehnične integracije</div>
+      <div class="risk-card-desc">Integracija z obstoječimi sistemi (osebni portal, sistem za malice, karierna točka) zahteva tehnično delo in koordinacijo lastnikov sistemov.</div>
+      <div class="risk-mitigation">Zgodnja tehnična analiza integracij. Jasna lastništva sistemov. Postopna implementacija — najprej najpomembnejše integracije.</div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <div class="page-footer-left">Zaupno · Hisense Intranet</div>
+    <div class="page-footer-right">stran 13</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════
+     PAGE 14 — VALJEVO
+══════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-header">
+    <div class="page-header-logo">renderspace</div>
+    <div class="page-header-section">Posebni vpogled — Valjevo</div>
+  </div>
+
+  <span class="section-number">12 — Posebni vpogled</span>
+  <h2>Gorenje Valjevo, Srbija</h2>
+
+  <div class="valjevo-header">
+    <h3>Dopolnilni klic — 20. januar 2025</h3>
+    <p>Poleg osrednje delavnice z ekipo Hisense Europe smo izvedli ločen usklajevalni klic z ekipo Gorenje Valjevo — samostojnega podjetja v skupini Hisense Europe s sedežem v Valjevu, z 1.700 proizvodnimi in 180 režijskimi delavci. V skupini Hisense Europe so poleg Gorenja Valjevo v Srbiji prisotni tudi zaposleni v Beogradu in Novem Sadu. Namen klica: razumeti specifične potrebe in zagotoviti, da bo intranetna platforma služila vsem.</p>
+  </div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:4mm; margin:4mm 0;">
+    <div style="background:var(--navy); border-radius:4px; padding:5mm 6mm; color:white;">
+      <div style="font-size:9px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:rgba(255,255,255,0.5); margin-bottom:2mm;">Jezik</div>
+      <div style="font-size:12px; font-weight:800; color:white; margin-bottom:2mm;">Srbščina je nujna</div>
+      <div style="font-size:9.5px; color:rgba(255,255,255,0.65); line-height:1.6;">Korporativne novice v angleščini so sprejemljive. Lokalne vsebine — pravilniki, hišni red, obvestila — morajo biti v srbščini. Srbska jezikovna različica mora biti vključena že v MVP ob lansiranju.</div>
+    </div>
+    <div style="background:var(--orange); border-radius:4px; padding:5mm 6mm; color:white;">
+      <div style="font-size:9px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; color:rgba(255,255,255,0.6); margin-bottom:2mm;">Lokalne vsebine</div>
+      <div style="font-size:12px; font-weight:800; color:white; margin-bottom:2mm;">Enaka platforma, lokalna vsebina</div>
+      <div style="font-size:9.5px; color:rgba(255,255,255,0.8); line-height:1.6;">Pravilniki, hišni red in lokalna obvestila v srbščini. Korporativne novice prihajajo iz sedeža skupine Hisense Europe. Lokalne vsebine urejajo lokalni uredniki v Gorenje Valjevo.</div>
+    </div>
+  </div>
+
+  <h3>Implementacijske zahteve</h3>
+
+  <table class="priority-table" style="margin:3mm 0 5mm;">
+    <thead>
+      <tr>
+        <th>Zahteva</th>
+        <th>Opis</th>
+        <th>MVP?</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Srbska jezikovna različica</td>
+        <td>Celoten vmesnik + lokalne vsebine v srbščini (latinica)</td>
+        <td><span class="badge badge-must">Nujno</span></td>
+      </tr>
+      <tr>
+        <td>Prijava brez AD računa</td>
+        <td>Alternativna avtentikacija — večina zaposlenih nima AD</td>
+        <td><span class="badge badge-must">Nujno</span></td>
+      </tr>
+      <tr>
+        <td>Lokalni uredniški dostop</td>
+        <td>Lokalni urednik v Gorenje Valjevo ureja srbske vsebine neodvisno</td>
+        <td><span class="badge badge-must">Nujno</span></td>
+      </tr>
+      <tr>
+        <td>Lokalne novice in obvestila</td>
+        <td>Pravilniki, hišni red, lokalna obvestila — ločena od korporativnih</td>
+        <td><span class="badge badge-must">Nujno</span></td>
+      </tr>
+      <tr>
+        <td>Karierna točka</td>
+        <td>Prikaz internih priložnosti — v skupini Hisense Europe, ne le lokalno</td>
+        <td><span class="badge badge-high">Visoka</span></td>
+      </tr>
+      <tr>
+        <td>Malice / jedilnik</td>
+        <td>Ločen sistem od Velenja — integracija ali povezava, ne skupni modul</td>
+        <td><span class="badge badge-medium">Srednja</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:3mm;">
+    <div style="background:var(--gray-bg); border-radius:4px; padding:4mm 5mm;">
+      <div style="font-size:9px; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; color:var(--gray-mid); margin-bottom:2mm;">Kontekst</div>
+      <ul class="simple-list" style="margin:0;">
+        <li>1.700 proizvodnih + 180 režijskih delavcev</li>
+        <li>Prisotnost v Valjevu, Beogradu in Novem Sadu</li>
+        <li>Samostojno podjetje v skupini — ne podružnica</li>
+        <li>Lansiranje usklajeno s Hisense Europe</li>
+      </ul>
+    </div>
+    <div style="background:var(--navy-light); border-left:3px solid var(--navy); border-radius:0 4px 4px 0; padding:4mm 5mm;">
+      <div style="font-size:9px; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; color:var(--navy); margin-bottom:2mm;">Načelo</div>
+      <div style="font-size:11px; font-weight:800; color:var(--navy); margin-bottom:2mm;">Enaka platforma, lokalna vsebina</div>
+      <div style="font-size:9.5px; color:var(--gray-dark); line-height:1.6;">Gorenje Valjevo ni posebna izjema — je dokaz, da mora platforma podpirati večlokacijsko in večjezično delovanje od samega začetka.</div>
+    </div>
+  </div>
+
+
+  <div class="page-footer">
+    <div class="page-footer-left">Zaupno · Hisense Intranet</div>
+    <div class="page-footer-right">stran 14</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════
+     PAGE 15 — KLJUČNI ZAKLJUČKI
+══════════════════════════════════════════ -->
+<div class="page">
+  <div class="page-header">
+    <div class="page-header-logo">renderspace</div>
+    <div class="page-header-section">Ključni zaključki</div>
+  </div>
+
+  <span class="section-number">13 — Ključni zaključki delavnice</span>
+  <h2>Kaj smo se naučili</h2>
+
+  <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:3mm; margin-bottom:5mm;">
+    <div style="background:var(--black); border-radius:4px; padding:5mm;">
+      <div style="font-size:9px; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; color:rgba(255,255,255,0.4); margin-bottom:2mm;">Dostopnost</div>
+      <div style="font-size:13px; font-weight:900; color:var(--orange); margin-bottom:1.5mm;">50 % brez dostopa</div>
+      <div style="font-size:9px; color:rgba(255,255,255,0.6); line-height:1.5;">Ni mobilne verzije. Ni dostopa izven omrežja. Proizvodnja odrezana. To je strateški — ne tehnični — problem.</div>
+    </div>
+    <div style="background:var(--black); border-radius:4px; padding:5mm;">
+      <div style="font-size:9px; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; color:rgba(255,255,255,0.4); margin-bottom:2mm;">Orientacija</div>
+      <div style="font-size:13px; font-weight:900; color:var(--orange); margin-bottom:1.5mm;">Ni jasne strukture</div>
+      <div style="font-size:9px; color:rgba(255,255,255,0.6); line-height:1.5;">Novice, delovne informacije in kadrovske vsebine so pomešane. Iskalnika ni. Preobremenjena prva stran.</div>
+    </div>
+    <div style="background:var(--black); border-radius:4px; padding:5mm;">
+      <div style="font-size:9px; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; color:rgba(255,255,255,0.4); margin-bottom:2mm;">Resursi</div>
+      <div style="font-size:13px; font-weight:900; color:var(--orange); margin-bottom:1.5mm;">1 oseba za vse</div>
+      <div style="font-size:9px; color:rgba(255,255,255,0.6); line-height:1.5;">Brez kadrovske okrepitve bo nova platforma imela enake težave. Tehnična rešitev sama ne zadostuje.</div>
+    </div>
+  </div>
+
+  <h3>Izhodišča za novo rešitev</h3>
+  <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:3mm; margin:3mm 0;">
+    <div style="border-left:3px solid var(--orange); padding:3mm 4mm;">
+      <div style="font-size:10.5px; font-weight:800; color:var(--ink); margin-bottom:1mm;">Mobile-first</div>
+      <div style="font-size:9px; color:var(--gray-mid); line-height:1.5;">Primarni kanal za proizvodnjo — ne dodatek, ampak osnova</div>
+    </div>
+    <div style="border-left:3px solid var(--orange); padding:3mm 4mm;">
+      <div style="font-size:10.5px; font-weight:800; color:var(--ink); margin-bottom:1mm;">10 sekund do vrednosti</div>
+      <div style="font-size:9px; color:var(--gray-mid); line-height:1.5;">Relevantna vsebina takoj vidna — brez iskanja, brez klikov</div>
+    </div>
+    <div style="border-left:3px solid var(--orange); padding:3mm 4mm;">
+      <div style="font-size:10.5px; font-weight:800; color:var(--ink); margin-bottom:1mm;">Dva nivoja novic</div>
+      <div style="font-size:9px; color:var(--gray-mid); line-height:1.5;">Korporativne za vse · lokalne za relevantne (po lokaciji)</div>
+    </div>
+    <div style="border-left:3px solid var(--navy); padding:3mm 4mm;">
+      <div style="font-size:10.5px; font-weight:800; color:var(--ink); margin-bottom:1mm;">Viden iskalnik</div>
+      <div style="font-size:9px; color:var(--gray-mid); line-height:1.5;">Temeljna funkcija — ne skrita v kotu navigacije</div>
+    </div>
+    <div style="border-left:3px solid var(--navy); padding:3mm 4mm;">
+      <div style="font-size:10.5px; font-weight:800; color:var(--ink); margin-bottom:1mm;">Jasna ločnica vsebin</div>
+      <div style="font-size:9px; color:var(--gray-mid); line-height:1.5;">Novice ločene od delovnih informacij — vsak ve, kje iskati</div>
+    </div>
+    <div style="border-left:3px solid var(--navy); padding:3mm 4mm;">
+      <div style="font-size:10.5px; font-weight:800; color:var(--ink); margin-bottom:1mm;">Personalizacija od začetka</div>
+      <div style="font-size:9px; color:var(--gray-mid); line-height:1.5;">Arhitektura mora podpirati segmentacijo po lokaciji in vlogi</div>
+    </div>
+  </div>
+
+  <h3>Dvo-fazni pristop</h3>
+  <div class="phase-row">
+    <div class="phase-block p1">
+      <div class="phase-label">Faza 1</div>
+      <div class="phase-title">MVP — Mobilni novičarski portal</div>
+      <ul class="phase-list">
+        <li>Naslovi najpomembnejšo vrzel: dostop za delavce</li>
+        <li>Novice, push notifikacije, jedilnik, karierna točka</li>
+        <li>Osnovno iskanje, hitri linki, osebni portal (povezava)</li>
+        <li>Večjezičnost (SI, EN, SR) od primera lansiranja</li>
+        <li>Hiter viden rezultat — gradi zaupanje in momentum</li>
+      </ul>
+    </div>
+    <div class="phase-block p2">
+      <div class="phase-label">Faza 2</div>
+      <div class="phase-title">Celovita prenova intraneta (SharePoint)</div>
+      <ul class="phase-list">
+        <li>Personalizacija glede na lokacijo in vlogo</li>
+        <li>Strukturiran onboarding za nove zaposlene</li>
+        <li>Interaktivna organizacijska shema s kontakti</li>
+        <li>Integracija Iskric (sistem za predloge zaposlenih že obstaja na portalu)</li>
+        <li>Napredni iskalnik čez vse vsebine + integracije</li>
+      </ul>
+    </div>
+  </div>
+
+  <div style="background:var(--navy); border-radius:4px; padding:5mm 6mm; margin-top:5mm; display:flex; align-items:center; justify-content:space-between; gap:6mm;">
+    <div style="flex:1;">
+      <div style="font-size:10.5px; font-weight:800; color:white; margin-bottom:1.5mm;">Naslednji korak</div>
+      <div style="font-size:9.5px; color:rgba(255,255,255,0.65); line-height:1.6;">To poročilo je osnova za vse nadaljnje projektne odločitve — od obsega in prioritet do UX oblikovanja in tehnične implementacije. Renderspace je pripravljen na nadaljevanje.</div>
+    </div>
+    <div style="text-align:right; flex-shrink:0;">
+      <div style="font-size:9px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--orange); margin-bottom:1mm;">Renderspace d.o.o.</div>
+      <div style="font-size:9px; color:rgba(255,255,255,0.5);">Vilharjeva cesta 36, Ljubljana</div>
+      <div style="font-size:9px; color:rgba(255,255,255,0.5);">27. januarja 2026</div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <div class="page-footer-left">Zaupno · Hisense Intranet</div>
+    <div class="page-footer-right">stran 15</div>
+  </div>
+</div>
+
+
+
+</body>
+</html>

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useMaintenancesStore } from '../stores/maintenances'
 import { useChangeRequestsStore } from '../stores/changeRequests'
 import { useResourceStore } from '../stores/resource'
+import { useSettingsStore } from '../stores/settings'
 import { supabase } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import type { RevenuePlanner, Maintenance, HostingClient, ChangeRequest } from '../lib/types'
@@ -15,6 +16,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { UsageTab } from './maintenance/UsageTab'
 import { ReportsTab } from './maintenance/ReportsTab'
 import { EditMaintenanceModal, validateHostingFields } from '../components/EditMaintenanceModal'
+import { ToolsTab } from '../components/ToolsTab'
 import type { MaintenanceFormState } from '../components/EditMaintenanceModal'
 
 function safeUrl(url: string | null | undefined): string | undefined {
@@ -137,6 +139,7 @@ export function MaintenanceDetailView() {
   const navigate = useNavigate()
   const store = useMaintenancesStore()
   const crStore = useChangeRequestsStore()
+  const settingsStore = useSettingsStore()
   const { teams, fetchTeams } = useResourceStore()
 
   const [rpRows, setRpRows] = useState<RevenuePlanner[]>([])
@@ -184,7 +187,7 @@ export function MaintenanceDetailView() {
   const [crForm, setCRForm] = useState<CRForm>(defaultCRForm())
   const [crSaving, setCRSaving] = useState(false)
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'invoice-planning' | 'usage' | 'reports'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'invoice-planning' | 'usage' | 'reports' | 'tools'>('overview')
 
   // Plan CR
   const [showPlanCR, setShowPlanCR] = useState(false)
@@ -195,6 +198,7 @@ export function MaintenanceDetailView() {
 
   useEffect(() => {
     if (!store.maintenances.length) store.fetchAll()
+    settingsStore.fetch()
     fetchTeams()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -274,6 +278,7 @@ export function MaintenanceDetailView() {
       billing_month:          String(maint.billing_month ?? 1),
       hours_included:         String(maint.hours_included),
       help_requests_included: String(maint.help_requests_included),
+      contract_id:            maint.contract_id ?? '',
       contract_start:         maint.contract_start?.slice(0, 7) ?? '',
       contract_duration_months: String(duration),
       contract_url:           maint.contract_url ?? '',
@@ -305,6 +310,7 @@ export function MaintenanceDetailView() {
         cycle:         editForm.hosting_cycle,
         amount:        parseFloat(editForm.hosting_amount) || 0,
         billing_since: start,
+        contract_id:   editForm.contract_id || null,
       } : null
       await store.update(maint.id, {
         name:                   editForm.name,
@@ -315,6 +321,7 @@ export function MaintenanceDetailView() {
         billing_month:          editForm.billing_cycle === 'annual' ? Number(editForm.billing_month) || 1 : null,
         hours_included:         parseInt(editForm.hours_included) || 0,
         help_requests_included: parseInt(editForm.help_requests_included) || 0,
+        contract_id:            editForm.contract_id || null,
         contract_start:         start ?? maint.contract_start,
         contract_end:           end || null,
         contract_url:           editForm.contract_url || null,
@@ -757,7 +764,7 @@ export function MaintenanceDetailView() {
 
       {/* Tab bar */}
       <div className="flex border-b border-border px-6 bg-background">
-        {(['overview', 'invoice-planning', 'usage', 'reports'] as const).map(tab => (
+        {(['overview', 'invoice-planning', 'usage', 'reports', 'tools'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -770,7 +777,8 @@ export function MaintenanceDetailView() {
             {tab === 'overview' ? 'Overview'
               : tab === 'invoice-planning' ? 'Invoice Planning'
               : tab === 'usage' ? 'Usage'
-              : 'Reports'}
+              : tab === 'reports' ? 'Reports'
+              : 'Tools'}
           </button>
         ))}
       </div>
@@ -893,6 +901,18 @@ export function MaintenanceDetailView() {
                     {maint.contract_end ? fmtDate(maint.contract_end) : 'Open-ended'}
                   </span>
                 </div>
+                {maint.contract_id && (
+                  <div className="flex justify-between text-[13px]">
+                    <span className="text-muted-foreground">Contract No.</span>
+                    <span className="font-bold">{maint.contract_id}</span>
+                  </div>
+                )}
+                {maint.cms && (
+                  <div className="flex justify-between text-[13px]">
+                    <span className="text-muted-foreground">CMS / Technology</span>
+                    <span className="font-bold">{maint.cms}</span>
+                  </div>
+                )}
                 {maint.notes && (
                   <div className="flex justify-between text-[13px] items-start gap-4">
                     <span className="text-muted-foreground shrink-0">Notes</span>
@@ -1306,6 +1326,7 @@ export function MaintenanceDetailView() {
 
       {activeTab === 'usage' && maint && <UsageTab maintenance={maint} />}
       {activeTab === 'reports' && maint && <ReportsTab maintenance={maint} />}
+      {activeTab === 'tools' && maint && <ToolsTab maintenanceId={maint.id} />}
 
       {/* Create Invoice modal */}
       <Modal open={showCreateInvoice} title="Create Invoice" maxWidth={380} onClose={() => setShowCreateInvoice(false)}
@@ -1335,7 +1356,8 @@ export function MaintenanceDetailView() {
           form={editForm}
           onChange={(field, value) => setEditForm(f => f ? { ...f, [field]: value } : f)}
           clients={[maint?.client ? { id: maint.client_id, name: maint.client.name } : { id: '', name: '' }].filter(c => c.id)}
-          cmsOptions={[]}
+          cmsOptions={[{ value: '', label: '— None —' }, ...settingsStore.cmsOptions.map(c => ({ value: c, label: c }))]}
+
         />
       )}
 

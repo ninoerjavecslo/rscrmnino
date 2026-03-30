@@ -5,12 +5,14 @@ import { useSettingsStore } from '../stores/settings'
 import { supabase } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import type { Domain } from '../lib/types'
+import { buildLogoHtml, openHtmlAsPdf } from '../lib/pdfExport'
 import { Select } from '../components/Select'
 import { Modal } from '../components/Modal'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
+import * as XLSX from 'xlsx'
 
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -567,6 +569,107 @@ export function DomainsView() {
     }
   }
 
+  function exportExcel() {
+    const rows = activeDomains.map(d => ({
+      Domain:       d.domain_name,
+      Client:       d.client?.name ?? '',
+      'Project #':  d.project_pn ?? '',
+      Expiry:       d.expiry_date,
+      'Yearly (€)': d.yearly_amount ?? '',
+      Status:       (() => { const days = daysUntil(d.expiry_date); return days < 0 ? 'Expired' : days <= 7 ? 'Critical' : days <= 30 ? 'Warning' : 'Active' })(),
+      Notes:        d.notes ?? '',
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Domains')
+    XLSX.writeFile(wb, `domains-${new Date().toISOString().slice(0, 10)}.xlsx`)
+  }
+
+  function exportPDF() {
+    const { agencyLogo, agencyName } = settingsStore
+    const logoHtml = buildLogoHtml(agencyLogo, agencyName)
+    const today = new Date().toLocaleDateString('en-GB')
+
+    const rows = activeDomains.map((d, i) => {
+      const days = daysUntil(d.expiry_date)
+      const bg = i % 2 === 0 ? '#ffffff' : '#fafaf9'
+      const statusColor = days < 0 ? '#dc2626' : days <= 7 ? '#dc2626' : days <= 30 ? '#d97706' : '#16a34a'
+      const statusBg    = days < 0 ? '#fff1f2' : days <= 7 ? '#fff1f2' : days <= 30 ? '#fffbeb' : '#f0fdf4'
+      const statusLabel = days < 0 ? 'Expired' : days <= 7 ? `${days}d` : days <= 30 ? `${days}d` : 'Active'
+      return `<tr>
+        <td style="background:${bg};font-weight:600">${d.domain_name}</td>
+        <td style="background:${bg};color:#6b7280">${d.client?.name ?? '—'}</td>
+        <td style="background:${bg};color:#6b7280">${d.project_pn ?? '—'}</td>
+        <td style="background:${bg}">${fmtDate(d.expiry_date)}</td>
+        <td style="background:${bg};text-align:right;font-weight:700;color:#16a34a">${d.yearly_amount ? d.yearly_amount + ' €' : '—'}</td>
+        <td style="background:${bg}"><span style="display:inline-block;padding:2px 7px;border-radius:99px;font-size:9px;font-weight:700;color:${statusColor};background:${statusBg}">${statusLabel}</span></td>
+        <td style="background:${bg};color:#6b7280;font-size:9px">${d.notes ?? ''}</td>
+      </tr>`
+    }).join('')
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Figtree',sans-serif;background:#e8e8e5;color:#1a1a1a;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .page{width:210mm;min-height:297mm;margin:20px auto;padding:10mm 14mm;background:#fff;box-shadow:0 4px 40px rgba(0,0,0,.12)}
+  @media print{body{background:#fff}.page{margin:0;box-shadow:none;width:210mm}}
+  @page{size:A4 portrait;margin:0}
+  .header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8mm;border-bottom:2px solid #E85C1A;padding-bottom:5mm}
+  .doc-title{font-size:13px;font-weight:700;color:#1a1a1a;margin-top:3px}
+  .meta{text-align:right;font-size:10px;color:#6b7280;line-height:1.7}
+  .stats{display:flex;gap:12px;margin-bottom:6mm}
+  .stat{background:#fafaf9;border:1px solid #e0e0dd;border-radius:6px;padding:6px 12px;flex:1;text-align:center}
+  .stat-val{font-size:15px;font-weight:800;color:#1a1a1a}
+  .stat-lbl{font-size:9px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-top:1px}
+  table{width:100%;border-collapse:collapse}
+  th{background:#1a1a1a;color:#fff;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;padding:5px 8px;text-align:left;white-space:nowrap}
+  th.r{text-align:right}
+  td{padding:5px 8px;border-bottom:1px solid #f0efed;font-size:10.5px;vertical-align:middle}
+  .footer{margin-top:6mm;border-top:1px solid #e0e0dd;padding-top:3mm;display:flex;justify-content:space-between;font-size:9px;color:#94a3b8}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <div>
+      ${logoHtml}
+      <div class="doc-title">Domain Portfolio</div>
+    </div>
+    <div class="meta">
+      <div>Exported ${today}</div>
+      <div>support@renderspace.si</div>
+    </div>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="stat-val">${activeDomains.length}</div><div class="stat-lbl">Active</div></div>
+    <div class="stat"><div class="stat-val" style="color:#dc2626">${critical.length}</div><div class="stat-lbl">Critical</div></div>
+    <div class="stat"><div class="stat-val" style="color:#d97706">${warningSoon.length}</div><div class="stat-lbl">Expiring Soon</div></div>
+    <div class="stat"><div class="stat-val" style="color:#16a34a">${totalYearly.toLocaleString(undefined, { maximumFractionDigits: 0 })} €</div><div class="stat-lbl">Yearly Revenue</div></div>
+  </div>
+  <table>
+    <thead><tr>
+      <th>Domain</th><th>Client</th><th>Project #</th><th>Expiry</th><th class="r">Yearly</th><th>Status</th><th>Notes</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="footer">
+    <div>${agencyName || 'Renderspace'} · support@renderspace.si · +386 (1) 23 91 200</div>
+    <div>${today}</div>
+  </div>
+</div>
+<script>window.onload=function(){window.print()}</script>
+</body>
+</html>`
+
+    openHtmlAsPdf(html)
+  }
+
   return (
     <div>
       {/* Header */}
@@ -592,6 +695,8 @@ export function DomainsView() {
             <input placeholder="Search domains…" value={search} onChange={e => setSearch(e.target.value)}
               className="pl-7 max-w-[160px] w-full h-[34px] text-[13px]" />
           </div>
+          <Button variant="outline" size="sm" onClick={exportExcel}>Export Excel</Button>
+          <Button variant="outline" size="sm" onClick={exportPDF}>Export PDF</Button>
           <Button size="sm" onClick={() => setShowAdd(true)}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Add Client Domains

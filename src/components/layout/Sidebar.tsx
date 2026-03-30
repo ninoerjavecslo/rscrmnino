@@ -71,6 +71,14 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         <NavLink to="/projects"      className={nav}><IconBriefcase /> Projects</NavLink>
         <NavLink to="/internal"      className={nav}><IconGrid /> Internal</NavLink>
         <NavLink to="/maintenances"  className={nav}><IconTool /> Maintenances</NavLink>
+        <NavLink to="/contracts"     className={nav}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          Contracts
+        </NavLink>
+        <NavLink to="/contractors"   className={nav}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="7" r="4"/><path d="M5.5 20h13a6.5 6.5 0 00-13 0z"/></svg>
+          Contractors
+        </NavLink>
         <NavLink to="/sales"         className={nav}><IconTarget /> Sales</NavLink>
 
         <div className="sidebar-divider" />
@@ -83,6 +91,10 @@ export function Sidebar({ open, onClose }: SidebarProps) {
 
         <div className="sidebar-group-label">Finance</div>
         <NavLink to="/planning" className={nav}><IconCalendar /> Invoice Plan</NavLink>
+        <NavLink to="/stack" className={nav}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          Software & Tools
+        </NavLink>
         <NavLink to="/forecast" className={nav}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
           Forecast

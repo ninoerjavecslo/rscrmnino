@@ -1,0 +1,1342 @@
+<!DOCTYPE html>
+<html lang="sl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UEC2026 – Ponudba za razvoj spletne strani</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,300;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --black: #0a0a0a;
+    --ink: #1a1a1a;
+    --gray-dark: #0a0a0a;
+    --gray-mid: #0a0a0a;
+    --gray-light: #0a0a0a;
+    --gray-bg: #f5f5f3;
+    --gray-rule: #e0e0dd;
+    --white: #ffffff;
+    --orange: #E85C1A;
+    --orange-light: #FDF0EA;
+    --orange-dark: #c94a0f;
+    --font: 'Figtree', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font);
+    background: var(--white);
+    color: var(--ink);
+    font-size: 12px;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* ── PAGE WRAPPER ── */
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto;
+    padding: 10mm 18mm 24mm;
+    position: relative;
+    background: var(--white);
+  }
+
+  @media screen {
+    body { background: #e8e8e5; }
+    .page {
+      margin: 20px auto;
+      box-shadow: 0 4px 40px rgba(0,0,0,0.12);
+    }
+    .page + .page { margin-top: 0; }
+  }
+
+  @media print {
+    body { background: white; }
+    .page {
+      margin: 0;
+      width: 210mm;
+      height: 297mm;
+      max-height: 297mm;
+      overflow: hidden;
+      page-break-after: always;
+      break-after: page;
+      box-shadow: none;
+    }
+    .page:last-child {
+      page-break-after: avoid;
+      break-after: avoid;
+    }
+    .extra-card, .service-block, .phase-block, .ts-card, .summary-box,
+    .extra-card-body, .timeline-row, .phase-row {
+      break-inside: avoid;
+    }
+  }
+
+  /* ── COVER PAGE ── */
+  .cover {
+    padding: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: #F2EAE0;
+    position: relative;
+    height: 297mm;
+    min-height: 297mm;
+    max-height: 297mm;
+  }
+
+  .cover::before {
+    content: '';
+    position: absolute;
+    bottom: -10mm;
+    right: -10mm;
+    width: 160mm;
+    height: 160mm;
+    background: radial-gradient(ellipse at center, #E8320A 0%, #F05A1A 30%, #F5956A 60%, transparent 80%);
+    border-radius: 50%;
+    filter: blur(18px);
+    opacity: 0.92;
+  }
+
+  .cover::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.08'/%3E%3C/svg%3E");
+    pointer-events: none;
+    mix-blend-mode: multiply;
+  }
+
+  .cover-header {
+    position: relative;
+    z-index: 2;
+    padding: 12mm 18mm 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .cover-wordmark img {
+    height: 28px;
+    width: auto;
+  }
+
+  .cover-contact {
+    text-align: right;
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--black);
+    line-height: 1.6;
+  }
+  .cover-contact a {
+    color: var(--black);
+    text-decoration: underline;
+  }
+
+  .cover-body {
+    position: relative;
+    z-index: 2;
+    flex: 1;
+    padding: 44mm 18mm 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+  }
+
+  .cover-eyebrow {
+    display: block;
+    width: fit-content;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--white);
+    background: var(--orange);
+    padding: 3px 8px;
+    margin-bottom: 5mm;
+  }
+
+  .cover-title {
+    font-size: 63px;
+    font-weight: 700;
+    color: var(--black);
+    line-height: 0.95;
+    letter-spacing: -0.03em;
+    margin-bottom: 5mm;
+    max-width: 170mm;
+  }
+
+  .cover-subtitle-main {
+    font-size: 30px;
+    font-weight: 700;
+    color: var(--black);
+    letter-spacing: -0.01em;
+    margin-bottom: 4mm;
+  }
+
+  .cover-client-under {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--black);
+  }
+  .cover-client-under strong {
+    font-weight: 700;
+    color: var(--black);
+  }
+
+  .cover-meta-row {
+    position: relative;
+    z-index: 2;
+    background: transparent;
+    padding: 7mm 18mm;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0;
+  }
+
+  .cover-meta-item {
+    padding-right: 6mm;
+  }
+  .cover-meta-item + .cover-meta-item {
+    padding-left: 6mm;
+    border-left: 1px solid rgba(0,0,0,0.15);
+  }
+
+  .cover-meta-label {
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--black);
+    margin-bottom: 3px;
+  }
+
+  .cover-meta-value {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--black);
+    line-height: 1.5;
+  }
+
+  .cover-footer {
+    position: relative;
+    z-index: 2;
+    padding: 0 18mm 12mm;
+  }
+
+  .cover-date {
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--black);
+  }
+
+  .cover-bottom { display: none; }
+  .cover-toc { display: none; }
+  .cover .page-footer { display: none !important; }
+
+  .cover-bottom-text {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--white);
+    letter-spacing: 0.01em;
+  }
+
+  .cover-bottom-price {
+    font-size: 22px;
+    font-weight: 900;
+    color: var(--white);
+    letter-spacing: -0.02em;
+  }
+  .cover-bottom-price span {
+    font-size: 10px;
+    font-weight: 400;
+    opacity: 0.7;
+    margin-left: 4px;
+  }
+
+  .cover-toc {
+    padding: 10mm 18mm 0;
+    flex: 1;
+  }
+  .cover-toc-label {
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--gray-mid);
+    margin-bottom: 5mm;
+    padding-bottom: 3px;
+    border-bottom: 2px solid var(--black);
+  }
+  .toc-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px 8mm;
+  }
+  .toc-item {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--gray-rule);
+  }
+  .toc-num {
+    font-size: 8px;
+    font-weight: 800;
+    color: var(--orange);
+    min-width: 14px;
+  }
+  .toc-text {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  /* ── DOC HEADER (inner pages) ── */
+  .doc-header {
+    padding-bottom: 7mm;
+    margin-bottom: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .doc-header-top {
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-start;
+    margin-bottom: 3mm;
+  }
+  .doc-header-logos {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .doc-header-logos img {
+    height: 20px;
+    width: auto;
+  }
+  .doc-header .label {
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--gray-mid);
+  }
+  .doc-header h1 {
+    font-size: 34px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    color: var(--black);
+  }
+  .doc-header .meta {
+    font-size: 9px;
+    color: var(--gray-mid);
+    margin-top: 2mm;
+    font-weight: 400;
+  }
+
+  /* ── SECTION LABEL ── */
+  .section-label {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--black);
+    padding-bottom: 4px;
+    border-bottom: 2px solid var(--black);
+    margin-bottom: 5mm;
+    margin-top: 8mm;
+  }
+  .section-label:first-of-type { margin-top: 4mm; }
+
+  .section-label.sub {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--black);
+    padding-bottom: 3px;
+    border-bottom: 1px solid var(--gray-rule);
+    margin-top: 6mm;
+  }
+
+  .section-label.orange {
+    color: var(--orange);
+    border-bottom-color: var(--orange);
+  }
+
+  /* ── PAGE FOOTER ── */
+  .page-footer {
+    position: absolute;
+    bottom: 10mm;
+    left: 18mm;
+    right: 18mm;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 3mm;
+    z-index: 1;
+  }
+  .page-footer span {
+    font-size: 8.5px;
+    color: var(--gray-light);
+    font-weight: 400;
+  }
+  .page-footer .pn {
+    font-weight: 600;
+    color: var(--gray-mid);
+  }
+
+  /* ── INTRO SECTION ── */
+  .intro-text {
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--gray-dark);
+    margin-bottom: 6mm;
+  }
+
+  .intro-text strong {
+    color: var(--black);
+    font-weight: 700;
+  }
+
+  /* ── GOAL PILLS ── */
+  .goal-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 6mm;
+  }
+  .goal-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 10px;
+    background: #F2EAE0;
+    border-left: 3px solid var(--orange);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink);
+    line-height: 1.4;
+  }
+  .goal-item::before {
+    content: '→';
+    color: var(--orange);
+    font-weight: 800;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+
+  /* ── AUDIENCE TABLE ── */
+  .audience-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 3px;
+    margin-bottom: 6mm;
+  }
+  .audience-card {
+    background: #F2EAE0;
+    padding: 5mm 5mm 5mm;
+  }
+  .audience-card.highlight {
+    background: var(--black);
+    border-color: var(--black);
+  }
+  .audience-role {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--black);
+    margin-bottom: 3mm;
+  }
+  .audience-card.highlight .audience-role { color: var(--orange); }
+  .audience-need {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--black);
+    line-height: 1.5;
+  }
+  .audience-card.highlight .audience-need { color: rgba(255,255,255,0.7); }
+
+  /* ── PHASE BLOCKS ── */
+  .phase-block {
+    margin-bottom: 4mm;
+    border: 1px solid var(--gray-rule);
+    break-inside: avoid;
+  }
+  .phase-head {
+    display: flex;
+    align-items: stretch;
+    background: var(--black);
+  }
+  .phase-tag {
+    background: var(--orange);
+    color: var(--white);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 6px 10px;
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+  }
+  .phase-head-info {
+    padding: 6px 10px;
+    flex: 1;
+  }
+  .phase-title {
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--white);
+    line-height: 1.2;
+  }
+  .phase-deadline {
+    font-size: 8.5px;
+    font-weight: 700;
+    color: var(--white);
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.2);
+    padding: 3px 9px;
+    white-space: nowrap;
+    align-self: center;
+    margin-left: auto;
+    flex-shrink: 0;
+    letter-spacing: 0.02em;
+  }
+  .phase-body {
+    padding: 5px 10px 7px;
+    background: var(--white);
+  }
+  .phase-goal {
+    font-size: 10px;
+    font-weight: 400;
+    color: rgb(251, 251, 251);
+    margin-top: 3px;
+    font-style: italic;
+    line-height: 1.4;
+  }
+
+  .phase-deliverables {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid var(--gray-rule);
+  }
+  .phase-deliverables-label {
+    font-size: 8px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--orange);
+    margin-bottom: 4px;
+  }
+  .phase-deliverables-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+  }
+  .phase-output {
+    font-size: 9.5px;
+    font-weight: 600;
+    background: var(--black);
+    color: var(--white);
+    padding: 2px 8px;
+    border-left: 2px solid var(--orange);
+  }
+  .phase-items {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px 8mm;
+  }
+  .phase-item {
+    font-size: 12px;
+    color: var(--gray-dark);
+    line-height: 1.5;
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+  }
+  .phase-item::before {
+    content: '·';
+    color: var(--orange);
+    font-weight: 900;
+    flex-shrink: 0;
+  }
+
+  /* ── SERVICE BLOCKS ── */
+  .service-block {
+    border: 1px solid var(--gray-rule);
+    margin-bottom: 3mm;
+    break-inside: avoid;
+  }
+  .service-head {
+    background: var(--black);
+    padding: 5px 10px;
+  }
+  .service-title {
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--white);
+  }
+  .service-body {
+    padding: 6px 10px 8px;
+  }
+  .service-cols {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 5mm;
+    align-items: start;
+  }
+  .service-items { flex: 1; }
+  .service-output-box {
+    background: var(--orange-light);
+    border-left: 3px solid var(--orange);
+    padding: 5px 8px;
+    min-width: 42mm;
+  }
+  .service-output-label {
+    font-size: 7.5px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--orange);
+    margin-bottom: 4px;
+  }
+  .service-output-item {
+    font-size: 9.5px;
+    font-weight: 600;
+    color: var(--gray-dark);
+    line-height: 1.6;
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+  }
+  .service-output-item::before {
+    content: '·';
+    color: var(--orange);
+    font-weight: 900;
+    flex-shrink: 0;
+  }
+
+  /* ── PAYLOAD CMS EXPLAINER ── */
+  .cms-explainer {
+    background: var(--gray-bg);
+    border-left: 3px solid var(--orange);
+    padding: 6mm 8mm;
+    margin-top: 4mm;
+  }
+  .cms-explainer-title {
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--black);
+    margin-bottom: 2mm;
+  }
+  .cms-explainer-body {
+    font-size: 12px;
+    line-height: 1.65;
+    color: var(--gray-dark);
+    margin-bottom: 3mm;
+  }
+  .cms-benefits {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    margin-top: 3mm;
+  }
+  .cms-benefit {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 4px 6px;
+    background: var(--white);
+    font-size: 10.5px;
+    color: var(--gray-dark);
+    line-height: 1.4;
+  }
+  .cms-benefit::before {
+    content: '✓';
+    color: var(--orange);
+    font-weight: 900;
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+
+  /* ── PRICE TABLE ── */
+  .price-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font);
+    margin-bottom: 5mm;
+  }
+  .price-table thead tr {
+    background: var(--black);
+  }
+  .price-table thead th {
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--white);
+    text-align: left;
+    padding: 6px 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .price-table thead th:last-child {
+    text-align: right;
+    white-space: nowrap;
+  }
+  .price-table tbody tr:nth-child(odd) { background: var(--white); }
+  .price-table tbody tr:nth-child(even) { background: var(--gray-bg); }
+  .price-table tbody td {
+    font-size: 12px;
+    color: var(--gray-dark);
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--gray-rule);
+    line-height: 1.4;
+    vertical-align: top;
+  }
+  .price-table tbody td:first-child {
+    font-weight: 600;
+    color: var(--black);
+  }
+  .price-table tbody td:last-child {
+    text-align: right;
+    font-weight: 700;
+    color: var(--black);
+    white-space: nowrap;
+  }
+  .price-table tfoot td {
+    background: var(--black);
+    color: var(--white);
+    font-size: 12px;
+    font-weight: 800;
+    padding: 7px 10px;
+  }
+  .price-table tfoot td:last-child {
+    text-align: right;
+    color: var(--orange);
+    font-size: 14px;
+    white-space: nowrap;
+  }
+
+  /* ── OPTIONAL BADGE ── */
+  .badge {
+    display: inline-block;
+    font-size: 7.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 2px;
+    margin-left: 5px;
+    vertical-align: middle;
+  }
+  .badge-opt { background: var(--orange-light); color: var(--orange-dark); }
+  .badge-rec { background: var(--black); color: var(--white); }
+
+  /* ── AI EXTRA CARD ── */
+  .extra-card {
+    border: 1px solid var(--gray-rule);
+    margin-bottom: 4mm;
+    break-inside: avoid;
+  }
+  .extra-card-head {
+    background: var(--black);
+    padding: 6px 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .extra-card-icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+  }
+  .extra-card-icon svg {
+    width: 20px;
+    height: 20px;
+    stroke: var(--orange);
+    fill: none;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .extra-card-head-text {}
+  .extra-card-title {
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--white);
+    line-height: 1.2;
+  }
+  .extra-card-price-tag {
+    margin-left: auto;
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .extra-card-price {
+    font-size: 14px;
+    font-weight: 900;
+    color: var(--orange);
+  }
+  .extra-card-price-label {
+    font-size: 7.5px;
+    color: rgba(255,255,255,0.4);
+    text-align: right;
+  }
+  .extra-card-body {
+    padding: 7px 10px 8px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6mm;
+  }
+  .extra-card-desc {
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--gray-dark);
+  }
+  .extra-card-value {
+    background: var(--orange-light);
+    padding: 6px 8px;
+    border-left: 3px solid var(--orange);
+  }
+  .extra-card-value-label {
+    font-size: 7.5px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--orange);
+    margin-bottom: 3px;
+  }
+  .extra-card-value-text {
+    font-size: 10.5px;
+    line-height: 1.5;
+    color: var(--gray-dark);
+    font-weight: 500;
+  }
+  .extra-card-includes {
+    margin-top: 5px;
+    padding-top: 5px;
+    border-top: 1px solid var(--gray-rule);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+  }
+  .extra-tag {
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--gray-dark);
+    background: var(--gray-bg);
+    border: 1px solid var(--gray-rule);
+    padding: 2px 7px;
+  }
+
+  /* ── MAINTENANCE CARDS ── */
+  .maint-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3mm;
+    margin-bottom: 5mm;
+  }
+  .maint-card {
+    border: 1px solid var(--gray-rule);
+    display: flex;
+    flex-direction: column;
+  }
+  .maint-card.featured {
+    border-color: var(--orange);
+  }
+  .maint-card-head {
+    padding: 5px 8px;
+    background: var(--gray-bg);
+    border-bottom: 1px solid var(--gray-rule);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .maint-card.featured .maint-card-head {
+    background: var(--orange);
+    border-bottom-color: var(--orange);
+  }
+  .maint-card-name {
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--black);
+  }
+  .maint-card.featured .maint-card-name { color: var(--white); }
+  .maint-card-price {
+    font-size: 13px;
+    font-weight: 900;
+    color: var(--black);
+  }
+  .maint-card.featured .maint-card-price { color: var(--white); }
+  .maint-card-body {
+    padding: 6px 8px 7px;
+    flex: 1;
+  }
+  .maint-item {
+    font-size: 10.5px;
+    color: var(--gray-dark);
+    line-height: 1.6;
+    display: flex;
+    gap: 5px;
+  }
+  .maint-item::before { content: '·'; color: var(--orange); font-weight: 900; }
+
+  /* ── SUMMARY BOX ── */
+  .summary-box {
+    background: var(--black);
+    padding: 8mm 10mm;
+    margin-top: 5mm;
+  }
+  .summary-box-label {
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--white);
+    margin-bottom: 4mm;
+  }
+  .summary-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-bottom: 5mm;
+  }
+  .summary-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .summary-row-name {
+    font-size: 12px;
+    color: var(--white);
+    font-weight: 400;
+  }
+  .summary-row-price {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--white);
+  }
+  .summary-row.opt .summary-row-name { color: var(--white); }
+  .summary-row.opt .summary-row-price { color: var(--white); }
+  .summary-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding-top: 5mm;
+    border-top: 1px solid rgba(255,255,255,0.2);
+  }
+  .summary-total-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--white);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .summary-total-price {
+    font-size: 28px;
+    font-weight: 900;
+    color: var(--orange);
+    letter-spacing: -0.02em;
+  }
+  .summary-total-sub {
+    font-size: 9px;
+    color: var(--white);
+    font-weight: 300;
+    margin-top: 2px;
+    text-align: right;
+  }
+
+  /* ── TECH STACK ── */
+  .tech-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 2px;
+    margin-bottom: 4mm;
+  }
+  .tech-item {
+    background: var(--gray-bg);
+    padding: 6px 8px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .tech-icon {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .tech-icon svg {
+    width: 20px;
+    height: 20px;
+    stroke: var(--orange);
+    fill: none;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .tech-name {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--black);
+    line-height: 1.2;
+  }
+  .tech-desc {
+    font-size: 9.5px;
+    color: var(--gray-mid);
+    font-weight: 400;
+  }
+
+  /* ── LANG BOX ── */
+  .lang-row {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 5mm;
+  }
+  .lang-pill {
+    padding: 5px 10px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .lang-pill.primary { background: var(--black); color: var(--white); }
+  .lang-pill.required { background: var(--orange); color: var(--white); }
+  .lang-pill.recommended { background: var(--gray-bg); color: var(--gray-mid); border: 1px solid var(--gray-rule); }
+
+  /* ── CLOSING ── */
+  .closing-block {
+    background: var(--orange);
+    padding: 8mm 10mm;
+    margin-top: 6mm;
+  }
+  .closing-title {
+    font-size: 18px;
+    font-weight: 900;
+    color: var(--white);
+    letter-spacing: -0.01em;
+    margin-bottom: 3mm;
+  }
+  .closing-body {
+    font-size: 12px;
+    color: rgba(255,255,255,0.85);
+    line-height: 1.6;
+    font-weight: 400;
+    margin-bottom: 5mm;
+  }
+  .closing-contacts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4mm;
+  }
+  .closing-contact-label {
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.5);
+    margin-bottom: 2px;
+  }
+  .closing-contact-name {
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--white);
+    margin-bottom: 1px;
+  }
+  .closing-contact-role {
+    font-size: 10px;
+    color: rgba(255,255,255,0.65);
+    font-weight: 400;
+  }
+
+  /* ── NOTE ── */
+  .note {
+    font-size: 10px;
+    color: var(--gray-mid);
+    line-height: 1.5;
+    font-style: italic;
+    margin-top: 3mm;
+  }
+
+  /* ── DIVIDER ── */
+  .divider {
+    height: 1px;
+    background: var(--gray-rule);
+    margin: 5mm 0;
+  }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5mm;
+  }
+
+  .col-label {
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--gray-mid);
+    margin-bottom: 3mm;
+    padding-bottom: 3px;
+    border-bottom: 1px solid var(--gray-rule);
+  }
+
+  .small-text {
+    font-size: 10px;
+    color: var(--gray-mid);
+    line-height: 1.5;
+  }
+
+  /* ── TIPSKE STRANI CARDS ── */
+  .ts-cards-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3mm;
+  }
+  .ts-card {
+    border: 1px solid var(--gray-rule);
+    display: flex;
+    flex-direction: column;
+    break-inside: avoid;
+  }
+  .ts-card-head {
+    display: flex;
+    align-items: stretch;
+    background: var(--black);
+  }
+  .ts-card-num {
+    font-size: 10px;
+    font-weight: 800;
+    color: var(--white);
+    padding: 5px 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    letter-spacing: 0.04em;
+    border-right: 1px solid rgba(255,255,255,0.1);
+  }
+  .ts-card-title {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--white);
+    padding: 4px 7px;
+    display: flex;
+    align-items: center;
+    flex: 1;
+  }
+  .ts-card-body {
+    padding: 4px 7px 5px;
+    background: var(--white);
+    flex: 1;
+  }
+  .ts-card-desc {
+    font-size: 9px;
+    line-height: 1.45;
+    color: var(--black);
+  }
+  .ts-card-subs {
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px solid var(--gray-rule);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+  }
+  .ts-sub-tag {
+    font-size: 7.5px;
+    font-weight: 600;
+    color: var(--black);
+    background: var(--gray-bg);
+    border: 1px solid var(--gray-rule);
+    padding: 1.5px 5px;
+  }
+
+  /* ── SITEMAP ── */
+  .sm-child {
+    background: var(--gray-bg);
+    border: 1px solid var(--gray-rule);
+    font-size: 7px;
+    font-weight: 500;
+    color: var(--black);
+    padding: 3px 4px;
+    line-height: 1.3;
+    text-align: center;
+  }
+  .sm-child.sm-leaf {
+    background: var(--white);
+    color: var(--gray-mid);
+    font-style: italic;
+    border-style: dashed;
+  }
+  .legend-sm {
+    display: flex;
+    gap: 6mm;
+    margin-top: 5mm;
+    padding-top: 4mm;
+    border-top: 1px solid var(--gray-rule);
+  }
+  .legend-sm-item {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 8.5px;
+    color: var(--gray-mid);
+  }
+  .legend-sm-box {
+    width: 10px;
+    height: 10px;
+    border: 1px solid var(--gray-rule);
+  }
+  .legend-sm-box.black { background: var(--black); border-color: var(--black); }
+  .legend-sm-box.gray  { background: var(--gray-bg); }
+  .legend-sm-box.white { background: var(--white); border-style: dashed; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════ COVER ══ -->
+<div class="page cover">
+
+  <div class="cover-header">
+    <div class="cover-wordmark"><img src="../Logo/Primary logo_black.png" alt="Renderspace"></div>
+    <div class="cover-contact">
+      Vilharjeva cesta 36<br>
+      SI-1000 Ljubljana<br>
+      <a href="mailto:info@renderspace.si">info@renderspace.si</a><br>
+      +386 (1) 23 91 200
+    </div>
+  </div>
+
+  <div class="cover-body">
+    <div class="cover-eyebrow">Ponudba 26_001</div>
+    <div class="cover-title">Ponudba za razvoj spletne strani</div>
+    <div class="cover-subtitle-main">Pirnar.si</div>
+  </div>
+
+  <div class="cover-meta-row">
+    <div class="cover-meta-item">
+      <div class="cover-meta-label">Naročnik</div>
+      <div class="cover-meta-value">KZS<br>Celovška cesta 25<br>1000 Ljubljana</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="cover-meta-label">Agencija</div>
+      <div class="cover-meta-value">Renderspace d.o.o.<br>Vilharjeva cesta 36<br>1000 Ljubljana</div>
+    </div>
+    <div class="cover-meta-item">
+      <div class="cover-meta-label">Datum · Verzija</div>
+      <div class="cover-meta-value">Marec 2026 · v1.0</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══════════════════════════════════ PAGE 2 — SPECIFIKACIJA PONUDBE ══ -->
+<div class="page">
+  <div class="doc-header">
+    <div class="doc-header-top">
+      <div class="doc-header-logos">
+        <img src="../Logo/Primary logo_black.png" alt="Renderspace">
+      </div>
+    </div>
+    <h1>Specifikacija ponudbe</h1>
+  </div>
+
+  <div class="section-label">Storitve</div>
+
+  <table class="price-table" style="width:100%; border-collapse:collapse; margin-bottom:6mm;">
+    <thead>
+      <tr>
+        <th style="text-align:left; padding:6px 8px; background:var(--orange); color:var(--white); font-size:11px; font-weight:800; letter-spacing:0.06em; text-transform:uppercase;">Storitev</th>
+        <th style="text-align:center; padding:6px 8px; background:var(--orange); color:var(--white); font-size:11px; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; width:20mm;">Količina</th>
+        <th style="text-align:right; padding:6px 8px; background:var(--orange); color:var(--white); font-size:11px; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; width:28mm;">Cena / enoto</th>
+        <th style="text-align:right; padding:6px 8px; background:var(--orange); color:var(--white); font-size:11px; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; width:32mm; white-space:nowrap;">Neto cena v EUR</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="padding:8px 8px; border-bottom:1px solid var(--gray-rule); font-size:11px;">
+          <span style="font-weight:600;">[Naziv storitve 1]</span><br>
+          <span style="font-size:10px; font-weight:400; color:var(--ink);">[Opis storitve]</span>
+        </td>
+        <td style="padding:8px 8px; border-bottom:1px solid var(--gray-rule); font-size:11px; text-align:center;">1</td>
+        <td style="padding:8px 8px; border-bottom:1px solid var(--gray-rule); font-size:11px; text-align:right;">0,00</td>
+        <td style="padding:8px 8px; border-bottom:1px solid var(--gray-rule); font-size:11px; text-align:right; font-weight:600;">0,00</td>
+      </tr>
+      <tr style="background:var(--gray-bg);">
+        <td style="padding:8px 8px; border-bottom:1px solid var(--gray-rule); font-size:11px;">
+          <span style="font-weight:600;">[Naziv storitve 2]</span><br>
+          <span style="font-size:10px; font-weight:400; color:var(--ink);">[Opis storitve]</span>
+        </td>
+        <td style="padding:8px 8px; border-bottom:1px solid var(--gray-rule); font-size:11px; text-align:center;">1</td>
+        <td style="padding:8px 8px; border-bottom:1px solid var(--gray-rule); font-size:11px; text-align:right;">0,00</td>
+        <td style="padding:8px 8px; border-bottom:1px solid var(--gray-rule); font-size:11px; text-align:right; font-weight:600;">0,00</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 8px; border-bottom:1px solid var(--gray-rule); font-size:11px;">
+          <span style="font-weight:600;">[Naziv storitve 3]</span><br>
+          <span style="font-size:10px; font-weight:400; color:var(--ink);">[Opis storitve]</span>
+        </td>
+        <td style="padding:8px 8px; border-bottom:1px solid var(--gray-rule); font-size:11px; text-align:center;">1</td>
+        <td style="padding:8px 8px; border-bottom:1px solid var(--gray-rule); font-size:11px; text-align:right;">0,00</td>
+        <td style="padding:8px 8px; border-bottom:1px solid var(--gray-rule); font-size:11px; text-align:right; font-weight:600;">0,00</td>
+      </tr>
+      <tr>
+        <td colspan="4" style="padding:6px 8px; background:var(--gray-bg); color:var(--gray-mid); font-size:9px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; border-top:1px solid var(--gray-rule); text-align:left;">Opcijske storitve</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 8px; border-bottom:1px solid var(--gray-rule); font-size:11px;">
+          <span style="font-weight:600;">[Naziv opcijske storitve]</span><br>
+          <span style="font-size:10px; font-weight:400; color:var(--ink);">[Opis storitve]</span>
+        </td>
+        <td style="padding:8px 8px; border-bottom:1px solid var(--gray-rule); font-size:11px; text-align:center;">1</td>
+        <td style="padding:8px 8px; border-bottom:1px solid var(--gray-rule); font-size:11px; text-align:right;">0,00</td>
+        <td style="padding:8px 8px; border-bottom:1px solid var(--gray-rule); font-size:11px; text-align:right; font-weight:600; color:var(--gray-mid);">0,00</td>
+      </tr>
+      <tr>
+        <td colspan="3" style="padding:10px 8px; background:var(--black); color:var(--white); font-size:10px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; vertical-align:middle;">Skupna vrednost projekta · brez DDV</td>
+        <td style="padding:10px 8px; background:var(--black); color:var(--white); font-size:16px; font-weight:900; text-align:right; white-space:nowrap;">0,00 EUR</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="section-label">Splošne opombe</div>
+
+  <div style="display:flex; flex-direction:column; gap:2px; margin-top:2mm;">
+    <div style="display:flex; align-items:baseline; gap:8px; padding:4px 0; font-size:12px; color:var(--black); line-height:1.5;">
+      <span style="color:var(--orange); font-weight:800; flex-shrink:0;">—</span>
+      V cenah ni vključen DDV.
+    </div>
+    <div style="display:flex; align-items:baseline; gap:8px; padding:4px 0; font-size:12px; color:var(--black); line-height:1.5;">
+      <span style="color:var(--orange); font-weight:800; flex-shrink:0;">—</span>
+      Ponudba velja 30 dni.
+    </div>
+    <div style="display:flex; align-items:baseline; gap:8px; padding:4px 0; font-size:12px; color:var(--black); line-height:1.5;">
+      <span style="color:var(--orange); font-weight:800; flex-shrink:0;">—</span>
+      Naročnik se zavezuje, da bo predčasno zagotovil potrebne materiale, reference in vse s projektom povezane dokumente.
+    </div>
+    <div style="display:flex; align-items:baseline; gap:8px; padding:4px 0; font-size:12px; color:var(--black); line-height:1.5;">
+      <span style="color:var(--orange); font-weight:800; flex-shrink:0;">—</span>
+      Izvajalec in naročnik se zavezujeta varovati poslovne skrivnosti, skladno z veljavno zakonodajo. Ta ponudba predstavlja poslovno skrivnost.
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span>Renderspace d.o.o.</span>
+    <span class="pn">2</span>
+  </div>
+</div>
+
+</body>
+</html>

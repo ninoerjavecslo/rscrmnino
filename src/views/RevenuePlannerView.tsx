@@ -575,7 +575,7 @@ export function RevenuePlannerView() {
                                 {/* Actual cell */}
                                 <td style={{
                                   padding: '6px 6px', borderLeft: '1px solid #e5e7eb',
-                                  background: isIssued ? '#eff6ff' : isDeferred ? '#fef2f2' : rowBg, verticalAlign: 'middle', textAlign: 'right',
+                                  background: isIssued ? '#f0fdf4' : isDeferred ? '#fef2f2' : rowBg, verticalAlign: 'middle', textAlign: 'right',
                                 }}>
                                   {actual != null ? (
                                     <span style={{ fontWeight: 700, fontSize: 11, color: '#1d4ed8', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
@@ -659,7 +659,7 @@ export function RevenuePlannerView() {
                             padding: '10px 6px', textAlign: 'right', borderLeft: '1px solid #e5e7eb',
                             fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
                             color: actual > 0 ? '#1d4ed8' : '#d1d5db', whiteSpace: 'nowrap',
-                            background: actual > 0 ? '#eff6ff' : undefined,
+                            background: actual > 0 ? '#f0fdf4' : undefined,
                           }}>
                             {actual > 0 ? fmtAmt(actual) : '—'}
                           </td>
@@ -684,7 +684,7 @@ export function RevenuePlannerView() {
                 { color: '#f0fdf4', border: '#86efac', label: '100% — Confirmed' },
                 { color: '#fffbeb', border: '#fde68a', label: '50% — Likely' },
                 { color: '#fff7ed', border: '#fed7aa', label: '25% — Unlikely' },
-                { color: '#eff6ff', border: '#93c5fd', label: 'Issued/Paid' },
+                { color: '#f0fdf4', border: '#93c5fd', label: 'Issued/Paid' },
                 { color: '#fef2f2', border: '#fca5a5', label: 'Costs / Deferred' },
               ].map(item => (
                 <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -1070,7 +1070,7 @@ export function RevenuePlannerView() {
                                       </span>
                                     ) : <span style={{ color: '#d1d5db', fontSize: 11 }}>—</span>}
                                   </td>
-                                  <td style={{ padding: '6px 6px', borderLeft: '1px solid #e5e7eb', background: actual != null ? '#eff6ff' : rowBg, verticalAlign: 'middle', textAlign: 'right' }}>
+                                  <td style={{ padding: '6px 6px', borderLeft: '1px solid #e5e7eb', background: actual != null ? '#f0fdf4' : rowBg, verticalAlign: 'middle', textAlign: 'right' }}>
                                     {actual != null ? (
                                       <span style={{ fontWeight: 700, fontSize: 11, color: '#1d4ed8', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                                         {fmtAmt(actual)}
@@ -1111,7 +1111,7 @@ export function RevenuePlannerView() {
                             <td style={{ padding: '10px 6px', textAlign: 'right', borderLeft: '2px solid #e5e7eb', fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: planned > 0 ? 'var(--navy)' : '#d1d5db', whiteSpace: 'nowrap' }}>
                               {planned > 0 ? fmtAmt(planned) : '—'}
                             </td>
-                            <td style={{ padding: '10px 6px', textAlign: 'right', borderLeft: '1px solid #e5e7eb', fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: actual > 0 ? '#1d4ed8' : '#d1d5db', whiteSpace: 'nowrap', background: actual > 0 ? '#eff6ff' : undefined }}>
+                            <td style={{ padding: '10px 6px', textAlign: 'right', borderLeft: '1px solid #e5e7eb', fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: actual > 0 ? '#1d4ed8' : '#d1d5db', whiteSpace: 'nowrap', background: actual > 0 ? '#f0fdf4' : undefined }}>
                               {actual > 0 ? fmtAmt(actual) : '—'}
                             </td>
                           </React.Fragment>

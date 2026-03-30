@@ -197,8 +197,10 @@ export const useMaintenancesStore = create<MaintenancesState>((set, get) => ({
       .select('*, client:clients(id, name)')
       .single()
     if (error) throw error
-    await upsertRetainerRows(inserted as Maintenance)
-    await syncHosting(inserted.id, inserted.client_id, hosting ?? null)
+    await Promise.all([
+      upsertRetainerRows(inserted as Maintenance),
+      syncHosting(inserted.id, inserted.client_id, hosting ?? null),
+    ])
     await get().fetchAll()
   },
 
@@ -211,8 +213,10 @@ export const useMaintenancesStore = create<MaintenancesState>((set, get) => ({
       .eq('id', id)
       .single()
     if (updated) {
-      await upsertRetainerRows(updated as Maintenance)
-      await syncHosting(id, updated.client_id, hosting ?? null)
+      await Promise.all([
+        upsertRetainerRows(updated as Maintenance),
+        syncHosting(id, updated.client_id, hosting ?? null),
+      ])
     }
     await get().fetchAll()
   },

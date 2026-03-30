@@ -8,9 +8,9 @@ import { useProjectsStore } from '../stores/projects'
 import { supabase } from '../lib/supabase'
 import { toast } from '../lib/toast'
 import type { Maintenance } from '../lib/types'
-import { Select } from '../components/Select'
-import { Modal } from '../components/Modal'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { EditMaintenanceModal, validateHostingFields } from '../components/EditMaintenanceModal'
+import type { MaintenanceFormState } from '../components/EditMaintenanceModal'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
@@ -34,38 +34,14 @@ const STATUS_BADGE: Record<string, 'green' | 'amber' | 'red'> = {
 }
 
 
-interface FormState {
-  client_id: string
-  project_pn: string
-  name: string
-  monthly_retainer: string
-  billing_cycle: 'monthly' | 'annual'
-  billing_month: string
-  help_requests_included: string
-  hours_included: string
-  contract_start: string
-  contract_duration_months: string  // '' = open-ended
-  contract_url: string
-  status: 'active' | 'paused' | 'cancelled'
-  notes: string
-  cms: string
-  // Hosting
-  hosting_enabled: boolean
-  hosting_project_pn: string
-  hosting_description: string
-  hosting_cycle: 'monthly' | 'yearly'
-  hosting_amount: string
-  hosting_billing_since: string
-}
-
-const EMPTY_FORM: FormState = {
+const EMPTY_FORM: MaintenanceFormState = {
   client_id: '', project_pn: '', name: '', monthly_retainer: '', billing_cycle: 'monthly', billing_month: '1',
   help_requests_included: '', hours_included: '',
   contract_start: '', contract_duration_months: '', contract_url: '',
   status: 'active', notes: '', cms: '',
   hosting_enabled: false,
   hosting_project_pn: '', hosting_description: '',
-  hosting_cycle: 'monthly', hosting_amount: '', hosting_billing_since: '',
+  hosting_cycle: 'monthly', hosting_amount: '',
 }
 
 function computeContractEnd(start: string, durationMonths: string): string | null {
@@ -77,11 +53,6 @@ function computeContractEnd(start: string, durationMonths: string): string | nul
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
 }
 
-function fmtYearMonth(isoDate: string) {
-  const d = new Date(isoDate + 'T00:00:00')
-  return d.toLocaleString('en', { month: 'short', year: 'numeric' })
-}
-
 export function MaintenancesView() {
   const store = useMaintenancesStore()
   const cStore = useClientsStore()
@@ -91,7 +62,7 @@ export function MaintenancesView() {
 
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<Maintenance | null>(null)
-  const [form, setForm] = useState<FormState>({ ...EMPTY_FORM })
+  const [form, setForm] = useState<MaintenanceFormState>({ ...EMPTY_FORM })
   const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Maintenance | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -170,7 +141,6 @@ export function MaintenancesView() {
       hosting_description: hosting?.description ?? '',
       hosting_cycle: hosting?.cycle ?? 'monthly',
       hosting_amount: hosting ? String(hosting.amount) : '',
-      hosting_billing_since: hosting?.billing_since ? hosting.billing_since.slice(0, 7) : '',
     })
     setShowModal(true)
   }
@@ -181,16 +151,13 @@ export function MaintenancesView() {
     setForm({ ...EMPTY_FORM })
   }
 
-  const f = (k: keyof FormState) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
-      setForm(prev => ({ ...prev, [k]: e.target.value }))
 
   async function save() {
     if (!form.client_id || !form.name || !form.monthly_retainer || !form.contract_start) return
-    if (form.hosting_enabled && form.hosting_amount && !form.hosting_billing_since) {
-      toast('error', 'Billing since is required when hosting is included')
-      return
-    }
+
+    const hostingError = validateHostingFields(form)
+    if (hostingError) { toast('error', hostingError); return }
+
     setSaving(true)
     try {
       const payload = {
@@ -216,7 +183,7 @@ export function MaintenancesView() {
             description: form.hosting_description.trim(),
             cycle: form.hosting_cycle,
             amount: Number(form.hosting_amount),
-            billing_since: form.hosting_billing_since ? form.hosting_billing_since + '-01' : null,
+            billing_since: form.contract_start + '-01',
           }
         : null
 
@@ -249,211 +216,19 @@ export function MaintenancesView() {
     }
   }
 
-  const computedEnd = computeContractEnd(form.contract_start, form.contract_duration_months)
-
   return (
     <div>
-      <Modal
+      <EditMaintenanceModal
         open={showModal}
-        title={editing ? 'Edit Maintenance Contract' : 'New Maintenance Contract'}
+        isNew={!editing}
         onClose={closeModal}
-        maxWidth={640}
-        footer={
-          <>
-            <Button variant="outline" size="sm" onClick={closeModal}>Cancel</Button>
-            <Button
-              size="sm"
-              onClick={save}
-              disabled={saving || !form.client_id || !form.name || !form.monthly_retainer || !form.contract_start}
-            >
-              {saving ? 'Saving…' : editing ? 'Save changes' : 'Create contract'}
-            </Button>
-          </>
-        }
-      >
-        {/* Row 1: Client + Status */}
-        <div className="grid grid-cols-2 gap-4 mb-3">
-          <div className="mb-4">
-            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Client</label>
-            <Select
-              value={form.client_id}
-              onChange={val => setForm(prev => ({ ...prev, client_id: val }))}
-              placeholder="Select client…"
-              options={cStore.clients.map(c => ({ value: c.id, label: c.name }))}
-            />
-          </div>
-          <div className="mb-4">
-            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Status</label>
-            <Select
-              value={form.status}
-              onChange={val => setForm(prev => ({ ...prev, status: val as FormState['status'] }))}
-              options={[
-                { value: 'active', label: 'Active' },
-                { value: 'paused', label: 'Paused' },
-                { value: 'cancelled', label: 'Cancelled' },
-              ]}
-            />
-          </div>
-        </div>
-
-        {/* Contract name + Project # */}
-        <div className="grid grid-cols-2 gap-4 mb-3">
-          <div className="mb-4" style={{ flex: 2 }}>
-            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Contract name</label>
-            <input value={form.name} onChange={f('name')} placeholder="e.g. Website Support" autoFocus={!editing} />
-          </div>
-          <div className="mb-4">
-            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
-              Project # <span className="text-xs text-muted-foreground mt-1 ml-1">optional</span>
-            </label>
-            <input value={form.project_pn} onChange={f('project_pn')} placeholder="e.g. RS-2026-001" />
-          </div>
-        </div>
-
-        {/* Row 2: Retainer + Requests + Hours */}
-        <div className="grid grid-cols-3 gap-4 mb-3">
-          <div className="mb-4">
-            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
-              {form.billing_cycle === 'annual' ? 'Annual retainer (€)' : 'Monthly retainer (€)'}
-            </label>
-            <div className="flex gap-2 mt-1">
-              <input type="number" value={form.monthly_retainer} onChange={f('monthly_retainer')} placeholder="500" className="flex-1 mt-0" />
-              <div className="flex rounded border border-border overflow-hidden text-[11px] font-bold shrink-0 self-start">
-                <button type="button" onClick={() => setForm(p => ({ ...p, billing_cycle: 'monthly' }))}
-                  className={`px-2 py-[7px] ${form.billing_cycle === 'monthly' ? 'bg-primary text-white' : 'bg-white text-muted-foreground'}`}>
-                  Mo
-                </button>
-                <button type="button" onClick={() => setForm(p => ({ ...p, billing_cycle: 'annual' }))}
-                  className={`px-2 py-[7px] border-l border-border ${form.billing_cycle === 'annual' ? 'bg-primary text-white' : 'bg-white text-muted-foreground'}`}>
-                  Yr
-                </button>
-              </div>
-            </div>
-            {form.billing_cycle === 'annual' && (
-              <div className="mt-2">
-                <label className="text-xs text-muted-foreground mb-1 block">Bill in month</label>
-                <select value={form.billing_month} onChange={f('billing_month')} className="w-full">
-                  {['January','February','March','April','May','June','July','August','September','October','November','December'].map((mo, i) => (
-                    <option key={i+1} value={String(i+1)}>{mo}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-          <div className="mb-4">
-            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
-              Help requests / mo <span className="text-xs text-muted-foreground mt-1 ml-1">optional</span>
-            </label>
-            <input type="number" value={form.help_requests_included} onChange={f('help_requests_included')} placeholder="5" />
-          </div>
-          <div className="mb-4">
-            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
-              Hours / mo <span className="text-xs text-muted-foreground mt-1 ml-1">optional</span>
-            </label>
-            <input type="number" step="0.5" value={form.hours_included} onChange={f('hours_included')} placeholder="4" />
-          </div>
-        </div>
-
-        {/* Row 3: Start + Duration */}
-        <div className="grid grid-cols-2 gap-4 mb-1.5">
-          <div className="mb-4">
-            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Contract start</label>
-            <input type="month" value={form.contract_start} onChange={f('contract_start')} placeholder="e.g. 2026-01" />
-          </div>
-          <div className="mb-4">
-            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
-              Duration <span className="text-xs text-muted-foreground mt-1 ml-1">months, optional</span>
-            </label>
-            <input type="number" min="1" value={form.contract_duration_months} onChange={f('contract_duration_months')} placeholder="e.g. 12" />
-          </div>
-        </div>
-
-        {computedEnd && (
-          <div className="text-xs text-primary bg-[var(--navy-light)] border border-[var(--navy-muted,#c7d2fe)] rounded px-3 py-1.5 mb-3">
-            <strong>{form.contract_duration_months} months</strong>
-            {' · Ends: '}<strong>{fmtYearMonth(computedEnd)}</strong>
-            {form.monthly_retainer ? ` · Total: ${fmtEuro(form.billing_cycle === 'annual' ? Math.ceil(parseInt(form.contract_duration_months) / 12) * Number(form.monthly_retainer) : parseInt(form.contract_duration_months) * Number(form.monthly_retainer))}` : ''}
-          </div>
-        )}
-        {!computedEnd && <div className="mb-3" />}
-
-        {/* CMS + Contract URL + Notes */}
-        <div className="mb-3">
-          <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
-            CMS / Technology <span className="text-xs text-muted-foreground mt-1 ml-1">optional</span>
-          </label>
-          <Select
-            value={form.cms}
-            onChange={val => setForm(prev => ({ ...prev, cms: val }))}
-            placeholder="— None —"
-            options={[{ value: '', label: '— None —' }, ...settingsStore.cmsOptions.map(c => ({ value: c, label: c }))]}
-          />
-        </div>
-        <div className="mb-3">
-          <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
-            Contract URL <span className="text-xs text-muted-foreground mt-1 ml-1">optional</span>
-          </label>
-          <input value={form.contract_url} onChange={f('contract_url')} placeholder="https://..." type="url" />
-        </div>
-        <div className="mb-5">
-          <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
-            Notes <span className="text-xs text-muted-foreground mt-1 ml-1">optional</span>
-          </label>
-          <textarea value={form.notes} onChange={f('notes')} rows={2} placeholder="Any additional notes…" className="w-full" style={{ resize: 'vertical' }} />
-        </div>
-
-        {/* Hosting toggle */}
-        <div className="border-t border-border pt-4">
-          <label className="flex items-center gap-2.5 cursor-pointer select-none" style={{ marginBottom: form.hosting_enabled ? 14 : 0 }}>
-            <input
-              type="checkbox"
-              checked={form.hosting_enabled}
-              onChange={e => setForm(prev => ({ ...prev, hosting_enabled: e.target.checked }))}
-              className="w-4 h-4 cursor-pointer"
-            />
-            <span className="font-semibold text-[13px] text-[var(--c1)]">Include hosting in this contract</span>
-            <span className="text-xs text-muted-foreground mt-1">client pays for hosting as part of maintenance</span>
-          </label>
-
-          {form.hosting_enabled && (
-            <div>
-              <div className="grid grid-cols-2 gap-4 mb-3">
-                <div className="mb-4">
-                  <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Project #</label>
-                  <input value={form.hosting_project_pn} onChange={f('hosting_project_pn')} placeholder="e.g. RS-2026-00223" />
-                </div>
-                <div className="mb-4">
-                  <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Billing cycle</label>
-                  <Select
-                    value={form.hosting_cycle}
-                    onChange={val => setForm(prev => ({ ...prev, hosting_cycle: val as FormState['hosting_cycle'] }))}
-                    options={[
-                      { value: 'monthly', label: 'Monthly' },
-                      { value: 'yearly', label: 'Yearly' },
-                    ]}
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4 mb-3">
-                <div className="mb-4">
-                  <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Hosting amount (€)</label>
-                  <input type="number" value={form.hosting_amount} onChange={f('hosting_amount')} placeholder="120" />
-                </div>
-                <div className="mb-4">
-                  <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Billing since</label>
-                  <input type="month" value={form.hosting_billing_since} onChange={f('hosting_billing_since')} required />
-                </div>
-              </div>
-              <div className="mb-4">
-                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
-                  Hosting description <span className="text-xs text-muted-foreground mt-1 ml-1">optional</span>
-                </label>
-                <input value={form.hosting_description} onChange={f('hosting_description')} placeholder="e.g. VPS + cPanel hosting" />
-              </div>
-            </div>
-          )}
-        </div>
-      </Modal>
+        onSave={save}
+        saving={saving}
+        form={form}
+        onChange={(field, value) => setForm((prev: MaintenanceFormState) => ({ ...prev, [field]: value }))}
+        clients={cStore.clients}
+        cmsOptions={[{ value: '', label: '— None —' }, ...settingsStore.cmsOptions.map(c => ({ value: c, label: c }))]}
+      />
 
       <div className="flex items-center justify-between px-6 py-4 bg-background border-b border-border">
         <div>

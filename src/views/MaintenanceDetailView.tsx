@@ -14,6 +14,8 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { UsageTab } from './maintenance/UsageTab'
 import { ReportsTab } from './maintenance/ReportsTab'
+import { EditMaintenanceModal, validateHostingFields } from '../components/EditMaintenanceModal'
+import type { MaintenanceFormState } from '../components/EditMaintenanceModal'
 
 function safeUrl(url: string | null | undefined): string | undefined {
   if (!url) return undefined
@@ -50,28 +52,7 @@ const MAINT_STATUS_BADGE_VARIANT: Record<string, 'green' | 'amber' | 'red'> = {
 
 // ── Edit form type ────────────────────────────────────────────────────────────
 
-interface EditForm {
-  name: string
-  monthly_retainer: string
-  billing_cycle: 'monthly' | 'annual'
-  billing_month: string
-  hours_included: string
-  help_requests_included: string
-  contract_start: string
-  contract_duration_months: string
-  contract_url: string
-  notes: string
-  status: string
-  jira_project_key: string
-  // Hosting
-  has_hosting: boolean
-  hosting_description: string
-  hosting_project_pn: string
-  hosting_cycle: 'monthly' | 'yearly'
-  hosting_amount: string
-  hosting_billing_since: string
-  hosting_contract_end: string
-}
+type EditForm = MaintenanceFormState
 
 interface CRForm {
   title: string
@@ -166,7 +147,6 @@ export function MaintenanceDetailView() {
   // Edit maintenance modal
   const [showEdit, setShowEdit] = useState(false)
   const [editForm, setEditForm] = useState<EditForm | null>(null)
-  const [editTeamHours, setEditTeamHours] = useState<Record<string, number>>({})
 
   // Inline status edit
   const [editingStatus, setEditingStatus] = useState(false)
@@ -286,6 +266,8 @@ export function MaintenanceDetailView() {
       duration = (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth()) + 1
     }
     setEditForm({
+      client_id:              maint.client_id,
+      project_pn:             maint.project_pn ?? '',
       name:                   maint.name,
       monthly_retainer:       String(maint.monthly_retainer),
       billing_cycle:          maint.billing_cycle ?? 'monthly',
@@ -297,41 +279,37 @@ export function MaintenanceDetailView() {
       contract_url:           maint.contract_url ?? '',
       notes:                  maint.notes ?? '',
       status:                 maint.status,
-      jira_project_key:       maint.jira_project_key ?? '',
-      has_hosting:            !!hosting,
+      cms:                    maint.cms ?? '',
+      hosting_enabled:        !!hosting,
       hosting_description:    hosting?.description ?? '',
       hosting_project_pn:     hosting?.project_pn ?? '',
       hosting_cycle:          hosting?.cycle ?? 'monthly',
       hosting_amount:         hosting ? String(hosting.amount) : '',
-      hosting_billing_since:  hosting?.billing_since?.slice(0, 7) ?? '',
-      hosting_contract_end:   hosting?.contract_expiry?.slice(0, 7) ?? maint.contract_end?.slice(0, 7) ?? '',
     })
-    setEditTeamHours(maint.team_hours ?? {})
     setShowEdit(true)
   }
 
   async function handleSaveEdit() {
     if (!maint || !editForm) return
+    const hostingError = validateHostingFields(editForm)
+    if (hostingError) { toast('error', hostingError); return }
     setSaving(true)
     try {
+
       const start = editForm.contract_start ? editForm.contract_start + '-01' : maint.contract_start
       const durationMonths = parseInt(editForm.contract_duration_months) || 12
       const end = start ? computeContractEnd(start, durationMonths) : null
-      // Only include team_hours entries with value > 0
-      const filteredTeamHours = Object.fromEntries(
-        Object.entries(editTeamHours).filter(([, v]) => v > 0)
-      )
-      const hostingPayload: import('../stores/maintenances').HostingPayload | null = editForm.has_hosting ? {
+      const hostingPayload: import('../stores/maintenances').HostingPayload | null = editForm.hosting_enabled ? {
         project_pn:    editForm.hosting_project_pn,
         description:   editForm.hosting_description,
         cycle:         editForm.hosting_cycle,
         amount:        parseFloat(editForm.hosting_amount) || 0,
-        billing_since: editForm.hosting_billing_since ? editForm.hosting_billing_since + '-01' : null,
-        contract_expiry: editForm.hosting_contract_end ? editForm.hosting_contract_end + '-01' : null,
+        billing_since: start,
       } : null
       await store.update(maint.id, {
         name:                   editForm.name,
         client_id:              maint.client_id,
+        project_pn:             editForm.project_pn || null,
         monthly_retainer:       parseFloat(editForm.monthly_retainer) || 0,
         billing_cycle:          editForm.billing_cycle,
         billing_month:          editForm.billing_cycle === 'annual' ? Number(editForm.billing_month) || 1 : null,
@@ -342,8 +320,7 @@ export function MaintenanceDetailView() {
         contract_url:           editForm.contract_url || null,
         notes:                  editForm.notes || null,
         status:                 editForm.status as Maintenance['status'],
-        team_hours:             Object.keys(filteredTeamHours).length > 0 ? filteredTeamHours : null,
-        jira_project_key:       editForm.jira_project_key.trim() || null,
+        cms:                    editForm.cms || null,
       }, hostingPayload)
       // Refresh hosting state from DB
       const { data: updatedHosting } = await supabase.from('hosting_clients').select('*').eq('maintenance_id', maint.id).maybeSingle()
@@ -1348,234 +1325,19 @@ export function MaintenanceDetailView() {
       </Modal>
 
       {/* Edit Contract modal */}
-      <Modal open={showEdit} title="Edit Contract" maxWidth={560} onClose={() => setShowEdit(false)}
-        footer={<>
-          <Button variant="outline" size="sm" onClick={() => setShowEdit(false)}>Cancel</Button>
-          <Button size="sm" onClick={handleSaveEdit} disabled={saving}>Save</Button>
-        </>}>
-        {editForm && (
-          <div>
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div className="mb-4">
-                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Contract name</label>
-                <input value={editForm.name} onChange={e => setEditForm(f => f ? { ...f, name: e.target.value } : f)} placeholder="e.g. Vzdrževanje spletne strani" />
-              </div>
-              <div className="mb-4">
-                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Status</label>
-                <Select
-                  value={editForm.status}
-                  onChange={val => setEditForm(f => f ? { ...f, status: val } : f)}
-                  options={[
-                    { value: 'active',    label: 'Active' },
-                    { value: 'paused',    label: 'Paused' },
-                    { value: 'cancelled', label: 'Cancelled' },
-                  ]}
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-4 mb-4">
-              <div className="mb-4">
-                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Monthly retainer (€)</label>
-                <div className="h-[42px] flex items-center px-3 bg-gray-50 border border-border rounded-lg text-sm font-semibold">
-                  {editForm.monthly_retainer} €
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">Contact support to change retainer amount</div>
-              </div>
-              <div className="mb-4">
-                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Hours / mo</label>
-                <input type="number" value={editForm.hours_included} onChange={e => setEditForm(f => f ? { ...f, hours_included: e.target.value } : f)} placeholder="10" />
-              </div>
-              <div className="mb-4">
-                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Requests / mo</label>
-                <input type="number" value={editForm.help_requests_included} onChange={e => setEditForm(f => f ? { ...f, help_requests_included: e.target.value } : f)} placeholder="5" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div className="mb-4">
-                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Contract start</label>
-                <div className="h-[42px] flex items-center px-3 bg-gray-50 border border-border rounded-lg text-sm">
-                  {editForm.contract_start ? fmtMonth(editForm.contract_start + '-01') : '—'}
-                </div>
-              </div>
-              <div className="mb-4">
-                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Duration (months)</label>
-                <div className="h-[42px] flex items-center px-3 bg-gray-50 border border-border rounded-lg text-sm">
-                  {editForm.contract_duration_months} months
-                </div>
-                {editForm.contract_start && editForm.contract_duration_months && (
-                  <div className="text-xs text-muted-foreground mt-1">
-                    Ends: {fmtMonth(computeContractEnd(editForm.contract_start + '-01', parseInt(editForm.contract_duration_months) || 12))}
-                    {' · '}Total: {fmtEuro((parseInt(editForm.contract_duration_months) || 12) * (parseFloat(editForm.monthly_retainer) || 0))}
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div className="mb-4">
-                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Contract URL <span className="text-xs text-muted-foreground ml-1">optional</span></label>
-                <input value={editForm.contract_url} onChange={e => setEditForm(f => f ? { ...f, contract_url: e.target.value } : f)} placeholder="https://..." />
-              </div>
-              <div className="mb-4">
-                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">
-                  Jira Project Key <span className="text-xs text-muted-foreground ml-1">optional</span>
-                </label>
-                <input
-                  value={editForm?.jira_project_key ?? ''}
-                  onChange={e => setEditForm(f => f ? { ...f, jira_project_key: e.target.value.toUpperCase() } : f)}
-                  placeholder="e.g. ACME"
-                />
-              </div>
-            </div>
-            <div className="mb-4">
-              <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Notes <span className="text-xs text-muted-foreground ml-1">optional</span></label>
-              <textarea value={editForm.notes} onChange={e => setEditForm(f => f ? { ...f, notes: e.target.value } : f)} rows={3} placeholder="Internal notes about this contract…" />
-            </div>
-            {teams.length > 0 && (
-              <div className="mb-4">
-                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">
-                  Team hours / month
-                  <span className="text-xs normal-case text-muted-foreground ml-1">for resource planning</span>
-                </label>
-                <div className="bg-[#f8f8fa] rounded-lg border border-border p-3 flex flex-col gap-2">
-                  {teams.map(t => (
-                    <div key={t.id} className="flex items-center gap-3">
-                      <div className="flex items-center gap-1.5 w-28 shrink-0">
-                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: t.color }} />
-                        <span className="text-[13px] font-medium text-[var(--c1)]">{t.name}</span>
-                      </div>
-                      <input
-                        type="number"
-                        min={0}
-                        value={editTeamHours[t.name] ?? ''}
-                        onChange={e => setEditTeamHours(prev => ({ ...prev, [t.name]: parseInt(e.target.value) || 0 }))}
-                        placeholder="0"
-                        style={{ width: 72, textAlign: 'right' }}
-                      />
-                      <span className="text-xs text-muted-foreground">h / mo</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Hosting */}
-            <div className="mb-1">
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Hosting</label>
-                <div className="flex gap-2">
-                  {hosting && (
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (confirm('Delete hosting from this contract?')) {
-                          setSaving(true)
-                          try {
-                            const { error } = await supabase.from('hosting_clients').delete().eq('maintenance_id', maint.id)
-                            if (error) throw error
-                            setHosting(null)
-                            setEditForm(f => f ? { ...f, has_hosting: false } : f)
-                            await fetchRows()
-                            toast('success', 'Hosting removed')
-                          } catch (err) {
-                            toast('error', (err as Error).message)
-                          } finally {
-                            setSaving(false)
-                          }
-                        }
-                      }}
-                      disabled={saving}
-                      className="text-xs font-medium px-2.5 py-1 rounded border transition-colors text-red-600 border-red-300 hover:bg-red-50"
-                    >
-                      Delete
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setEditForm(f => f ? { ...f, has_hosting: !f.has_hosting } : f)}
-                    className="text-xs font-medium px-2.5 py-1 rounded border transition-colors"
-                    style={editForm.has_hosting
-                      ? { background: 'var(--navy)', color: '#fff', borderColor: 'var(--navy)' }
-                      : { background: 'transparent', color: 'var(--c3)', borderColor: 'var(--border)' }
-                    }
-                  >
-                    {editForm.has_hosting ? 'Hide' : '+ Add hosting'}
-                  </button>
-                </div>
-              </div>
-              {!editForm.has_hosting && (
-                <div className="text-xs text-muted-foreground bg-[#f8f8fa] rounded-lg border border-border px-3 py-2.5">
-                  No hosting linked to this contract.
-                </div>
-              )}
-              {editForm.has_hosting && (
-                <div className="bg-[#f8f8fa] rounded-lg border border-border p-3 flex flex-col gap-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs text-muted-foreground block mb-1">Description</label>
-                      <input
-                        value={editForm.hosting_description}
-                        onChange={e => setEditForm(f => f ? { ...f, hosting_description: e.target.value } : f)}
-                        placeholder="e.g. Production server"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground block mb-1">Project PN</label>
-                      <input
-                        value={editForm.hosting_project_pn}
-                        onChange={e => setEditForm(f => f ? { ...f, hosting_project_pn: e.target.value } : f)}
-                        placeholder="e.g. RS-2026-001"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className="text-xs text-muted-foreground block mb-1">Cycle</label>
-                      <Select
-                        value={editForm.hosting_cycle}
-                        onChange={val => setEditForm(f => f ? { ...f, hosting_cycle: val as 'monthly' | 'yearly' } : f)}
-                        options={[
-                          { value: 'monthly', label: 'Monthly' },
-                          { value: 'yearly',  label: 'Yearly' },
-                        ]}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground block mb-1">Amount (€)</label>
-                      <input
-                        type="number"
-                        value={editForm.hosting_amount}
-                        onChange={e => setEditForm(f => f ? { ...f, hosting_amount: e.target.value } : f)}
-                        placeholder="0"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground block mb-1">Billing since</label>
-                      <input
-                        type="month"
-                        value={editForm.hosting_billing_since}
-                        onChange={e => setEditForm(f => f ? { ...f, hosting_billing_since: e.target.value } : f)}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground block mb-1">Contract end <span className="text-xs text-muted-foreground ml-1">optional — defaults to maintenance end</span></label>
-                    <input
-                      type="month"
-                      value={editForm.hosting_contract_end}
-                      onChange={e => setEditForm(f => f ? { ...f, hosting_contract_end: e.target.value } : f)}
-                    />
-                    {editForm.hosting_contract_end && (
-                      <div className="text-xs text-muted-foreground mt-1">
-                        Ends: {fmtMonth(editForm.hosting_contract_end + '-01')}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </Modal>
+      {editForm && (
+        <EditMaintenanceModal
+          open={showEdit}
+          isNew={false}
+          onClose={() => setShowEdit(false)}
+          onSave={handleSaveEdit}
+          saving={saving}
+          form={editForm}
+          onChange={(field, value) => setEditForm(f => f ? { ...f, [field]: value } : f)}
+          clients={[maint?.client ? { id: maint.client_id, name: maint.client.name } : { id: '', name: '' }].filter(c => c.id)}
+          cmsOptions={[]}
+        />
+      )}
 
       {/* Confirm invoice modal */}
       <Modal open={!!confirmRow} title="Confirm Invoice" maxWidth={420} onClose={() => setConfirmRow(null)}

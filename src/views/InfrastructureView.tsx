@@ -456,18 +456,20 @@ export function InfrastructureView() {
                       </td>
                       <td>
                         <div className="flex gap-1 items-center">
-                          {h.status !== 'cancelled' && (
+                          {h.status !== 'cancelled' && isStandalone && (
                             <Button variant="outline" size="xs" onClick={() => editHosting.open(h)}>Edit</Button>
                           )}
-                          {h.status === 'active' && (
+                          {h.status === 'active' && isStandalone && (
                             <Button variant="destructive" size="xs"
                               onClick={() => { setCancelTarget(h); setCancelFromMonth('') }}>
                               Cancel
                             </Button>
                           )}
-                          <Button variant="ghost" size="xs" onClick={() => setDeleteTarget(h)} title="Delete" className="text-[#dc2626]">
-                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                          </Button>
+                          {isStandalone && (
+                            <Button variant="ghost" size="xs" onClick={() => setDeleteTarget(h)} title="Delete" className="text-[#dc2626]">
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>

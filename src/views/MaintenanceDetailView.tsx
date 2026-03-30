@@ -70,6 +70,7 @@ interface EditForm {
   hosting_cycle: 'monthly' | 'yearly'
   hosting_amount: string
   hosting_billing_since: string
+  hosting_contract_end: string
 }
 
 interface CRForm {
@@ -303,6 +304,7 @@ export function MaintenanceDetailView() {
       hosting_cycle:          hosting?.cycle ?? 'monthly',
       hosting_amount:         hosting ? String(hosting.amount) : '',
       hosting_billing_since:  hosting?.billing_since?.slice(0, 7) ?? '',
+      hosting_contract_end:   hosting?.contract_expiry?.slice(0, 7) ?? maint.contract_end?.slice(0, 7) ?? '',
     })
     setEditTeamHours(maint.team_hours ?? {})
     setShowEdit(true)
@@ -325,6 +327,7 @@ export function MaintenanceDetailView() {
         cycle:         editForm.hosting_cycle,
         amount:        parseFloat(editForm.hosting_amount) || 0,
         billing_since: editForm.hosting_billing_since ? editForm.hosting_billing_since + '-01' : null,
+        contract_expiry: editForm.hosting_contract_end ? editForm.hosting_contract_end + '-01' : null,
       } : null
       await store.update(maint.id, {
         name:                   editForm.name,
@@ -1553,6 +1556,19 @@ export function MaintenanceDetailView() {
                         onChange={e => setEditForm(f => f ? { ...f, hosting_billing_since: e.target.value } : f)}
                       />
                     </div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground block mb-1">Contract end <span className="text-xs text-muted-foreground ml-1">optional — defaults to maintenance end</span></label>
+                    <input
+                      type="month"
+                      value={editForm.hosting_contract_end}
+                      onChange={e => setEditForm(f => f ? { ...f, hosting_contract_end: e.target.value } : f)}
+                    />
+                    {editForm.hosting_contract_end && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Ends: {fmtMonth(editForm.hosting_contract_end + '-01')}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

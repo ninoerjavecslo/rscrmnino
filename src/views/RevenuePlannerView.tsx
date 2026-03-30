@@ -80,7 +80,7 @@ function statusRank(s: RevenuePlanner['status']): number {
 function getCellBg(row: AggCell | undefined): string {
   if (!row) return 'transparent'
   if (row.status === 'deferred') return '#fef2f2'
-  if (row.status === 'issued' || row.status === 'paid') return '#eff6ff'
+  if (row.status === 'issued' || row.status === 'paid') return '#f0fdf4'
   if (row.status === 'retainer') return '#fffbf0'
   if (row.status === 'planned') return probColors(row.probability ?? 100).bg
   return 'transparent'

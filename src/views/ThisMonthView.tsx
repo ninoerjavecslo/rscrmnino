@@ -905,11 +905,12 @@ export function ThisMonthView() {
                     const isUpdating  = statusUpdating === row.id
                     const isPending   = row.status === 'planned'
                     const isDeferred  = row.status === 'deferred' || row.status === 'retainer'
+                    const isIssued    = row.status === 'issued' || row.status === 'paid'
                     const isCRRow = row.notes?.startsWith('CR:')
                     const crTitle = isCRRow ? row.notes!.slice(3).trim() : null
 
                     return (
-                      <tr key={row.id} style={isDeferred ? { background: 'rgba(239,68,68,0.04)' } : undefined}>
+                      <tr key={row.id} style={isDeferred ? { background: 'rgba(239,68,68,0.04)' } : isIssued ? { background: 'rgba(34,197,94,0.04)' } : undefined}>
                         <td>
                           <div className="flex items-center gap-1.5">
                             <div className="font-medium text-primary hover:underline cursor-pointer font-bold">

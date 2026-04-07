@@ -660,6 +660,7 @@ export interface OfferMeta {
 export interface Offer {
   id: string
   title: string
+  client_id?: string | null
   client_name: string
   offer_number: string
   language: OfferLanguage

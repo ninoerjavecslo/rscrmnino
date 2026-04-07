@@ -1326,7 +1326,7 @@ export function MaintenanceDetailView() {
 
       {activeTab === 'usage' && maint && <UsageTab maintenance={maint} />}
       {activeTab === 'reports' && maint && <ReportsTab maintenance={maint} />}
-      {activeTab === 'tools' && maint && <ToolsTab maintenanceId={maint.id} />}
+      {activeTab === 'tools' && maint && <ToolsTab clientId={maint.client_id} />}
 
       {/* Create Invoice modal */}
       <Modal open={showCreateInvoice} title="Create Invoice" maxWidth={380} onClose={() => setShowCreateInvoice(false)}

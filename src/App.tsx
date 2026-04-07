@@ -29,6 +29,7 @@ import { PixelView } from './views/PixelView'
 import { OfferGeneratorView } from './views/OfferGeneratorView'
 import { OfferNewView } from './views/OfferNewView'
 import { OfferEditorView } from './views/OfferEditorView'
+import { OfferTemplatesView } from './views/OfferTemplatesView'
 import { ResourcePlanningView } from './views/ResourcePlanningView'
 import { ResourceReportsView } from './views/ResourceReportsView'
 import { ResourceYearlyView } from './views/ResourceYearlyView'
@@ -48,16 +49,25 @@ import { MonthlyDigestView } from './views/reports/MonthlyDigestView'
 import { CapacityForecastView } from './views/reports/CapacityForecastView'
 import { Toaster } from './components/Toaster'
 import { Topbar } from './components/layout/Topbar'
+import { ProtectedRoute } from './components/ProtectedRoute'
+import { usePermissionsStore } from './stores/permissions'
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [session, setSession] = useState<boolean | null>(null) // null = loading
+  const fetchPermissions = usePermissionsStore(s => s.fetchMine)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(!!data.session))
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(!!s))
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(!!data.session)
+      if (data.session) fetchPermissions()
+    })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
+      setSession(!!s)
+      if (s) fetchPermissions()
+    })
     return () => subscription.unsubscribe()
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (session === null) return null // loading — no flash
 
@@ -106,47 +116,53 @@ function App() {
               <Routes>
                 <Route path="/"                element={<Navigate to="/dashboard" replace />} />
                 <Route path="/dashboard"       element={<DashboardView />} />
-                <Route path="/this-month"      element={<ThisMonthView />} />
-                <Route path="/automations"           element={<AutomationsView />} />
-                <Route path="/automations/new"       element={<AutomationFormView />} />
-                <Route path="/automations/:id/edit"  element={<AutomationFormView />} />
-                <Route path="/planning"        element={<RevenuePlannerView />} />
-                <Route path="/forecast"        element={<ForecastView />} />
-                <Route path="/clients"         element={<ClientsView />} />
-                <Route path="/clients/:id"     element={<ClientDetailView />} />
-                <Route path="/projects"        element={<ProjectsView />} />
-                <Route path="/projects/:id"    element={<ProjectDetailView />} />
-                <Route path="/internal"        element={<InternalView />} />
-                <Route path="/maintenances"    element={<MaintenancesView />} />
-                <Route path="/maintenances/:id" element={<MaintenanceDetailView />} />
-                <Route path="/sales"           element={<SalesView />} />
-                <Route path="/stats"           element={<StatisticsView />} />
-                <Route path="/infrastructure"  element={<InfrastructureView />} />
-                <Route path="/domains"         element={<DomainsView />} />
-                <Route path="/tools"           element={<ToolsView />} />
-                <Route path="/tools/timesheet" element={<TimesheetView />} />
-                <Route path="/tools/offer-generator" element={<OfferGeneratorView />} />
-                <Route path="/tools/offer-generator/new" element={<OfferNewView />} />
-                <Route path="/tools/offer-generator/:id" element={<OfferEditorView />} />
-                <Route path="/resource-planning" element={<ResourcePlanningView />} />
-                <Route path="/resource-reports" element={<ResourceReportsView />} />
-                <Route path="/reports" element={<ReportsView />} />
-                <Route path="/reports/pipeline-impact" element={<PipelineImpactView />} />
-                <Route path="/reports/delay-impact" element={<DelayImpactView />} />
-                <Route path="/reports/monthly-digest" element={<MonthlyDigestView />} />
-                <Route path="/reports/capacity-forecast" element={<CapacityForecastView />} />
-                <Route path="/resource-yearly" element={<ResourceYearlyView />} />
-                <Route path="/resource-monthly" element={<ResourceMonthlyView />} />
-                <Route path="/resource-by-project" element={<ResourceByProjectView />} />
+                <Route path="/this-month"      element={<ProtectedRoute page="this-month"><ThisMonthView /></ProtectedRoute>} />
+                <Route path="/automations"           element={<ProtectedRoute page="automations"><AutomationsView /></ProtectedRoute>} />
+                <Route path="/automations/new"       element={<ProtectedRoute page="automations"><AutomationFormView /></ProtectedRoute>} />
+                <Route path="/automations/:id/edit"  element={<ProtectedRoute page="automations"><AutomationFormView /></ProtectedRoute>} />
+                <Route path="/planning"        element={<ProtectedRoute page="planning"><RevenuePlannerView /></ProtectedRoute>} />
+                <Route path="/forecast"        element={<ProtectedRoute page="forecast"><ForecastView /></ProtectedRoute>} />
+                <Route path="/clients"         element={<ProtectedRoute page="clients"><ClientsView /></ProtectedRoute>} />
+                <Route path="/clients/:id"     element={<ProtectedRoute page="clients"><ClientDetailView /></ProtectedRoute>} />
+                <Route path="/projects"        element={<ProtectedRoute page="projects"><ProjectsView /></ProtectedRoute>} />
+                <Route path="/projects/:id"    element={<ProtectedRoute page="projects"><ProjectDetailView /></ProtectedRoute>} />
+                <Route path="/internal"        element={<ProtectedRoute page="internal"><InternalView /></ProtectedRoute>} />
+                <Route path="/maintenances"    element={<ProtectedRoute page="maintenances"><MaintenancesView /></ProtectedRoute>} />
+                <Route path="/maintenances/:id" element={<ProtectedRoute page="maintenances"><MaintenanceDetailView /></ProtectedRoute>} />
+                <Route path="/sales"           element={<ProtectedRoute page="sales"><SalesView /></ProtectedRoute>} />
+                <Route path="/stats"           element={<ProtectedRoute page="stats"><StatisticsView /></ProtectedRoute>} />
+                <Route path="/infrastructure"  element={<ProtectedRoute page="infrastructure"><InfrastructureView /></ProtectedRoute>} />
+                <Route path="/domains"         element={<ProtectedRoute page="domains"><DomainsView /></ProtectedRoute>} />
+                <Route path="/tools"           element={<ProtectedRoute page="tools"><ToolsView /></ProtectedRoute>} />
+                <Route path="/tools/timesheet" element={<ProtectedRoute page="tools"><TimesheetView /></ProtectedRoute>} />
+                {/* Offers section */}
+                <Route path="/offers" element={<ProtectedRoute page="offers"><OfferGeneratorView /></ProtectedRoute>} />
+                <Route path="/offers/new" element={<ProtectedRoute page="offers"><OfferNewView /></ProtectedRoute>} />
+                <Route path="/offers/templates" element={<ProtectedRoute page="offers"><OfferTemplatesView /></ProtectedRoute>} />
+                <Route path="/offers/:id" element={<ProtectedRoute page="offers"><OfferEditorView /></ProtectedRoute>} />
+                {/* Legacy redirects */}
+                <Route path="/tools/offer-generator" element={<Navigate to="/offers" replace />} />
+                <Route path="/tools/offer-generator/new" element={<Navigate to="/offers/new" replace />} />
+                <Route path="/tools/offer-generator/:id" element={<ProtectedRoute page="offers"><OfferEditorView /></ProtectedRoute>} />
+                <Route path="/resource-planning" element={<ProtectedRoute page="resource-planning"><ResourcePlanningView /></ProtectedRoute>} />
+                <Route path="/resource-reports" element={<ProtectedRoute page="resource-planning"><ResourceReportsView /></ProtectedRoute>} />
+                <Route path="/reports" element={<ProtectedRoute page="reports"><ReportsView /></ProtectedRoute>} />
+                <Route path="/reports/pipeline-impact" element={<ProtectedRoute page="reports"><PipelineImpactView /></ProtectedRoute>} />
+                <Route path="/reports/delay-impact" element={<ProtectedRoute page="reports"><DelayImpactView /></ProtectedRoute>} />
+                <Route path="/reports/monthly-digest" element={<ProtectedRoute page="reports"><MonthlyDigestView /></ProtectedRoute>} />
+                <Route path="/reports/capacity-forecast" element={<ProtectedRoute page="reports"><CapacityForecastView /></ProtectedRoute>} />
+                <Route path="/resource-yearly" element={<ProtectedRoute page="resource-yearly"><ResourceYearlyView /></ProtectedRoute>} />
+                <Route path="/resource-monthly" element={<ProtectedRoute page="resource-yearly"><ResourceMonthlyView /></ProtectedRoute>} />
+                <Route path="/resource-by-project" element={<ProtectedRoute page="resource-yearly"><ResourceByProjectView /></ProtectedRoute>} />
                 <Route path="/team"            element={<Navigate to="/resource-planning" replace />} />
                 <Route path="/team/:id"        element={<TeamMemberDetailView />} />
                 <Route path="/email-tool"      element={<EmailToolView />} />
                 <Route path="/settings"        element={<SettingsView />} />
-                <Route path="/pixel"           element={<PixelView />} />
+                <Route path="/pixel"           element={<ProtectedRoute page="pixel"><PixelView /></ProtectedRoute>} />
                 <Route path="/profile"         element={<ProfileView />} />
-                <Route path="/contracts"       element={<ContractsView />} />
-                <Route path="/contractors"     element={<ContractorsView />} />
-                <Route path="/stack"           element={<AgencyToolsView />} />
+                <Route path="/contracts"       element={<ProtectedRoute page="contracts"><ContractsView /></ProtectedRoute>} />
+                <Route path="/contractors"     element={<ProtectedRoute page="contractors"><ContractorsView /></ProtectedRoute>} />
+                <Route path="/stack"           element={<ProtectedRoute page="stack"><AgencyToolsView /></ProtectedRoute>} />
               </Routes>
             </main>
           </div>

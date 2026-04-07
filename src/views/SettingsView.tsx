@@ -6,6 +6,10 @@ import { useResourceStore } from '../stores/resource'
 import { useHolidayStore } from '../stores/holidays'
 import { useEmailIntakeStore } from '../stores/emailIntake'
 import { useMaintenancesStore } from '../stores/maintenances'
+import { usePermissionsStore } from '../stores/permissions'
+import type { AppUser } from '../stores/permissions'
+import { useCurrentUser } from '../lib/useCurrentUser'
+import { PERMISSIONED_PAGES } from '../lib/pages'
 import { toast } from '../lib/toast'
 import { Select } from '../components/Select'
 import { Modal } from '../components/Modal'
@@ -29,7 +33,7 @@ function TelegramIcon() {
   )
 }
 
-type SettingsTab = 'general' | 'team' | 'holidays'
+type SettingsTab = 'general' | 'team' | 'holidays' | 'users'
 
 interface MemberForm {
   name: string; email: string; team_id: string; role: string; skills: string
@@ -52,13 +56,18 @@ export function SettingsView() {
   const holidayStore = useHolidayStore()
   const intakeStore = useEmailIntakeStore()
   const maintenancesStore = useMaintenancesStore()
+  const permissionsStore = usePermissionsStore()
+  const currentUser = useCurrentUser()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
 
   const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
     const tab = searchParams.get('tab')
-    return (tab === 'team' || tab === 'holidays' || tab === 'general') ? tab : 'general'
+    return (tab === 'team' || tab === 'holidays' || tab === 'general' || tab === 'users') ? tab : 'general'
   })
+
+  // ── Users & Permissions ────────────────────────────────────────────────────
+  const [managingUser, setManagingUser] = useState<AppUser | null>(null)
 
   // ── General settings ──────────────────────────────────────────────────────
   const [agencyInput, setAgencyInput]     = useState('')
@@ -138,6 +147,10 @@ export function SettingsView() {
     intakeStore.fetchAll()
     maintenancesStore.fetchAll()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (activeTab === 'users') permissionsStore.fetchAll()
+  }, [activeTab]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { setInternalRate(String(settingsStore.internalHourlyRate || '')) }, [settingsStore.internalHourlyRate])
 
@@ -928,6 +941,107 @@ export function SettingsView() {
     )
   }
 
+  function renderUsers() {
+    const { users, allPermissions, setPermission, setAdmin } = permissionsStore
+
+    function getAccess(userId: string, page: string): 'full' | 'readonly' | 'hidden' {
+      const perm = allPermissions.find(p => p.user_id === userId && p.page === page)
+      if (!perm) return 'full'
+      if (!perm.can_view) return 'hidden'
+      if (!perm.can_edit) return 'readonly'
+      return 'full'
+    }
+
+    async function handleAccess(userId: string, page: string, level: 'full' | 'readonly' | 'hidden') {
+      await setPermission(userId, page, level !== 'hidden', level === 'full')
+    }
+
+    return (
+      <div className="max-w-4xl">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-base font-semibold">User Access</h2>
+            <p className="text-sm text-muted-foreground mt-0.5">Control which pages each user can view or edit. Admins always have full access.</p>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          {users.length === 0 && (
+            <div className="text-sm text-muted-foreground py-8 text-center">No users found. Users are synced automatically when created in Supabase.</div>
+          )}
+          {users.map(u => {
+            const isCurrentUser = u.id === currentUser?.id
+            const isNino = u.is_admin
+
+            return (
+              <div key={u.id} className="bg-white rounded-[10px] border border-border">
+                {/* User header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                  <div className="flex items-center gap-3">
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#0f172a', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
+                      {(u.name || u.email)[0].toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="font-semibold text-[13px] text-foreground">{u.name || '—'} {isCurrentUser && <span className="text-muted-foreground font-normal">(you)</span>}</div>
+                      <div className="text-xs text-muted-foreground">{u.email}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {isNino
+                      ? <Badge variant="navy">Admin</Badge>
+                      : (
+                        <button
+                          onClick={() => managingUser?.id === u.id ? setManagingUser(null) : setManagingUser(u)}
+                          className="text-xs text-primary font-medium hover:underline"
+                        >
+                          {managingUser?.id === u.id ? 'Hide permissions' : 'Manage permissions'}
+                        </button>
+                      )
+                    }
+                  </div>
+                </div>
+
+                {/* Permission grid — only shown when expanded */}
+                {managingUser?.id === u.id && !isNino && (
+                  <div className="p-4">
+                    <div className="grid grid-cols-2 gap-2">
+                      {PERMISSIONED_PAGES.map(pg => {
+                        const level = getAccess(u.id, pg.key)
+                        return (
+                          <div key={pg.key} className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-muted/40">
+                            <span className="text-[13px] font-medium">{pg.label}</span>
+                            <div className="flex rounded-md overflow-hidden border border-border text-xs">
+                              {(['full', 'readonly', 'hidden'] as const).map(lvl => (
+                                <button
+                                  key={lvl}
+                                  onClick={() => handleAccess(u.id, pg.key, lvl)}
+                                  className={`px-2 py-1 font-medium transition-colors ${level === lvl
+                                    ? lvl === 'full' ? 'bg-green-600 text-white' : lvl === 'readonly' ? 'bg-amber-500 text-white' : 'bg-slate-500 text-white'
+                                    : 'bg-white text-muted-foreground hover:bg-muted'
+                                  }`}
+                                >
+                                  {lvl === 'full' ? 'Full' : lvl === 'readonly' ? 'Read' : 'Hidden'}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    <div className="mt-3 flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Make admin (full permanent access, no restrictions):</span>
+                      <Button size="xs" variant="outline" onClick={() => setAdmin(u.id, true)}>Set as Admin</Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
   function renderTeam() {
     return (
       <div className="flex flex-col gap-4">
@@ -1159,10 +1273,10 @@ export function SettingsView() {
           </div>
         </div>
         <div className="flex gap-0 border-t border-border w-full -mx-6 px-6">
-          {(['general', 'team', 'holidays'] as SettingsTab[]).map(tab => (
+          {(['general', 'team', 'holidays', 'users'] as SettingsTab[]).map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)}
               className={`bg-transparent border-0 cursor-pointer px-4 py-2.5 font-semibold text-[13px] whitespace-nowrap -mb-px capitalize transition-colors ${activeTab === tab ? 'border-b-2 border-primary text-primary' : 'border-b-2 border-transparent text-muted-foreground'}`}>
-              {tab === 'general' ? 'General' : tab === 'team' ? 'Team' : 'Holidays'}
+              {tab === 'general' ? 'General' : tab === 'team' ? 'Team' : tab === 'holidays' ? 'Holidays' : 'Users'}
             </button>
           ))}
         </div>
@@ -1172,6 +1286,7 @@ export function SettingsView() {
         {activeTab === 'general' && renderGeneral()}
         {activeTab === 'team' && renderTeam()}
         {activeTab === 'holidays' && renderHolidays()}
+        {activeTab === 'users' && renderUsers()}
       </div>
     </div>
   )

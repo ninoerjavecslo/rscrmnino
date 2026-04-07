@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAgencyToolsStore, type AgencyTool } from '../stores/agencyTools'
+import { useProjectsStore } from '../stores/projects'
 import { toast } from '../lib/toast'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -9,21 +10,10 @@ import { Modal } from './Modal'
 import { ConfirmDialog } from './ConfirmDialog'
 import { Select } from './Select'
 
-interface ToolLink {
-  id: string
-  tool_id: string
-  billing_from: string | null
-  billable: boolean
-  notes: string | null
-  tool: AgencyTool
-}
-
 interface Props {
+  clientId?: string
   projectId?: string
-  maintenanceId?: string
 }
-
-const TABLE = 'resource_tools'
 
 const CATEGORIES = [
   'Design', 'Development', 'Communication', 'Project Management',
@@ -44,12 +34,11 @@ const EMPTY_NEW_TOOL: NewToolForm = {
   name: '', category: '', billing_cycle: 'monthly', cost: '', url: '', email: '',
 }
 
-export function ToolsTab({ projectId, maintenanceId }: Props) {
+export function ToolsTab({ clientId, projectId }: Props) {
   const toolsStore = useAgencyToolsStore()
-  const [links, setLinks]               = useState<ToolLink[]>([])
-  const [loading, setLoading]           = useState(true)
+  const { projects, fetchAll: fetchProjects } = useProjectsStore()
   const [showAdd, setShowAdd]           = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<ToolLink | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<AgencyTool | null>(null)
   const [deleting, setDeleting]         = useState(false)
   const [saving, setSaving]             = useState(false)
 
@@ -57,45 +46,49 @@ export function ToolsTab({ projectId, maintenanceId }: Props) {
   const [selectedToolId, setSelectedToolId] = useState('')
   const [newTool, setNewTool]           = useState<NewToolForm>(EMPTY_NEW_TOOL)
   const [billingFrom, setBillingFrom]   = useState('')
-  const [billable, setBillable]         = useState(true)
+  const [assignProjectId, setAssignProjectId] = useState('')
   const [notes, setNotes]               = useState('')
 
   useEffect(() => {
     if (!toolsStore.tools.length) toolsStore.fetchAll()
-    fetchLinks()
-  }, [projectId, maintenanceId]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (!projects.length) fetchProjects()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function fetchLinks() {
-    setLoading(true)
-    const query = supabase
-      .from(TABLE)
-      .select('*, tool:agency_tools(*)')
-      .order('created_at')
-    if (projectId)     query.eq('project_id', projectId)
-    if (maintenanceId) query.eq('maintenance_id', maintenanceId)
-    const { data } = await query
-    setLinks((data ?? []) as ToolLink[])
-    setLoading(false)
-  }
+  // Filtering logic:
+  // - project context: show client-level tools (no project) + tools for this project
+  // - client context: show all tools for this client
+  const links = (() => {
+    if (!clientId) return []
+    if (projectId) {
+      return toolsStore.tools.filter(t =>
+        (t.client_id === clientId && !t.project_id) || t.project_id === projectId
+      )
+    }
+    return toolsStore.tools.filter(t => t.client_id === clientId)
+  })()
+
+  // Client projects for the dropdown in "Add" modal
+  const clientProjects = clientId
+    ? projects.filter(p => p.client_id === clientId)
+    : []
 
   function openAdd() {
     setMode('select')
     setSelectedToolId('')
     setNewTool(EMPTY_NEW_TOOL)
     setBillingFrom('')
-    setBillable(true)
+    setAssignProjectId(projectId ?? '')
     setNotes('')
     setShowAdd(true)
   }
 
   async function handleAdd() {
+    if (!clientId) return
     setSaving(true)
     try {
-      let toolId = selectedToolId
-
       if (mode === 'create') {
         if (!newTool.name.trim() || !newTool.cost) return
-        const { data, error } = await supabase.from('agency_tools').insert({
+        await toolsStore.add({
           name:          newTool.name.trim(),
           category:      newTool.category || 'Other',
           billing_cycle: newTool.billing_cycle,
@@ -103,24 +96,22 @@ export function ToolsTab({ projectId, maintenanceId }: Props) {
           url:           newTool.url || null,
           email:         newTool.email || null,
           status:        'active',
-        }).select().single()
-        if (error) throw error
-        toolId = data.id
-        toolsStore.fetchAll()
+          billable:      !!billingFrom,
+          client_id:     clientId,
+          billing_from:  billingFrom ? billingFrom + '-01' : null,
+          project_id:    assignProjectId || null,
+          notes:         notes || null,
+        })
+      } else {
+        if (!selectedToolId) return
+        await toolsStore.update(selectedToolId, {
+          client_id:    clientId,
+          billing_from: billingFrom ? billingFrom + '-01' : null,
+          billable:     !!billingFrom,
+          project_id:   assignProjectId || null,
+          notes:        notes || null,
+        })
       }
-
-      if (!toolId) return
-
-      const { error } = await supabase.from(TABLE).insert({
-        project_id:     projectId ?? null,
-        maintenance_id: maintenanceId ?? null,
-        tool_id:        toolId,
-        billing_from:   billable ? (billingFrom || null) : null,
-        billable,
-        notes:          notes || null,
-      })
-      if (error) throw error
-      await fetchLinks()
       setShowAdd(false)
       toast('success', 'Tool added')
     } catch {
@@ -130,24 +121,28 @@ export function ToolsTab({ projectId, maintenanceId }: Props) {
     }
   }
 
-  async function handleDelete() {
+  async function handleRemove() {
     if (!deleteTarget) return
     setDeleting(true)
     try {
-      const { error } = await supabase.from(TABLE).delete().eq('id', deleteTarget.id)
+      const { error } = await supabase
+        .from('agency_tools')
+        .update({ client_id: null, billing_from: null, billable: false, project_id: null })
+        .eq('id', deleteTarget.id)
       if (error) throw error
-      setLinks(l => l.filter(x => x.id !== deleteTarget.id))
+      await toolsStore.fetchAll()
       setDeleteTarget(null)
-      toast('success', 'Tool removed')
+      toast('success', 'Tool unlinked')
     } catch {
-      toast('error', 'Failed to remove tool')
+      toast('error', 'Failed to unlink tool')
     } finally {
       setDeleting(false)
     }
   }
 
-  const usedIds = new Set(links.map(l => l.tool_id))
-  const availableTools = toolsStore.tools.filter(t => !usedIds.has(t.id))
+  // Tools not yet assigned to any client (available to assign)
+  const usedIds = new Set(links.map(t => t.id))
+  const availableTools = toolsStore.tools.filter(t => !t.client_id && !usedIds.has(t.id))
 
   const canSave = mode === 'select'
     ? !!selectedToolId
@@ -169,14 +164,20 @@ export function ToolsTab({ projectId, maintenanceId }: Props) {
     return n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
   }
 
+  const contextLabel = projectId
+    ? '· assigned to this project or client-wide'
+    : '· tools assigned to this client'
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-3">
-        <h2>Tools <span className="font-normal text-[13px] normal-case tracking-normal text-muted-foreground">· assigned to this client</span></h2>
+        <h2>Tools <span className="font-normal text-[13px] normal-case tracking-normal text-muted-foreground">
+          {contextLabel}
+        </span></h2>
         <Button size="sm" onClick={openAdd}>+ Add Tool</Button>
       </div>
 
-      {loading ? (
+      {toolsStore.loading ? (
         <div className="text-sm text-muted-foreground py-4">Loading…</div>
       ) : links.length === 0 ? (
         <Card>
@@ -190,42 +191,53 @@ export function ToolsTab({ projectId, maintenanceId }: Props) {
             <thead>
               <tr>
                 <th>Tool</th>
+                <th>Project</th>
                 <th>Category</th>
                 <th>Billing</th>
                 <th>Cost</th>
                 <th>Billable</th>
+                <th>Paying from</th>
                 <th>Billing from</th>
                 <th>Notes</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {links.map(l => (
-                <tr key={l.id}>
-                  <td className="font-semibold text-[13px]">
-                    {l.tool.url ? (
-                      <a href={l.tool.url.startsWith('http') ? l.tool.url : `https://${l.tool.url}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{l.tool.name}</a>
-                    ) : l.tool.name}
-                  </td>
-                  <td><Badge variant="gray">{l.tool.category}</Badge></td>
-                  <td>
-                    <Badge variant={l.tool.billing_cycle === 'monthly' ? 'blue' : l.tool.billing_cycle === 'yearly' ? 'amber' : 'gray'}>
-                      {l.tool.billing_cycle === 'monthly' ? 'Monthly' : l.tool.billing_cycle === 'yearly' ? 'Yearly' : 'One-time'}
-                    </Badge>
-                  </td>
-                  <td className="font-semibold text-[13px]">
-                    {fmtEuro(l.tool.cost)}<span className="text-[10px] text-muted-foreground font-normal"> {cycleSuffix(l.tool)}</span>
-                  </td>
-                  <td>
-                    <Badge variant={l.billable ? 'green' : 'gray'}>{l.billable ? 'Billable' : 'Non-billable'}</Badge>
-                  </td>
-                  <td className="text-[13px] text-muted-foreground">{l.billable ? fmtMonth(l.billing_from) : '—'}</td>
-                  <td className="text-[12px] text-muted-foreground">{l.notes ?? '—'}</td>
-                  <td>
-                    <Button variant="ghost" size="xs" className="text-[#dc2626]" onClick={() => setDeleteTarget(l)}>Remove</Button>
-                  </td>
-                </tr>
-              ))}
+              {links.map(t => {
+                const proj = projects.find(p => p.id === t.project_id)
+                return (
+                  <tr key={t.id}>
+                    <td className="font-semibold text-[13px]">
+                      {t.url ? (
+                        <a href={t.url.startsWith('http') ? t.url : `https://${t.url}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{t.name}</a>
+                      ) : t.name}
+                    </td>
+                    <td className="text-[13px] text-muted-foreground">
+                      {proj ? <Badge variant="blue">{proj.name}</Badge> : <span className="text-[12px] text-muted-foreground">All projects</span>}
+                    </td>
+                    <td><Badge variant="gray">{t.category}</Badge></td>
+                    <td>
+                      <Badge variant={t.billing_cycle === 'monthly' ? 'blue' : t.billing_cycle === 'yearly' ? 'amber' : 'gray'}>
+                        {t.billing_cycle === 'monthly' ? 'Monthly' : t.billing_cycle === 'yearly' ? 'Yearly' : 'One-time'}
+                      </Badge>
+                    </td>
+                    <td className="font-semibold text-[13px]">
+                      {fmtEuro(t.cost)}<span className="text-[10px] text-muted-foreground font-normal"> {cycleSuffix(t)}</span>
+                    </td>
+                    <td>
+                      <Badge variant={t.billable ? 'green' : 'gray'}>
+                        {t.billable ? 'Billable' : 'Non-billable'}
+                      </Badge>
+                    </td>
+                    <td className="text-[13px] text-muted-foreground">{fmtMonth(t.paying_from)}</td>
+                    <td className="text-[13px] text-muted-foreground">{fmtMonth(t.billing_from)}</td>
+                    <td className="text-[12px] text-muted-foreground">{t.notes ?? '—'}</td>
+                    <td>
+                      <Button variant="ghost" size="xs" className="text-[#dc2626]" onClick={() => setDeleteTarget(t)}>Remove</Button>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </Card>
@@ -269,7 +281,7 @@ export function ToolsTab({ projectId, maintenanceId }: Props) {
               }))}
             />
             {availableTools.length === 0 && (
-              <p className="text-xs text-muted-foreground mt-1">All tools already added. Switch to "Create new tool" to add one.</p>
+              <p className="text-xs text-muted-foreground mt-1">No unassigned tools. Switch to "Create new tool".</p>
             )}
           </div>
         ) : (
@@ -313,50 +325,46 @@ export function ToolsTab({ projectId, maintenanceId }: Props) {
               </div>
               <div>
                 <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Account Email</label>
-                <input type="email" value={newTool.email} onChange={e => setNewTool(f => ({ ...f, email: e.target.value }))} placeholder="account@agency.com" />
+                <input value={newTool.email} onChange={e => setNewTool(f => ({ ...f, email: e.target.value }))} placeholder="account@agency.com" />
               </div>
             </div>
           </>
         )}
 
-        {/* Billable toggle */}
-        <div className="mb-4">
-          <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Billing Type</label>
-          <div className="flex gap-0.5 bg-gray-100 rounded-lg p-0.5">
-            {([true, false] as const).map(b => (
-              <button key={String(b)} type="button" onClick={() => setBillable(b)}
-                className={`flex-1 py-1.5 rounded text-[13px] border-none cursor-pointer font-inherit transition-all ${
-                  billable === b
-                    ? `bg-white shadow-sm font-bold ${b ? 'text-[#16a34a]' : 'text-muted-foreground'}`
-                    : 'bg-transparent font-medium text-muted-foreground'
-                }`}>
-                {b ? 'Billable' : 'Non-billable'}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {billable && (
-          <div className="mb-4">
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div>
             <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Billing From</label>
             <input type="month" value={billingFrom} onChange={e => setBillingFrom(e.target.value)} />
-            <p className="text-xs text-muted-foreground mt-1">Month to start charging the client</p>
+            <p className="text-xs text-muted-foreground mt-1">When to start invoicing client</p>
+          </div>
+          <div>
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Notes</label>
+            <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g. shared seat…" />
+          </div>
+        </div>
+
+        {clientProjects.length > 0 && (
+          <div className="mb-4">
+            <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">
+              Project <span className="font-normal normal-case text-muted-foreground">(optional — leave blank for all projects)</span>
+            </label>
+            <Select
+              value={assignProjectId}
+              onChange={setAssignProjectId}
+              placeholder="— All projects —"
+              options={clientProjects.map(p => ({ value: p.id, label: p.name }))}
+            />
           </div>
         )}
-
-        <div>
-          <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Notes</label>
-          <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g. Client's own licence, shared seat…" />
-        </div>
       </Modal>
 
       <ConfirmDialog
         open={!!deleteTarget}
         title="Remove Tool"
-        message={`Remove ${deleteTarget?.tool.name} from this ${projectId ? 'project' : 'maintenance'}?`}
+        message={`Unlink ${deleteTarget?.name} from this client? The tool will remain in the global tools list.`}
         confirmLabel="Remove"
         loading={deleting}
-        onConfirm={handleDelete}
+        onConfirm={handleRemove}
         onCancel={() => setDeleteTarget(null)}
       />
     </div>

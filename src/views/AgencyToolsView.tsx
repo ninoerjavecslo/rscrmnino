@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAgencyToolsStore, type AgencyTool } from '../stores/agencyTools'
+import { useClientsStore } from '../stores/clients'
+import { useProjectsStore } from '../stores/projects'
 import { toast } from '../lib/toast'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import { Modal } from '../components/Modal'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { PageHeader } from '../components/PageHeader'
@@ -25,34 +27,42 @@ type FormState = {
   notes: string
   status: 'active' | 'inactive'
   paying_from: string
+  billable: boolean
+  client_id: string
+  billing_from: string
+  project_id: string
 }
 
 const EMPTY_FORM: FormState = {
   name: '', category: '', billing_cycle: 'monthly',
   cost: '', url: '', email: '', notes: '', status: 'active', paying_from: '',
+  billable: false, client_id: '', billing_from: '', project_id: '',
 }
 
 function monthlyEquivalent(t: AgencyTool) {
+  if (t.billing_cycle === 'one-time') return 0
   return t.billing_cycle === 'yearly' ? t.cost / 12 : t.cost
 }
 
 function yearlyEquivalent(t: AgencyTool) {
+  if (t.billing_cycle === 'one-time') return t.cost
   return t.billing_cycle === 'monthly' ? t.cost * 12 : t.cost
 }
 
 export function AgencyToolsView() {
   const store = useAgencyToolsStore()
+  const { clients, fetchAll: fetchClients } = useClientsStore()
+  const { projects, fetchAll: fetchProjects } = useProjectsStore()
   const [showModal, setShowModal]       = useState(false)
   const [editTarget, setEditTarget]     = useState<AgencyTool | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<AgencyTool | null>(null)
   const [form, setForm]                 = useState<FormState>(EMPTY_FORM)
   const [saving, setSaving]             = useState(false)
-  const [deleting, setDeleting]         = useState(false)
   const [search, setSearch]             = useState('')
   const [catFilter, setCatFilter]       = useState('all')
   const [cycleFilter, setCycleFilter]   = useState<'all' | 'monthly' | 'yearly'>('all')
 
-  useEffect(() => { store.fetchAll() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { store.fetchAll(); fetchClients(); fetchProjects() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function openAdd() {
     setEditTarget(null)
@@ -71,7 +81,11 @@ export function AgencyToolsView() {
       email:         t.email ?? '',
       notes:         t.notes ?? '',
       status:        t.status,
-      paying_from:   t.paying_from ?? '',
+      paying_from:   t.paying_from ? t.paying_from.slice(0, 7) : '',
+      billable:      t.billable,
+      client_id:     t.client_id ?? '',
+      billing_from:  t.billing_from ? t.billing_from.slice(0, 7) : '',
+      project_id:    t.project_id ?? '',
     })
     setShowModal(true)
   }
@@ -89,7 +103,11 @@ export function AgencyToolsView() {
         email:         form.email || null,
         notes:         form.notes || null,
         status:        form.status,
-        paying_from:   form.paying_from || null,
+        paying_from:   form.paying_from ? form.paying_from + '-01' : null,
+        billable:      form.billable,
+        client_id:     form.billable && form.client_id ? form.client_id : null,
+        billing_from:  form.billable && form.billing_from ? form.billing_from + '-01' : null,
+        project_id:    form.billable && form.client_id && form.project_id ? form.project_id : null,
       }
       if (editTarget) {
         await store.update(editTarget.id, payload)
@@ -108,15 +126,12 @@ export function AgencyToolsView() {
 
   async function handleDelete() {
     if (!deleteTarget) return
-    setDeleting(true)
     try {
       await store.remove(deleteTarget.id)
       toast('success', 'Tool removed')
       setDeleteTarget(null)
     } catch {
       toast('error', 'Failed to delete')
-    } finally {
-      setDeleting(false)
     }
   }
 
@@ -156,6 +171,12 @@ export function AgencyToolsView() {
     }
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]))
   }, [filtered])
+
+  function fmtMonth(d?: string | null) {
+    if (!d) return '—'
+    const [y, m] = d.split('-')
+    return `${m}/${y}`
+  }
 
   function fmtEuro(n: number) {
     return n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
@@ -241,8 +262,16 @@ export function AgencyToolsView() {
           <div key={category}>
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-[13px] font-bold uppercase tracking-wide text-muted-foreground">{category}</h2>
-              <span className="text-[11px] text-muted-foreground">
-                {fmtEuro(tools.filter(t => t.status === 'active').reduce((s, t) => s + monthlyEquivalent(t), 0))} /mo
+              <span className="text-[11px] text-muted-foreground flex flex-col items-end gap-0">
+                {(() => {
+                  const active = tools.filter(t => t.status === 'active')
+                  const mo = active.reduce((s, t) => s + monthlyEquivalent(t), 0)
+                  const yr = active.reduce((s, t) => s + yearlyEquivalent(t), 0)
+                  return <>
+                    {mo > 0 && <span>{fmtEuro(mo)} /mo</span>}
+                    <span>{fmtEuro(yr)} /yr</span>
+                  </>
+                })()}
               </span>
             </div>
             <Card>
@@ -250,16 +279,23 @@ export function AgencyToolsView() {
                 <thead>
                   <tr>
                     <th>Tool</th>
-                    <th>Email</th>
+                    <th>Client</th>
+                    <th>Project</th>
+                    <th>Category</th>
                     <th>Billing</th>
-                    <th className="text-right">Cost</th>
-                    <th className="text-right">/ Month</th>
+                    <th>Cost</th>
+                    <th>Billable</th>
+                    <th>Paying From</th>
+                    <th>Billing From</th>
                     <th>Status</th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {tools.map(t => (
+                  {tools.map(t => {
+                    const client = clients.find(c => c.id === t.client_id)
+                    const project = projects.find(p => p.id === t.project_id)
+                    return (
                     <tr key={t.id} className={t.status === 'inactive' ? 'opacity-50' : ''}>
                       <td>
                         <div className="font-semibold text-[13px]">
@@ -269,18 +305,33 @@ export function AgencyToolsView() {
                         </div>
                         {t.notes && <div className="text-[11px] text-muted-foreground">{t.notes}</div>}
                       </td>
-                      <td className="text-[12px] text-muted-foreground">{t.email ?? '—'}</td>
+                      <td className="text-[13px] text-muted-foreground">{client ? client.name : '—'}</td>
+                      <td className="text-[13px] text-muted-foreground">{project ? project.name : '—'}</td>
+                      <td><Badge variant="gray">{t.category}</Badge></td>
                       <td>
                         <Badge variant={t.billing_cycle === 'monthly' ? 'blue' : t.billing_cycle === 'yearly' ? 'amber' : 'gray'}>
                           {t.billing_cycle === 'monthly' ? 'Monthly' : t.billing_cycle === 'yearly' ? 'Yearly' : 'One-time'}
                         </Badge>
                       </td>
-                      <td className="text-right font-semibold text-[13px]">
-                        {fmtEuro(t.cost)}<span className="text-[10px] text-muted-foreground font-normal"> {t.billing_cycle === 'monthly' ? '/mo' : t.billing_cycle === 'yearly' ? '/yr' : ''}</span>
+                      <td className="font-semibold text-[13px]">
+                        {t.billing_cycle === 'one-time' ? (
+                          <>
+                            {fmtEuro(t.cost)}
+                            <div className="text-[10px] text-muted-foreground font-normal">one-time</div>
+                          </>
+                        ) : (
+                          <>
+                            {fmtEuro(t.billing_cycle === 'yearly' ? t.cost / 12 : t.cost)}
+                            <span className="text-[10px] text-muted-foreground font-normal">/mo</span>
+                            <div className="text-[10px] text-muted-foreground font-normal">{fmtEuro(yearlyEquivalent(t))}/yr</div>
+                          </>
+                        )}
                       </td>
-                      <td className="text-right text-[13px] text-muted-foreground">
-                        {t.billing_cycle === 'yearly' ? fmtEuro(t.cost / 12) : '—'}
+                      <td>
+                        <Badge variant={t.billable ? 'green' : 'gray'}>{t.billable ? 'Billable' : 'Non-billable'}</Badge>
                       </td>
+                      <td className="text-[13px] text-muted-foreground">{fmtMonth(t.paying_from)}</td>
+                      <td className="text-[13px] text-muted-foreground">{fmtMonth(t.billing_from)}</td>
                       <td>
                         <Badge variant={t.status === 'active' ? 'green' : 'gray'}>
                           {t.status === 'active' ? 'Active' : 'Inactive'}
@@ -292,7 +343,8 @@ export function AgencyToolsView() {
                         <Button variant="ghost" size="xs" className="text-[#dc2626]" onClick={() => setDeleteTarget(t)}>Delete</Button>
                       </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </Card>
@@ -368,7 +420,7 @@ export function AgencyToolsView() {
           </div>
           <div>
             <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Account Email</label>
-            <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="account@renderspace.si" />
+            <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="account@renderspace.si" />
           </div>
         </div>
         <div className="mb-4">
@@ -376,6 +428,57 @@ export function AgencyToolsView() {
           <input type="month" value={form.paying_from} onChange={e => setForm(f => ({ ...f, paying_from: e.target.value }))} />
           <p className="text-xs text-muted-foreground mt-1">Month the agency subscription started</p>
         </div>
+
+        {/* Billable section */}
+        <div className="mb-4">
+          <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-2">Billable to Client</label>
+          <div className="flex gap-0.5 bg-gray-100 rounded-lg p-0.5">
+            {([false, true] as const).map(b => (
+              <button key={String(b)} type="button" onClick={() => setForm(f => ({ ...f, billable: b }))}
+                className={`flex-1 py-1.5 rounded text-[13px] border-none cursor-pointer font-inherit transition-all ${
+                  form.billable === b
+                    ? `bg-white shadow-sm font-bold ${b ? 'text-[#16a34a]' : 'text-muted-foreground'}`
+                    : 'bg-transparent font-medium text-muted-foreground'
+                }`}>
+                {b ? 'Billable' : 'Non-billable'}
+              </button>
+            ))}
+          </div>
+        </div>
+        {form.billable && (
+          <>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Client</label>
+                <Select
+                  value={form.client_id}
+                  onChange={v => setForm(f => ({ ...f, client_id: v, project_id: '' }))}
+                  placeholder="— Select client —"
+                  options={clients.map(c => ({ value: c.id, label: c.name }))}
+                />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Billing From</label>
+                <input type="month" value={form.billing_from} onChange={e => setForm(f => ({ ...f, billing_from: e.target.value }))} />
+                <p className="text-xs text-muted-foreground mt-1">Month to start charging</p>
+              </div>
+            </div>
+            {form.client_id && (
+              <div className="mb-4">
+                <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Project <span className="font-normal normal-case text-muted-foreground">(optional — leave blank for all projects)</span></label>
+                <Select
+                  value={form.project_id}
+                  onChange={v => setForm(f => ({ ...f, project_id: v }))}
+                  placeholder="— All projects —"
+                  options={projects
+                    .filter(p => p.client_id === form.client_id)
+                    .map(p => ({ value: p.id, label: p.name }))}
+                />
+              </div>
+            )}
+          </>
+        )}
+
         <div>
           <label className="text-xs uppercase tracking-wide text-muted-foreground font-medium block mb-1">Notes</label>
           <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Plan, seats, usage…" rows={2} />
@@ -387,7 +490,6 @@ export function AgencyToolsView() {
         title="Remove Tool"
         message={`Remove ${deleteTarget?.name} from the stack?`}
         confirmLabel="Remove"
-        loading={deleting}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
       />

@@ -16,6 +16,7 @@ import { Modal } from '../components/Modal'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
+import { usePagePermission } from '../lib/usePagePermission'
 
 const CURRENT_YEAR = new Date().getFullYear()
 
@@ -53,6 +54,7 @@ export function ClientsView() {
   const pipeStore      = usePipelineStore()
   const settingsStore  = useSettingsStore()
   const navigate       = useNavigate()
+  const { canEdit }    = usePagePermission('clients')
   const [showAdd, setShowAdd] = useState(false)
   const [name, setName]       = useState('')
   const [saving, setSaving]   = useState(false)
@@ -236,10 +238,10 @@ export function ClientsView() {
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={exportPDF}>Export PDF</Button>
-          <Button size="sm" onClick={() => setShowAdd(true)}>
+          {canEdit && <Button size="sm" onClick={() => setShowAdd(true)}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             New Client
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -270,7 +272,7 @@ export function ClientsView() {
               <div className="text-3xl mb-2">👥</div>
               <div className="font-bold text-[15px] text-[#374151] mb-1">No clients yet</div>
               <div className="text-sm mb-4">Add your first client to get started</div>
-              <Button size="sm" onClick={() => setShowAdd(true)}>New Client</Button>
+              {canEdit && <Button size="sm" onClick={() => setShowAdd(true)}>New Client</Button>}
             </CardContent>
           </Card>
         ) : (

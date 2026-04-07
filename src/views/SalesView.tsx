@@ -13,6 +13,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
+import { usePagePermission } from '../lib/usePagePermission'
 
 function fmtEuro(n?: number | null) {
   if (!n) return '—'
@@ -156,6 +157,7 @@ export function SalesView() {
   const cStore   = useClientsStore()
   const settings = useSettingsStore()
   const navigate = useNavigate()
+  const { canEdit } = usePagePermission('sales')
 
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<PipelineItem | null>(null)
@@ -468,7 +470,7 @@ export function SalesView() {
           <h1>Sales Pipeline</h1>
           <p className="text-muted-foreground text-[13px] m-0">Track pitches and proposals for revenue forecasting</p>
         </div>
-        <Button size="sm" onClick={openAdd}>+ Add deal</Button>
+        {canEdit && <Button size="sm" onClick={openAdd}>+ Add deal</Button>}
       </div>
 
       <div className="grid grid-cols-4 gap-3 mb-4 px-6 pt-4">
@@ -572,7 +574,7 @@ export function SalesView() {
                             {item.expected_month && <span className="text-[11px] text-muted-foreground">{fmtMonth(item.expected_month)}</span>}
                           </div>
                           {item.description && <div className="text-[11px] text-muted-foreground mb-2 leading-snug">{item.description}</div>}
-                          <div className="flex gap-1 flex-wrap">
+                          {canEdit && <div className="flex gap-1 flex-wrap">
                             {item.status !== 'won' && item.status !== 'lost' && (
                               <>
                                 <Button size="xs" variant="outline" className="text-[#16a34a] border-[#16a34a] text-[10px] font-bold px-[7px] py-[2px]" onClick={() => openWon(item)}>Won ✓</Button>
@@ -581,7 +583,7 @@ export function SalesView() {
                             )}
                             <Button variant="outline" size="xs" onClick={() => openEdit(item)}>Edit</Button>
                             <Button variant="ghost" size="xs" className="text-muted-foreground" onClick={() => setDeleteTarget(item)}>✕</Button>
-                          </div>
+                          </div>}
                         </div>
                       )
                     })}
@@ -673,7 +675,7 @@ export function SalesView() {
                           : '—'}
                       </td>
                       <td>
-                        <div className="flex gap-1.5 items-center flex-nowrap">
+                        {canEdit && <div className="flex gap-1.5 items-center flex-nowrap">
                           {item.status !== 'won' && item.status !== 'lost' && (
                             <>
                               <Button size="xs" variant="outline" className="text-[#16a34a] border-[#16a34a] font-bold text-[11px]" onClick={() => openWon(item)}>Won ✓</Button>
@@ -682,7 +684,7 @@ export function SalesView() {
                           )}
                           <Button variant="outline" size="xs" onClick={() => openEdit(item)}>Edit</Button>
                           <Button variant="ghost" size="xs" className="text-[#dc2626]" onClick={() => setDeleteTarget(item)}>✕</Button>
-                        </div>
+                        </div>}
                       </td>
                     </tr>
                   )

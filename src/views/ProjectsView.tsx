@@ -14,6 +14,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
+import { usePagePermission } from '../lib/usePagePermission'
 
 const CURRENT_YEAR = new Date().getFullYear()
 
@@ -104,6 +105,7 @@ export function ProjectsView() {
   const crStore = useChangeRequestsStore()
   const settingsStore = useSettingsStore()
   const navigate = useNavigate()
+  const { canEdit } = usePagePermission('projects')
   const pmOptions = settingsStore.projectManagers.map(m => ({ value: m, label: m }))
   const [showAdd, setShowAdd]         = useState(false)
   const [saving, setSaving]           = useState(false)
@@ -251,10 +253,10 @@ export function ProjectsView() {
           <h1>Projects</h1>
           <p>Manage your project portfolio</p>
         </div>
-        <Button size="sm" onClick={() => { setForm(f => ({ ...f, pn: nextPn(pStore.projects) })); setShowAdd(true) }}>
+        {canEdit && <Button size="sm" onClick={() => { setForm(f => ({ ...f, pn: nextPn(pStore.projects) })); setShowAdd(true) }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           New Project
-        </Button>
+        </Button>}
       </div>
 
       {/* Stats strip */}
@@ -325,7 +327,7 @@ export function ProjectsView() {
                     <div className="text-3xl mb-2">📁</div>
                     <div className="font-bold text-[15px] text-[#374151] mb-1">No projects yet</div>
                     <div className="text-sm mb-4">Create your first project</div>
-                    <Button size="sm" onClick={() => setShowAdd(true)}>New Project</Button>
+                    {canEdit && <Button size="sm" onClick={() => setShowAdd(true)}>New Project</Button>}
                   </div>
                 </Card>
               ) : (

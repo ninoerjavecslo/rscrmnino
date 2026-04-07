@@ -680,6 +680,171 @@ export function RevenuePlannerView() {
     openHtmlAsPdf(html)
   }
 
+  // ── This Month exports ─────────────────────────────────────────────────────
+
+  function buildThisMonthRows() {
+    const now = new Date()
+    const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+
+    type ExportRow = { client: string; project: string; type: string; revenue: number; cost: number }
+    const rows: ExportRow[] = []
+
+    const typeLabel = (t: string) =>
+      t === 'fixed' ? 'Project' : t === 'maintenance' ? 'Maintenance' : t === 'variable' ? 'Variable' : t
+
+    // Projects — skip maintenance-type projects entirely; they're covered by retainerByMaint below
+    for (const p of activeProjects) {
+      if (p.type === 'maintenance') continue
+      const revenue = cellAmount(p, thisMonth) ?? 0
+      const costEntry = rpStore.rows.find(r => r.project_id === p.id && r.month === thisMonth && r.status === 'cost')
+      const cost = costEntry?.planned_amount ?? costEntry?.actual_amount ?? 0
+      if (!revenue && !cost) continue
+      rows.push({ client: p.client?.name ?? '', project: p.name, type: typeLabel(p.type), revenue, cost })
+    }
+
+    // Maintenance retainers: planned_amount + linked monthly hosting (mirrors ThisMonthView logic)
+    for (const [mid, { name, clientName, rows: retRows }] of retainerByMaint) {
+      const r = retRows.find(r => r.month === thisMonth)
+      if (!r?.planned_amount) continue
+      const linkedHosting = infraStore.hostingClients.find(
+        h => h.maintenance_id === mid && h.cycle === 'monthly' && hostingActiveInMonth(h, thisMonth)
+      )
+      rows.push({ client: clientName, project: name, type: 'Maintenance', revenue: (r.planned_amount) + (linkedHosting?.amount ?? 0), cost: 0 })
+    }
+
+    // Hosting — standalone only (maintenance-linked hosting is already included in the retainer amount)
+    for (const h of activeHostingClients.filter(h => !h.maintenance_id)) {
+      const amt = hostingCellAmount(h.id, thisMonth)
+      if (!amt) continue
+      rows.push({ client: h.client?.name ?? '', project: h.description ?? 'Hosting', type: 'Hosting', revenue: amt, cost: 0 })
+    }
+
+    // Domain renewals billed this month (use current year, not the view's year state)
+    const thisMonthNum = String(now.getMonth() + 1).padStart(2, '0')
+    for (const d of domainsStore.domains) {
+      const domMonthNum = (d.registered_date ?? d.expiry_date).slice(5, 7)
+      if (domMonthNum !== thisMonthNum) continue
+      if (!d.yearly_amount) continue
+      rows.push({
+        client:   (d as { client?: { name?: string } }).client?.name ?? '',
+        project:  `Domain: ${d.domain_name}`,
+        type:     'Domain',
+        revenue:  d.yearly_amount,
+        cost:     0,
+      })
+    }
+
+    return { rows, thisMonth }
+  }
+
+  function exportThisMonthExcel() {
+    const { rows, thisMonth } = buildThisMonthRows()
+    const now = new Date()
+    const monthLabel = now.toLocaleString('en', { month: 'long', year: 'numeric' })
+
+    type Row = (string | number | null)[]
+    const data: Row[] = []
+    data.push([`Monthly Plan — ${monthLabel}`])
+    data.push([])
+    data.push(['Client', 'Project / Contract', 'Type', 'Revenue Plan (€)', 'Cost Plan (€)'])
+
+    for (const r of rows) {
+      data.push([r.client, r.project, r.type, r.revenue || null, r.cost || null])
+    }
+
+    data.push([])
+    const totalRevenue = rows.reduce((s, r) => s + r.revenue, 0)
+    const totalCost    = rows.reduce((s, r) => s + r.cost, 0)
+    data.push(['TOTAL', '', '', totalRevenue || null, totalCost || null])
+
+    const ws = XLSX.utils.aoa_to_sheet(data)
+    ws['!cols'] = [{ wch: 28 }, { wch: 36 }, { wch: 14 }, { wch: 18 }, { wch: 14 }]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Monthly Plan')
+    XLSX.writeFile(wb, `monthly-plan-${thisMonth.slice(0, 7)}.xlsx`)
+    setExportOpen(false)
+  }
+
+  function exportThisMonthPDF() {
+    const { rows } = buildThisMonthRows()
+    const now = new Date()
+    const monthLabel = now.toLocaleString('en', { month: 'long', year: 'numeric' })
+    const today = now.toLocaleDateString('en-GB')
+    const { agencyLogo, agencyName } = settingsStore
+    const logoHtml = buildLogoHtml(agencyLogo, agencyName)
+    const totalRevenue = rows.reduce((s, r) => s + r.revenue, 0)
+    const totalCost    = rows.reduce((s, r) => s + r.cost, 0)
+
+    const typeColor: Record<string, string> = {
+      Project: '#0369a1', Maintenance: '#1d4ed8', Variable: '#92400e', Hosting: '#15803d', Domain: '#7c3aed',
+    }
+
+    const rowsHtml = rows.map(r => `
+      <tr>
+        <td>${r.client}</td>
+        <td style="font-weight:600">${r.project}</td>
+        <td><span style="display:inline-block;padding:2px 6px;border-radius:3px;font-size:8px;font-weight:700;background:#f0f4ff;color:${typeColor[r.type] ?? '#374151'}">${r.type}</span></td>
+        <td style="text-align:right;font-weight:600;color:#1a1a1a">${r.revenue ? fmtAmt(r.revenue) : '—'}</td>
+        <td style="text-align:right;color:#dc2626">${r.cost ? fmtAmt(r.cost) : '—'}</td>
+      </tr>`).join('')
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Monthly Plan — ${monthLabel}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+  body{font-family:'Inter',sans-serif;background:#e8e8e5;color:#1a1a1a;font-size:10px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .page{width:210mm;min-height:297mm;margin:20px auto;padding:10mm 12mm;background:#fff;box-shadow:0 4px 40px rgba(0,0,0,.12)}
+  @media print{body{background:#fff}.page{margin:0;box-shadow:none}}
+  @page{size:A4 portrait;margin:0}
+  .header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:5mm;border-bottom:2px solid #E85C1A;padding-bottom:4mm}
+  .doc-title{font-size:14px;font-weight:800;color:#1a1a1a;margin-top:4px}
+  .meta{text-align:right;font-size:9px;color:#6b7280;line-height:1.7}
+  .stats{display:flex;gap:10px;margin-bottom:5mm}
+  .stat{background:#fafaf9;border:1px solid #e0e0dd;border-radius:6px;padding:6px 12px;flex:1;text-align:center}
+  .stat-val{font-size:15px;font-weight:800}
+  .stat-lbl{font-size:8px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-top:1px}
+  table{width:100%;border-collapse:collapse}
+  th{background:#1a1a1a;color:#fff;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:5px 7px;text-align:left}
+  th.r{text-align:right}
+  td{padding:5px 7px;border-bottom:1px solid #f0efed;font-size:9.5px;vertical-align:middle}
+  tr.total td{border-top:2px solid #1a1a1a;font-weight:700;background:#fafaf9}
+  .footer{margin-top:5mm;border-top:1px solid #e0e0dd;padding-top:2mm;display:flex;justify-content:space-between;font-size:8px;color:#94a3b8}
+</style></head><body>
+<div class="page">
+  <div class="header">
+    <div>${logoHtml}<div class="doc-title">Monthly Plan — ${monthLabel}</div></div>
+    <div class="meta"><div>Exported ${today}</div><div>${agencyName || 'Agency'}</div></div>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="stat-val">${fmtAmt(totalRevenue)}</div><div class="stat-lbl">Total Revenue Plan</div></div>
+    <div class="stat"><div class="stat-val" style="color:#dc2626">${fmtAmt(totalCost)}</div><div class="stat-lbl">Total Cost Plan</div></div>
+    <div class="stat"><div class="stat-val" style="color:#16a34a">${fmtAmt(totalRevenue - totalCost)}</div><div class="stat-lbl">Net</div></div>
+  </div>
+  <table>
+    <thead><tr>
+      <th>Client</th><th>Project / Contract</th><th>Type</th>
+      <th class="r">Revenue Plan</th><th class="r">Cost Plan</th>
+    </tr></thead>
+    <tbody>
+      ${rowsHtml}
+      <tr class="total">
+        <td colspan="3">TOTAL</td>
+        <td style="text-align:right">${fmtAmt(totalRevenue)}</td>
+        <td style="text-align:right;color:#dc2626">${totalCost ? fmtAmt(totalCost) : '—'}</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="footer">
+    <div>${agencyName || 'Agency'}</div><div>${today}</div>
+  </div>
+</div>
+<script>window.onload=function(){window.print()}</script>
+</body></html>`
+
+    openHtmlAsPdf(html)
+    setExportOpen(false)
+  }
+
   return (
     <div>
       {/* Page header */}
@@ -730,20 +895,21 @@ export function RevenuePlannerView() {
               Export ▾
             </Button>
             {exportOpen && (
-              <div className="absolute right-0 top-full mt-1 bg-white border border-border rounded-[7px] shadow-md z-50 min-w-[160px] overflow-hidden">
-                <button
-                  onClick={exportExcel}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-[#f5f3f8] cursor-pointer"
-                  style={{ fontFamily: 'inherit', border: 'none', background: 'transparent', display: 'block' }}
-                >
-                  Export Excel (.xlsx)
+              <div className="absolute right-0 top-full mt-1 bg-white border border-border rounded-[7px] shadow-md z-50 min-w-[190px] overflow-hidden">
+                <div className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">This Month</div>
+                <button onClick={exportThisMonthExcel} className="w-full text-left px-3 py-2 text-sm hover:bg-[#f5f3f8] cursor-pointer" style={{ fontFamily: 'inherit', border: 'none', background: 'transparent', display: 'block' }}>
+                  This Month — Excel
                 </button>
-                <button
-                  onClick={exportPDF}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-[#f5f3f8] cursor-pointer"
-                  style={{ fontFamily: 'inherit', border: 'none', background: 'transparent', display: 'block' }}
-                >
-                  Export PDF
+                <button onClick={exportThisMonthPDF} className="w-full text-left px-3 py-2 text-sm hover:bg-[#f5f3f8] cursor-pointer" style={{ fontFamily: 'inherit', border: 'none', background: 'transparent', display: 'block' }}>
+                  This Month — PDF
+                </button>
+                <div className="border-t border-border mx-2 my-1" />
+                <div className="px-3 pt-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Full Plan</div>
+                <button onClick={exportExcel} className="w-full text-left px-3 py-2 text-sm hover:bg-[#f5f3f8] cursor-pointer" style={{ fontFamily: 'inherit', border: 'none', background: 'transparent', display: 'block' }}>
+                  Invoice Plan — Excel
+                </button>
+                <button onClick={exportPDF} className="w-full text-left px-3 py-2 text-sm hover:bg-[#f5f3f8] cursor-pointer" style={{ fontFamily: 'inherit', border: 'none', background: 'transparent', display: 'block' }}>
+                  Invoice Plan — PDF
                 </button>
               </div>
             )}

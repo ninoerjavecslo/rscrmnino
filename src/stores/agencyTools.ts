@@ -12,6 +12,10 @@ export interface AgencyTool {
   notes?: string | null
   status: 'active' | 'inactive'
   paying_from?: string | null
+  billable: boolean
+  client_id?: string | null
+  billing_from?: string | null
+  project_id?: string | null
   created_at: string
 }
 

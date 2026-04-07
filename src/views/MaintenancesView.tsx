@@ -16,6 +16,7 @@ import type { MaintenanceFormState } from '../components/EditMaintenanceModal'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
+import { usePagePermission } from '../lib/usePagePermission'
 import * as XLSX from 'xlsx'
 
 function fmtEuro(n: number) {
@@ -63,6 +64,7 @@ export function MaintenancesView() {
   const settingsStore = useSettingsStore()
   const infraStore = useInfraStore()
   const navigate = useNavigate()
+  const { canEdit } = usePagePermission('maintenances')
 
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<Maintenance | null>(null)
@@ -363,7 +365,7 @@ export function MaintenancesView() {
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={exportExcel}>Export Excel</Button>
           <Button variant="outline" size="sm" onClick={exportPDF}>Export PDF</Button>
-          <Button size="sm" onClick={openAdd}>+ New Contract</Button>
+          {canEdit && <Button size="sm" onClick={openAdd}>+ New Contract</Button>}
         </div>
       </div>
 

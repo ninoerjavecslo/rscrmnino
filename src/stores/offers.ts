@@ -11,6 +11,7 @@ interface GenerateParams {
   sections: string[]
   coverMeta: OfferMeta
   clientName: string
+  clientId?: string
   offerNumber: string
 }
 
@@ -203,6 +204,7 @@ export const useOffersStore = create<OffersState>((set, get) => ({
 
       const id = await get().create({
         title: params.coverMeta.cover_title ?? generated.title ?? params.clientName,
+        client_id: params.clientId ?? null,
         client_name: params.clientName,
         offer_number: params.offerNumber,
         language: params.language,

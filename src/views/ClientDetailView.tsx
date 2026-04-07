@@ -20,6 +20,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { usePagePermission } from '../lib/usePagePermission'
+import { ToolsTab } from '../components/ToolsTab'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -279,7 +281,7 @@ function plMonthCount(start: string, end: string): number {
   return Math.max(1, (e.getFullYear() - s.getFullYear()) * 12 + e.getMonth() - s.getMonth() + 1)
 }
 
-type TabId = 'overview' | 'projects' | 'infra' | 'maintenances' | 'other-income' | 'invoices' | 'pipeline'
+type TabId = 'overview' | 'projects' | 'infra' | 'maintenances' | 'other-income' | 'invoices' | 'pipeline' | 'tools'
 
 // ── component ─────────────────────────────────────────────────────────────────
 
@@ -296,6 +298,7 @@ export function ClientDetailView() {
   const plStore = usePipelineStore()
   const crStore = useChangeRequestsStore()
   const settingsStore = useSettingsStore()
+  const { canEdit } = usePagePermission('clients')
   const pmOptions = settingsStore.projectManagers.map(m => ({ value: m, label: m }))
 
   const allMonths = useMemo(() => clientMonths(), [])
@@ -925,7 +928,7 @@ Client profile:
         } else {
           const { data: newProj, error: pe } = await supabase.from('projects').insert({
             client_id: client?.id ?? null,
-            pn: `OI-${new Date().getFullYear()}`,
+            pn: `OI-${(client?.id ?? '').slice(0, 8)}`,
             name: 'Other Income',
             type: 'fixed',
             status: 'active',
@@ -989,7 +992,7 @@ Client profile:
       ? Math.round(((invoicedYTD - prevYearInvoiced) / prevYearInvoiced) * 100)
       : null
 
-    const quickActions = [
+    const quickActions = canEdit ? [
       {
         label: 'Issue one-time invoice', sub: 'Add billing entry', bg: '#6366f1',
         icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
@@ -1010,7 +1013,7 @@ Client profile:
         icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>,
         onClick: () => setShowDeleteClient(true),
       },
-    ]
+    ] : []
 
     return (
       <div className="flex flex-col gap-4">
@@ -1183,7 +1186,7 @@ Client profile:
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2>Projects</h2>
-          <Button size="sm" onClick={() => setShowAddProject(true)}>+ New Project</Button>
+          {canEdit && <Button size="sm" onClick={() => setShowAddProject(true)}>+ New Project</Button>}
         </div>
         <Card>
           {projects.length === 0 ? (
@@ -1698,6 +1701,7 @@ Client profile:
     { id: 'other-income', label: `Other Income${otherIncomeRows.length > 0 ? ` (${otherIncomeRows.length})` : ''}` },
     { id: 'invoices', label: 'Invoices' },
     { id: 'pipeline', label: `Pipeline${activePipelineItems.length > 0 ? ` (${activePipelineItems.length})` : ''}` },
+    { id: 'tools', label: 'Tools' },
   ]
 
   function exportPDF() {
@@ -2299,7 +2303,7 @@ Client profile:
           <div className="flex gap-2 shrink-0">
             <Button variant="outline" size="sm" onClick={exportPDF}>Export PDF</Button>
             <Button variant="outline" size="sm" onClick={openEdit}>Edit</Button>
-            <Button size="sm" onClick={() => setShowAddProject(true)}>+ New Project</Button>
+            {canEdit && <Button size="sm" onClick={() => setShowAddProject(true)}>+ New Project</Button>}
           </div>
         </div>
 
@@ -2381,6 +2385,7 @@ Client profile:
         {activeTab === 'other-income' && renderOtherIncome()}
         {activeTab === 'invoices'     && renderInvoices()}
         {activeTab === 'pipeline'     && renderPipeline()}
+        {activeTab === 'tools'        && client && <ToolsTab clientId={client.id} />}
       </div>
     </div>
   )

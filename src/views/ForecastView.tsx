@@ -1,15 +1,18 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRevenuePlannerStore } from '../stores/revenuePlanner'
 import { usePipelineStore } from '../stores/pipeline'
 import { useChangeRequestsStore } from '../stores/changeRequests'
 import { useClientsStore } from '../stores/clients'
 import { useInfraStore } from '../stores/infrastructure'
 import { useDomainsStore } from '../stores/domains'
+import { useSettingsStore } from '../stores/settings'
 import type { PipelineItem } from '../lib/types'
 import { hostingActiveInMonth } from '../lib/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
+import { buildLogoHtml, openHtmlAsPdf } from '../lib/pdfExport'
+import * as XLSX from 'xlsx'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -71,9 +74,12 @@ export function ForecastView() {
   const cStore = useClientsStore()
   const infraStore = useInfraStore()
   const domainsStore = useDomainsStore()
+  const settingsStore = useSettingsStore()
 
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(currentYear)
+  const [exportOpen, setExportOpen] = useState(false)
+  const exportRef = useRef<HTMLDivElement>(null)
   const months = useMemo(() => getYearMonths(year), [year])
   const loadMonths = useMemo(() => getYearMonths(year), [year])
 
@@ -85,6 +91,15 @@ export function ForecastView() {
     infraStore.fetchAll()
     domainsStore.fetchAll()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!exportOpen) return
+    function handler(e: MouseEvent) {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) setExportOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [exportOpen])
 
   // ── confirmed rows ─────────────────────────────────────────────────────────
   const confirmedRows = useMemo(() =>
@@ -278,10 +293,28 @@ export function ForecastView() {
         })
       }
       const entry = byMaint.get(r.maintenance_id)!
-      entry.amountByMonth.set(r.month, (entry.amountByMonth.get(r.month) ?? 0) + (r.planned_amount ?? 0))
+      entry.amountByMonth.set(r.month, (entry.amountByMonth.get(r.month) ?? 0) + (r.planned_amount ?? r.actual_amount ?? 0))
     }
     return [...byMaint.values()]
   }, [rpStore.rows, months])
+
+  // ── project cost rows (status='cost' in revenue_planner with project_id) ──
+  const projectCostRows = useMemo(() => {
+    const byProject = new Map<string, { name: string; clientName: string; amountByMonth: Map<string, number> }>()
+    for (const r of rpStore.rows) {
+      if (r.status !== 'cost' || !r.project_id || r.maintenance_id || !months.includes(r.month)) continue
+      if (!byProject.has(r.project_id)) {
+        byProject.set(r.project_id, {
+          name: r.project?.name ?? 'Project cost',
+          clientName: r.project?.client_id ? (cStore.clients.find(c => c.id === r.project!.client_id)?.name ?? '') : '',
+          amountByMonth: new Map(),
+        })
+      }
+      const entry = byProject.get(r.project_id)!
+      entry.amountByMonth.set(r.month, (entry.amountByMonth.get(r.month) ?? 0) + (r.planned_amount ?? r.actual_amount ?? 0))
+    }
+    return [...byProject.values()]
+  }, [rpStore.rows, months, cStore.clients])
 
   // ── infrastructure costs by month ─────────────────────────────────────────
   const costsByMonth = useMemo(() => {
@@ -300,8 +333,13 @@ export function ForecastView() {
         map.set(m, (map.get(m) ?? 0) + amt)
       }
     }
+    for (const pc of projectCostRows) {
+      for (const [m, amt] of pc.amountByMonth) {
+        map.set(m, (map.get(m) ?? 0) + amt)
+      }
+    }
     return map
-  }, [months, infraStore.infraCosts, maintCostRows])
+  }, [months, infraStore.infraCosts, maintCostRows, projectCostRows])
 
   const costRows = useMemo(() =>
     infraStore.infraCosts.filter(c => {
@@ -324,6 +362,238 @@ export function ForecastView() {
   const sectionHeaderCls = 'font-bold text-[11px] uppercase tracking-[0.5px] px-3 py-1.5'
   const subTotalRowCls = 'bg-[#f9fafb] border-t-2 border-[#e5e7eb]'
 
+  const monthLabels = months.map(m => new Date(m + 'T00:00:00').toLocaleString('en', { month: 'short' }))
+
+  function fmtNum(n: number) {
+    return n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  }
+
+  function exportExcel() {
+    const cols = ['CLIENT / SOURCE', ...monthLabels, 'TOTAL']
+    const data: (string | number)[][] = []
+
+    data.push([`Forecast — ${year}`])
+    data.push([])
+
+    // Confirmed
+    data.push(['CONFIRMED REVENUE'])
+    data.push(cols)
+    for (const [, { name, byMonth }] of clientRows) {
+      const total = [...byMonth.values()].reduce((s, v) => s + v, 0)
+      data.push([name, ...months.map(m => byMonth.get(m) ?? 0), total])
+    }
+    if (hostingByMonth.size > 0) {
+      const total = [...hostingByMonth.values()].reduce((s, v) => s + v, 0)
+      data.push(['Hosting — All clients', ...months.map(m => hostingByMonth.get(m) ?? 0), total])
+    }
+    if (domainsByMonth.size > 0) {
+      const total = [...domainsByMonth.values()].reduce((s, v) => s + v, 0)
+      data.push(['Domains — All renewals', ...months.map(m => domainsByMonth.get(m) ?? 0), total])
+    }
+    data.push(['Confirmed Total', ...months.map(m => confirmedByMonth.get(m) ?? 0), totalConfirmed])
+    data.push([])
+
+    // Pipeline
+    data.push(['PIPELINE'])
+    data.push(['CLIENT', 'DEAL', 'PROB %', ...monthLabels, 'TOTAL'])
+    for (const item of activePipeline) {
+      const clientName = getPipelineClientName(item)
+      data.push([clientName, item.title, item.probability, ...months.map(m => pipelineAmountInMonth(item, m)), pipelineDealTotal(item)])
+    }
+    for (const cr of pendingCRPipeline) {
+      const clientName = getCRClientName(cr)
+      data.push([clientName, cr.title, cr.probability ?? 50, ...months.map(m => cr.expected_month === m ? (cr.amount ?? 0) : 0), cr.amount ?? 0])
+    }
+    if (activePipeline.length > 0 || pendingCRPipeline.length > 0) {
+      data.push(['Pipeline Total (face value)', '', '', ...months.map(m => pipelineFaceByMonth.get(m) ?? 0), totalPipelineFace])
+    }
+    data.push([])
+
+    // Costs
+    if (costRows.length > 0 || maintCostRows.length > 0 || projectCostRows.length > 0) {
+      data.push(['COSTS'])
+      data.push(['PROVIDER / PROJECT', 'DESCRIPTION / CLIENT', ...monthLabels, 'TOTAL'])
+      for (const c of costRows) {
+        const isCancelled = c.status === 'inactive'
+        const rowTotal = months.reduce((s, m) => {
+          if (c.status === 'active') return s + c.monthly_cost
+          if (isCancelled && c.cancelled_from && m < c.cancelled_from) return s + c.monthly_cost
+          return s
+        }, 0)
+        data.push([c.provider, c.description ?? '', ...months.map(m => {
+          const active = c.status === 'active' || (isCancelled && !!c.cancelled_from && m < c.cancelled_from)
+          return active ? c.monthly_cost : 0
+        }), rowTotal])
+      }
+      for (const mc of maintCostRows) {
+        const rowTotal = months.reduce((s, m) => s + (mc.amountByMonth.get(m) ?? 0), 0)
+        data.push([mc.name, mc.clientName, ...months.map(m => mc.amountByMonth.get(m) ?? 0), rowTotal])
+      }
+      for (const pc of projectCostRows) {
+        const rowTotal = months.reduce((s, m) => s + (pc.amountByMonth.get(m) ?? 0), 0)
+        data.push([pc.name, pc.clientName, ...months.map(m => pc.amountByMonth.get(m) ?? 0), rowTotal])
+      }
+      data.push(['Costs Total', '', ...months.map(m => costsByMonth.get(m) ?? 0), totalCosts])
+      data.push([])
+    }
+
+    // Grand total
+    const monthlyNets = months.map(m =>
+      (confirmedByMonth.get(m) ?? 0) + (pipelineFaceByMonth.get(m) ?? 0) - (costsByMonth.get(m) ?? 0)
+    )
+    const grandTotal = monthlyNets.reduce((s, v) => s + v, 0)
+    data.push(['Grand Total', ...monthlyNets, grandTotal])
+
+    const ws = XLSX.utils.aoa_to_sheet(data)
+    ws['!cols'] = [{ wch: 28 }, ...months.map(() => ({ wch: 12 })), { wch: 14 }]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Forecast')
+    XLSX.writeFile(wb, `forecast-${year}.xlsx`)
+    setExportOpen(false)
+  }
+
+  function exportPDF() {
+    const { agencyLogo, agencyName } = settingsStore
+    const logoHtml = buildLogoHtml(agencyLogo, agencyName)
+    const today = new Date().toLocaleDateString('en-GB')
+
+    const f = (n: number) => n.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' €'
+    const numCols = months.length + 2 // name + 12 months + total
+
+    const monthlyNets = months.map(m =>
+      Math.round((confirmedByMonth.get(m) ?? 0) + (pipelineFaceByMonth.get(m) ?? 0) - (costsByMonth.get(m) ?? 0))
+    )
+    const grandTotal = monthlyNets.reduce((s, v) => s + v, 0)
+    const hasCosts = costRows.length > 0 || maintCostRows.length > 0 || projectCostRows.length > 0
+    const hasPipeline = activePipeline.length > 0 || pendingCRPipeline.length > 0
+
+    // Single-table styles — all sections share the same table for perfect column alignment
+    const S = {
+      sectionHdr: (bg: string) => `padding:5px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#fff;background:${bg}`,
+      th: (bg: string) => `padding:5px 8px;text-align:right;font-size:9px;font-weight:700;color:#fff;background:${bg};white-space:nowrap`,
+      thL: (bg: string) => `padding:5px 8px;text-align:left;font-size:9px;font-weight:700;color:#fff;background:${bg}`,
+      td: (color = '#111') => `padding:4px 8px;text-align:right;font-size:10px;border-bottom:1px solid #f0f0f0;color:${color}`,
+      tdL: () => `padding:4px 8px;text-align:left;font-size:10px;border-bottom:1px solid #f0f0f0`,
+      sub: (color = '#111') => `padding:5px 8px;text-align:right;font-size:10px;font-weight:700;background:#f3f4f6;border-top:2px solid #e5e7eb;color:${color}`,
+      subL: (color = '#111') => `padding:5px 8px;text-align:left;font-size:10px;font-weight:700;background:#f3f4f6;border-top:2px solid #e5e7eb;color:${color}`,
+    }
+
+    const mVal = (v: number | undefined, color: string) =>
+      `<td style="${S.td(v ? color : '#bbb')}">${v ? f(v) : '—'}</td>`
+
+    // Confirmed rows
+    const confirmedRows = [
+      ...clientRows.map(([, { name, byMonth }]) => {
+        const total = [...byMonth.values()].reduce((s, v) => s + v, 0)
+        return `<tr><td style="${S.tdL()}">${name}</td>${months.map(m => mVal(byMonth.get(m), '#1e1b4b')).join('')}<td style="${S.td('#1e1b4b')};font-weight:700">${f(total)}</td></tr>`
+      }),
+      hostingByMonth.size > 0 ? (() => { const t = [...hostingByMonth.values()].reduce((s,v)=>s+v,0); return `<tr><td style="${S.tdL()}">Hosting — All clients</td>${months.map(m => mVal(hostingByMonth.get(m), '#1e1b4b')).join('')}<td style="${S.td('#1e1b4b')};font-weight:700">${f(t)}</td></tr>` })() : '',
+      domainsByMonth.size > 0 ? (() => { const t = [...domainsByMonth.values()].reduce((s,v)=>s+v,0); return `<tr><td style="${S.tdL()}">Domains — All renewals</td>${months.map(m => mVal(domainsByMonth.get(m), '#1e1b4b')).join('')}<td style="${S.td('#1e1b4b')};font-weight:700">${f(t)}</td></tr>` })() : '',
+    ].join('')
+
+    // Pipeline rows
+    const pipelineRows = hasPipeline ? [
+      ...activePipeline.map(item => {
+        const faceTotal = pipelineDealTotal(item)
+        return `<tr><td style="${S.tdL()}"><div style="font-weight:600">${getPipelineClientName(item)}</div><div style="font-size:9px;color:#6b7280;margin-top:1px">${item.title} · ${item.probability}%</div></td>${months.map(m => mVal(pipelineAmountInMonth(item, m) || undefined, '#d97706')).join('')}<td style="${S.td('#d97706')};font-weight:700">${f(faceTotal)}</td></tr>`
+      }),
+      ...pendingCRPipeline.map(cr => {
+        return `<tr><td style="${S.tdL()}"><div style="font-weight:600">${getCRClientName(cr)} <span style="font-size:8px;background:#1e1b4b;color:#fff;border-radius:3px;padding:1px 4px">CR</span></div><div style="font-size:9px;color:#6b7280;margin-top:1px">${cr.title} · ${cr.probability ?? 50}%</div></td>${months.map(m => mVal(cr.expected_month === m ? (cr.amount ?? undefined) : undefined, '#d97706')).join('')}<td style="${S.td('#d97706')};font-weight:700">${f(cr.amount ?? 0)}</td></tr>`
+      }),
+    ].join('') : ''
+
+    // Cost rows
+    const allCostRows = hasCosts ? [
+      ...costRows.map(c => {
+        const isCancelled = c.status === 'inactive'
+        const rowTotal = months.reduce((s, m) => c.status === 'active' ? s + c.monthly_cost : (isCancelled && c.cancelled_from && m < c.cancelled_from ? s + c.monthly_cost : s), 0)
+        return `<tr style="${isCancelled ? 'opacity:.7' : ''}"><td style="${S.tdL()}"><div style="font-weight:600;color:#dc2626">${c.provider}</div>${c.description ? `<div style="font-size:9px;color:#6b7280;margin-top:1px">${c.description}</div>` : ''}</td>${months.map(m => { const a = c.status === 'active' || (isCancelled && !!c.cancelled_from && m < c.cancelled_from); return mVal(a ? c.monthly_cost : undefined, '#dc2626') }).join('')}<td style="${S.td('#dc2626')};font-weight:700">${f(rowTotal)}</td></tr>`
+      }),
+      ...[...maintCostRows, ...projectCostRows].map(mc => {
+        const rowTotal = months.reduce((s, m) => s + (mc.amountByMonth.get(m) ?? 0), 0)
+        return `<tr><td style="${S.tdL()}"><div style="font-weight:600;color:#dc2626">${mc.name}</div>${mc.clientName ? `<div style="font-size:9px;color:#6b7280;margin-top:1px">${mc.clientName}</div>` : ''}</td>${months.map(m => mVal(mc.amountByMonth.get(m) || undefined, '#dc2626')).join('')}<td style="${S.td('#dc2626')};font-weight:700">${f(rowTotal)}</td></tr>`
+      }),
+    ].join('') : ''
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+    <title>Forecast ${year}</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif; font-size: 11px; color: #111; background: #fff; padding: 20px; }
+      @media print { body { padding: 0; } @page { size: A3 landscape; margin: 10mm; } }
+    </style>
+    </head><body>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      ${logoHtml}
+      <div style="text-align:right;font-size:10px;color:#6b7280">${today}</div>
+    </div>
+    <h2 style="font-size:18px;font-weight:800;color:#1e1b4b;margin-bottom:6px">Forecast — ${year}</h2>
+    <div style="display:flex;gap:20px;margin-bottom:16px;flex-wrap:wrap">
+      <span style="font-size:11px;color:#6b7280">Confirmed: <strong style="color:#1e1b4b">${f(totalConfirmed)}</strong></span>
+      <span style="font-size:11px;color:#6b7280">Pipeline: <strong style="color:#d97706">${f(totalPipelineFace)}</strong></span>
+      <span style="font-size:11px;color:#6b7280">Best Case: <strong style="color:#16a34a">${f(totalBestCase)}</strong></span>
+      ${hasCosts ? `<span style="font-size:11px;color:#6b7280">Costs: <strong style="color:#dc2626">${f(totalCosts)}</strong></span>` : ''}
+    </div>
+    <table style="width:100%;border-collapse:collapse;table-layout:fixed">
+      <colgroup>
+        <col style="width:22%">
+        ${months.map(() => `<col style="width:${(72 / months.length).toFixed(2)}%">`).join('')}
+        <col style="width:6%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th style="${S.thL('#1e1b4b')}">CLIENT / SOURCE</th>
+          ${monthLabels.map(l => `<th style="${S.th('#1e1b4b')}">${l}</th>`).join('')}
+          <th style="${S.th('#1e1b4b')}">TOTAL</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td colspan="${numCols}" style="${S.sectionHdr('#1e1b4b')}">Confirmed Revenue</td></tr>
+        ${confirmedRows}
+        <tr>
+          <td style="${S.subL()}">Confirmed Total</td>
+          ${months.map(m => { const v = confirmedByMonth.get(m) ?? 0; return `<td style="${S.sub('#1e1b4b')}">${v > 0 ? f(v) : '—'}</td>` }).join('')}
+          <td style="${S.sub('#1e1b4b')}">${f(totalConfirmed)}</td>
+        </tr>
+        ${hasPipeline ? `
+        <tr><td colspan="${numCols}" style="${S.sectionHdr('#92400e')}">Pipeline</td></tr>
+        <tr>
+          <th style="${S.thL('#92400e')}">CLIENT / DEAL</th>
+          ${monthLabels.map(l => `<th style="${S.th('#92400e')}">${l}</th>`).join('')}
+          <th style="${S.th('#92400e')}">TOTAL</th>
+        </tr>
+        ${pipelineRows}
+        <tr>
+          <td style="${S.subL('#d97706')}">Pipeline Total (face value)</td>
+          ${months.map(m => { const v = pipelineFaceByMonth.get(m) ?? 0; return `<td style="${S.sub('#d97706')}">${v > 0 ? f(v) : '—'}</td>` }).join('')}
+          <td style="${S.sub('#d97706')}">${f(totalPipelineFace)}</td>
+        </tr>` : ''}
+        ${hasCosts ? `
+        <tr><td colspan="${numCols}" style="${S.sectionHdr('#7f1d1d')}">Costs</td></tr>
+        <tr>
+          <th style="${S.thL('#7f1d1d')}">PROVIDER / PROJECT</th>
+          ${monthLabels.map(l => `<th style="${S.th('#7f1d1d')}">${l}</th>`).join('')}
+          <th style="${S.th('#7f1d1d')}">TOTAL</th>
+        </tr>
+        ${allCostRows}
+        <tr>
+          <td style="${S.subL('#dc2626')}">Costs Total</td>
+          ${months.map(m => { const v = costsByMonth.get(m) ?? 0; return `<td style="${S.sub('#dc2626')}">${v > 0 ? f(v) : '—'}</td>` }).join('')}
+          <td style="${S.sub('#dc2626')}">${f(totalCosts)}</td>
+        </tr>` : ''}
+        <tr style="background:#1e1b4b">
+          <td style="padding:6px 10px;font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.5px">Grand Total</td>
+          ${monthlyNets.map(net => `<td style="padding:5px 8px;font-size:10px;font-weight:700;text-align:right;color:${net < 0 ? '#fca5a5' : '#fff'}">${net !== 0 ? f(net) : '—'}</td>`).join('')}
+          <td style="padding:5px 8px;font-size:11px;font-weight:800;text-align:right;color:${grandTotal < 0 ? '#fca5a5' : '#fff'}">${f(grandTotal)}</td>
+        </tr>
+      </tbody>
+    </table>
+    </body></html>`
+
+    openHtmlAsPdf(html)
+    setExportOpen(false)
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between px-6 py-4 bg-background border-b border-border">
@@ -335,6 +605,25 @@ export function ForecastView() {
           <Button variant="ghost" size="sm" onClick={() => setYear(y => y - 1)} disabled={year <= 2025}>← {year - 1}</Button>
           <span className="font-bold text-sm text-primary text-center min-w-[40px]">{year}</span>
           <Button variant="ghost" size="sm" onClick={() => setYear(y => y + 1)}>{year + 1} →</Button>
+          <div className="relative" ref={exportRef}>
+            <Button variant="outline" size="sm" onClick={() => setExportOpen(o => !o)}>Export ▾</Button>
+            {exportOpen && (
+              <div className="absolute right-0 top-full mt-1 bg-white border border-border rounded-[7px] shadow-md z-50 min-w-[160px] overflow-hidden">
+                <button
+                  onClick={exportExcel}
+                  className="w-full text-left px-3 py-2 text-[13px] hover:bg-[#f5f3ff] border-none bg-transparent cursor-pointer"
+                >
+                  Forecast — Excel
+                </button>
+                <button
+                  onClick={exportPDF}
+                  className="w-full text-left px-3 py-2 text-[13px] hover:bg-[#f5f3ff] border-none bg-transparent cursor-pointer"
+                >
+                  Forecast — PDF
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -544,7 +833,7 @@ export function ForecastView() {
               )}
 
               {/* ── Costs section header ── */}
-              {(costRows.length > 0 || maintCostRows.length > 0) && (
+              {(costRows.length > 0 || maintCostRows.length > 0 || projectCostRows.length > 0) && (
                 <tr className="bg-[#7f1d1d]">
                   <td colSpan={months.length + 2} className={`${sectionHeaderCls} text-white`}>
                     Costs
@@ -601,8 +890,30 @@ export function ForecastView() {
                 )
               })}
 
+              {/* Project cost rows */}
+              {projectCostRows.map((pc, i) => {
+                const rowTotal = months.reduce((s, m) => s + (pc.amountByMonth.get(m) ?? 0), 0)
+                return (
+                  <tr key={i}>
+                    <td className="text-[13px]">
+                      <div className="font-semibold text-[#dc2626]">{pc.name}</div>
+                      {pc.clientName && <div className="text-[11px] text-muted-foreground mt-px">{pc.clientName}</div>}
+                    </td>
+                    {months.map(m => {
+                      const amt = pc.amountByMonth.get(m) ?? 0
+                      return (
+                        <td key={m} className={`text-right text-[13px] ${amt ? 'text-[#dc2626]' : 'text-muted-foreground'}`}>
+                          {amt ? fmtEuro(amt) : '—'}
+                        </td>
+                      )
+                    })}
+                    <td className="text-right font-bold text-[#dc2626]">{fmtEuro(rowTotal)}</td>
+                  </tr>
+                )
+              })}
+
               {/* Costs subtotal */}
-              {(costRows.length > 0 || maintCostRows.length > 0) && (
+              {(costRows.length > 0 || maintCostRows.length > 0 || projectCostRows.length > 0) && (
                 <tr className="bg-[#f9fafb] border-t-2 border-[#fca5a5]">
                   <td className="font-bold text-[12px] uppercase tracking-[0.5px] text-[#dc2626]">Costs Total</td>
                   {months.map(m => (

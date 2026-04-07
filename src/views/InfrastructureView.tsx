@@ -11,6 +11,7 @@ import { Modal } from '../components/Modal'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { usePagePermission } from '../lib/usePagePermission'
 import { Card } from '@/components/ui/card'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -57,6 +58,7 @@ interface BillingEntry { status: 'billed' | 'planned'; rowId?: string }
 
 export function InfrastructureView() {
   const store = useInfraStore()
+  const { canEdit } = usePagePermission('infrastructure')
   const [showAddHosting, setShowAddHosting] = useState(false)
   const [saving, setSaving] = useState(false)
   const hosting = useHostingForm()
@@ -377,10 +379,10 @@ export function InfrastructureView() {
       <div className="flex-1 overflow-auto p-6">
         <div className="flex items-center justify-between mb-3">
           <h2>Client Hosting Revenue <span className="text-xs font-normal normal-case tracking-normal">· what clients pay you</span></h2>
-          <Button variant="outline" size="sm" onClick={() => setShowAddHosting(true)}>
+          {canEdit && <Button variant="outline" size="sm" onClick={() => setShowAddHosting(true)}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Add Client
-          </Button>
+          </Button>}
         </div>
 
         {yearlyDueSoon.length > 0 && (
@@ -500,7 +502,7 @@ export function InfrastructureView() {
         {/* ── Costs ───────────────────────────────────────── */}
         <div className="flex items-center justify-between mt-8 mb-[10px]">
           <h2>Costs <span className="text-xs font-normal normal-case tracking-normal">· what you pay providers</span></h2>
-          <Button variant="outline" size="sm" onClick={() => setShowAddCost(true)}>+ Add Cost</Button>
+          {canEdit && <Button variant="outline" size="sm" onClick={() => setShowAddCost(true)}>+ Add Cost</Button>}
         </div>
         <Card>
           {store.infraCosts.length === 0 ? (

@@ -2557,7 +2557,7 @@ export function ProjectDetailView() {
 
         {/* ── Tools tab ── */}
         {tab === 'tools' && project && (
-          <ToolsTab projectId={project.id} />
+          <ToolsTab clientId={project.client_id ?? undefined} projectId={project.id} />
         )}
 
         {/* ── Remove Team Member Confirm ─── */}

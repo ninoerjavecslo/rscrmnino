@@ -364,9 +364,6 @@ export function ForecastView() {
 
   const monthLabels = months.map(m => new Date(m + 'T00:00:00').toLocaleString('en', { month: 'short' }))
 
-  function fmtNum(n: number) {
-    return n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  }
 
   function exportExcel() {
     const cols = ['CLIENT / SOURCE', ...monthLabels, 'TOTAL']

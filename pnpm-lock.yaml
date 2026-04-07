@@ -38,6 +38,9 @@ importers:
       '@types/dompurify':
         specifier: ^3.0.5
         version: 3.2.0
+      ai:
+        specifier: ^6.0.149
+        version: 6.0.149(zod@4.3.6)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1

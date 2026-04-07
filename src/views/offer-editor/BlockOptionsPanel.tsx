@@ -1,4 +1,5 @@
-import React, { useEffect, useState, MutableRefObject } from 'react'
+import React, { useEffect, useState } from 'react'
+import type { MutableRefObject } from 'react'
 
 const BLOCK_TYPE_LABELS: Record<string, string> = {
   clientMeta: 'Offer Details',

@@ -363,7 +363,6 @@ export function ToolsTab({ clientId, projectId }: Props) {
         title="Remove Tool"
         message={`Unlink ${deleteTarget?.name} from this client? The tool will remain in the global tools list.`}
         confirmLabel="Remove"
-        loading={deleting}
         onConfirm={handleRemove}
         onCancel={() => setDeleteTarget(null)}
       />

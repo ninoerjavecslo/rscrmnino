@@ -27,7 +27,7 @@ interface PermissionsState {
   setAdmin: (userId: string, isAdmin: boolean) => Promise<void>
 }
 
-export const usePermissionsStore = create<PermissionsState>((set, get) => ({
+export const usePermissionsStore = create<PermissionsState>((set) => ({
   isAdmin: false,
   myPermissions: {},
   users: [],

@@ -39,7 +39,6 @@ export function ToolsTab({ clientId, projectId }: Props) {
   const { projects, fetchAll: fetchProjects } = useProjectsStore()
   const [showAdd, setShowAdd]           = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<AgencyTool | null>(null)
-  const [deleting, setDeleting]         = useState(false)
   const [saving, setSaving]             = useState(false)
 
   const [mode, setMode]                 = useState<'select' | 'create'>('select')
@@ -123,7 +122,6 @@ export function ToolsTab({ clientId, projectId }: Props) {
 
   async function handleRemove() {
     if (!deleteTarget) return
-    setDeleting(true)
     try {
       const { error } = await supabase
         .from('agency_tools')
@@ -135,8 +133,6 @@ export function ToolsTab({ clientId, projectId }: Props) {
       toast('success', 'Tool unlinked')
     } catch {
       toast('error', 'Failed to unlink tool')
-    } finally {
-      setDeleting(false)
     }
   }
 

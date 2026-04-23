@@ -209,6 +209,17 @@ The `(select ...)` wrapper is mandatory for per-statement caching (initPlan opti
 - Hook is registered and ACTIVE in Supabase Dashboard (edge function id: 03483343-e0c3-4afa-9569-e71a16aaa93a)
 - **Important for Phase 3:** Use `public.current_org_id()` not `auth.organization_id()` in all RLS policies
 
+## Self-Check: PASSED
+
+- FOUND: supabase/migrations/20260424000003_rls_policies.sql
+- FOUND: supabase/functions/custom-access-token-hook/index.ts
+- FOUND: supabase/functions/custom-access-token-hook/deno.json
+- FOUND: .planning/phases/01-database-foundation-rls/01-database-foundation-rls-03-SUMMARY.md
+- FOUND: commit 6bd6029 (Task 1 — SQL migration)
+- FOUND: commit ee97d92 (Task 2 — Edge function)
+- FOUND: commit a6fb93f (fix — public.current_org_id() deviation)
+- FOUND: commit dfd59ee (final metadata commit)
+
 ---
 *Phase: 01-database-foundation-rls*
 *Completed: 2026-04-24*

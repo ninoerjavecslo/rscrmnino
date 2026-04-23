@@ -41,7 +41,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
 - Roadmap: Use `organization_id` everywhere — never `org_id` — to avoid SQL bugs and broken FK references
-- Roadmap: RLS is deployed in Phase 1 but NOT enabled until Phase 3 backfill is complete (enabling before backfill locks out production)
+- Roadmap: RLS is ENABLED (default-deny, no policies) in Phase 1 — this is safe because no policies exist yet so all rows are blocked. Enforcement policies are written in Phase 3 AFTER backfill completes.
 - Roadmap: Zero Zustand store changes needed — RLS + JWT claim handles all scoping automatically
 - Roadmap: Must deploy to Vercel (Cloudflare Pages does not support wildcard custom domain SSL as of April 2026)
 

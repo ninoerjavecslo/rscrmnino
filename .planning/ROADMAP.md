@@ -35,14 +35,14 @@ Full-featured agency management tool for single-tenant use by Renderspace. Deliv
   1. An `organizations` table exists with slug, name, plan, and status columns and a unique constraint on slug
   2. An `organization_members` table exists linking users to organizations with a role field
   3. Every data table has an `organization_id` FK column with a matching index
-  4. RLS policies are enabled on all data tables and enforce that rows are visible only to the authenticated user's organization (verified via real client session, not SQL editor)
+  4. RLS is enabled (default-deny) on all data tables — enforcement policies are written in Phase 3 after backfill; until then authenticated users see zero rows (safe, expected)
   5. A Supabase Custom Access Token Hook embeds `organization_id` into `app_metadata` at login so RLS evaluates automatically
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: Create organizations and organization_members tables (migration 001)
-- [ ] 01-02: Add organization_id FK + indexes to all data tables (migration 002)
-- [ ] 01-03: Write RLS policies for all tables + Custom Access Token Hook (migration 003)
+- [ ] 01-database-foundation-rls/01-PLAN.md — Create organizations + organization_members tables (migration 20260424000001)
+- [ ] 01-database-foundation-rls/02-PLAN.md — Add nullable organization_id FK + index to every tenant-scoped table (migration 20260424000002)
+- [ ] 01-database-foundation-rls/03-PLAN.md — RLS helper + Custom Access Token Hook + enable RLS on all tables (migration 20260424000003 + edge function)
 
 ### Phase 2: Subdomain Routing + Auth
 **Goal**: Users who visit `renderspace.insighty.io` are automatically placed in the Renderspace org context and can only log in as Renderspace members

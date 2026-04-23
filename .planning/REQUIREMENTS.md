@@ -74,10 +74,10 @@ Requirements for the SaaS conversion milestone. Each maps to roadmap phases.
 | MT-02 | Phase 1 | Pending |
 | MT-03 | Phase 1 | Pending |
 | MT-04 | Phase 1 | Pending |
+| AUTH-02 | Phase 1 | Pending |
 | RT-01 | Phase 2 | Pending |
 | RT-02 | Phase 2 | Pending |
 | AUTH-01 | Phase 2 | Pending |
-| AUTH-02 | Phase 1 | Pending |
 | MIG-01 | Phase 3 | Pending |
 | MIG-02 | Phase 3 | Pending |
 | ADM-01 | Phase 4 | Pending |
@@ -94,4 +94,4 @@ Requirements for the SaaS conversion milestone. Each maps to roadmap phases.
 
 ---
 *Requirements defined: 2026-04-24*
-*Last updated: 2026-04-24 — initial v2.0 scope*
+*Last updated: 2026-04-24 — traceability updated after ROADMAP.md creation*

@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-04-24)
 
 **Core value:** Agency operators can see every project, invoice, cost, and pipeline deal in one place — so nothing falls through the cracks and revenue is always predictable.
-**Current focus:** Starting v2.0 SaaS milestone
+**Current focus:** Phase 1 — Database Foundation + RLS
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
+Phase: 1 of 4 (Database Foundation + RLS)
+Plan: 0 of 3 in current phase
 Status: Ready to plan
-Last activity: 2026-04-24 — v2.0 requirements defined (16 requirements, 4 categories)
+Last activity: 2026-04-24 — v2.0 roadmap created (4 phases, 16 requirements mapped)
 
 Progress: ░░░░░░░░░░ 0%
 
@@ -23,11 +23,40 @@ Progress: ░░░░░░░░░░ 0%
 - Average duration: —
 - Total execution time: —
 
+**By Phase:**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| - | - | - | - |
+
+**Recent Trend:**
+- Last 5 plans: —
+- Trend: —
+
 ## Accumulated Context
 
-- Existing codebase is a mature single-tenant agency tool (~45 views, ~20 stores)
-- Auth already exists but no multi-org isolation — all Supabase tables are unscoped
-- Plan: add `organizations` table + `organization_id` FK to all tables + Supabase RLS policies
-- Subdomain routing: wildcard DNS + slug resolution at app boot → set org context in Zustand
-- Renderspace's existing data needs migration to their new org record
-- Owner admin console: separate `/admin` route, visible only to Nino's account, shows all orgs/usage/billing
+### Decisions
+
+Decisions are logged in PROJECT.md Key Decisions table.
+Recent decisions affecting current work:
+
+- Roadmap: Use `organization_id` everywhere — never `org_id` — to avoid SQL bugs and broken FK references
+- Roadmap: RLS is deployed in Phase 1 but NOT enabled until Phase 3 backfill is complete (enabling before backfill locks out production)
+- Roadmap: Zero Zustand store changes needed — RLS + JWT claim handles all scoping automatically
+- Roadmap: Must deploy to Vercel (Cloudflare Pages does not support wildcard custom domain SSL as of April 2026)
+
+### Pending Todos
+
+None yet.
+
+### Blockers/Concerns
+
+- Phase 1: Exact table count needs verification before writing migration checklist (research says 14+, codebase may differ — confirm with `\dt` in Supabase SQL editor)
+- Phase 1: `organization_members.role` reconciliation with existing `user_permissions` store — resolve before writing Phase 1 migration
+- Phase 2: Vercel wildcard DNS setup for `*.insighty.io` is a deploy-time dependency, not code — needs platform configuration before Phase 2 goes live
+
+## Session Continuity
+
+Last session: 2026-04-24
+Stopped at: Roadmap created — ready to plan Phase 1
+Resume file: None

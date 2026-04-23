@@ -20,7 +20,7 @@ Full-featured agency management tool for single-tenant use by Renderspace. Deliv
 
 **Phase Numbering:** Starting at 1 (first GSD-tracked milestone).
 
-- [ ] **Phase 1: Database Foundation + RLS** - Organizations schema, `organization_id` FK on all tables, RLS policies, Custom Access Token Hook
+- [x] **Phase 1: Database Foundation + RLS** - Organizations schema, `organization_id` FK on all tables, RLS policies, Custom Access Token Hook (completed 2026-04-23)
 - [ ] **Phase 2: Subdomain Routing + Auth** - OrgProvider boot resolver, org context in stores, subdomain-scoped login
 - [ ] **Phase 3: Data Migration** - Backfill Renderspace org and user membership, verify isolation
 - [ ] **Phase 4: Admin Console** - Owner-only `/admin` route with org management and impersonation
@@ -42,7 +42,7 @@ Full-featured agency management tool for single-tenant use by Renderspace. Deliv
 Plans:
 - [x] 01-database-foundation-rls/01-PLAN.md — Create organizations + organization_members tables (migration 20260424000001)
 - [x] 01-database-foundation-rls/02-PLAN.md — Add nullable organization_id FK + index to every tenant-scoped table (migration 20260424000002)
-- [ ] 01-database-foundation-rls/03-PLAN.md — RLS helper + Custom Access Token Hook + enable RLS on all tables (migration 20260424000003 + edge function)
+- [x] 01-database-foundation-rls/03-PLAN.md — RLS helper + Custom Access Token Hook + enable RLS on all tables (migration 20260424000003 + edge function)
 
 ### Phase 2: Subdomain Routing + Auth
 **Goal**: Users who visit `renderspace.insighty.io` are automatically placed in the Renderspace org context and can only log in as Renderspace members
@@ -101,7 +101,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 1. Database Foundation + RLS | v2.0 | 2/3 | In Progress|  |
+| 1. Database Foundation + RLS | v2.0 | 3/3 | Complete   | 2026-04-23 |
 | 2. Subdomain Routing + Auth | v2.0 | 0/3 | Not started | - |
 | 3. Data Migration | v2.0 | 0/2 | Not started | - |
 | 4. Admin Console | v2.0 | 0/4 | Not started | - |

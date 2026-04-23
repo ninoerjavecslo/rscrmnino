@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: SaaS Conversion
 status: unknown
-stopped_at: Completed 01-database-foundation-rls-02-PLAN.md
-last_updated: "2026-04-23T17:04:32.650Z"
+stopped_at: "Stopped at checkpoint:human-action in 01-database-foundation-rls-03-PLAN.md (Task 3: Register Custom Access Token Hook)"
+last_updated: "2026-04-23T17:09:41.103Z"
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
+  completed_plans: 3
 ---
 
 # Project State
@@ -47,6 +47,7 @@ Plan: 3 of 3
 
 | Phase 01-database-foundation-rls P01 | 2min | 1 tasks | 1 files |
 | Phase 01-database-foundation-rls P02 | 15 | 2 tasks | 1 files |
+| Phase 01-database-foundation-rls P03 | 3 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -65,6 +66,8 @@ Recent decisions affecting current work:
 - [Phase 01-database-foundation-rls]: 35 tenant-scoped tables confirmed and altered — includes Studio-created tables confirmed via store usage + ALTER TABLE IF EXISTS evidence
 - [Phase 01-database-foundation-rls]: resource_plan and resource_projects excluded — tenant scope inherited via project_id FK; deferred to Phase 3 review due to naming ambiguity
 - [Phase 01-database-foundation-rls]: og_project_types and og_content_library included — over-scoping is reversible, under-scoping leaks data (PITFALLS.md Pitfall 1)
+- [Phase 01-database-foundation-rls]: custom_access_token_hook in public schema with security definer; auth.organization_id() in auth schema; both hooks deployed (SQL primary, Edge Function fallback)
+- [Phase 01-database-foundation-rls]: RLS enabled on 37 tables (default-deny, zero policies) in Phase 1; policies deferred to Phase 3 after backfill per PITFALLS.md Pitfall 5
 
 ### Pending Todos
 
@@ -78,6 +81,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-23T17:04:32.649Z
-Stopped at: Completed 01-database-foundation-rls-02-PLAN.md
+Last session: 2026-04-23T17:09:34.742Z
+Stopped at: Stopped at checkpoint:human-action in 01-database-foundation-rls-03-PLAN.md (Task 3: Register Custom Access Token Hook)
 Resume file: None

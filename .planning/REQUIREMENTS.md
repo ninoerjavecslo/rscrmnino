@@ -11,7 +11,7 @@ Requirements for the SaaS conversion milestone. Each maps to roadmap phases.
 
 - [x] **MT-01**: Each agency has an organization record with a unique slug, name, plan, and status
 - [x] **MT-02**: All data tables have an `organization_id` foreign key linking rows to their organization
-- [ ] **MT-03**: Supabase RLS policies restrict all table access to the authenticated user's organization
+- [x] **MT-03**: Supabase RLS policies restrict all table access to the authenticated user's organization
 - [x] **MT-04**: Users are linked to organizations via an `organization_members` table with a role field
 
 ### Routing
@@ -22,7 +22,7 @@ Requirements for the SaaS conversion milestone. Each maps to roadmap phases.
 ### Auth
 
 - [ ] **AUTH-01**: Login is scoped to the organization determined by the current subdomain
-- [ ] **AUTH-02**: Supabase session includes `org_id` for RLS policy enforcement (via JWT custom claims or `set_config` session context)
+- [x] **AUTH-02**: Supabase session includes `org_id` for RLS policy enforcement (via JWT custom claims or `set_config` session context)
 
 ### Migration
 
@@ -72,9 +72,9 @@ Requirements for the SaaS conversion milestone. Each maps to roadmap phases.
 |-------------|-------|--------|
 | MT-01 | Phase 1 | Complete |
 | MT-02 | Phase 1 | Complete |
-| MT-03 | Phase 1 | Pending |
+| MT-03 | Phase 1 | Complete |
 | MT-04 | Phase 1 | Complete |
-| AUTH-02 | Phase 1 | Pending |
+| AUTH-02 | Phase 1 | Complete |
 | RT-01 | Phase 2 | Pending |
 | RT-02 | Phase 2 | Pending |
 | AUTH-01 | Phase 2 | Pending |

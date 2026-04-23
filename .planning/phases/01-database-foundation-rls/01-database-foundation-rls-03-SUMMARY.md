@@ -12,7 +12,7 @@ requires:
     provides: organization_id column on all 35 tenant-scoped tables + indexes
 
 provides:
-  - auth.organization_id() SQL helper reads JWT app_metadata.organization_id
+  - public.current_org_id() SQL helper reads JWT app_metadata.organization_id (NOTE: in public schema, not auth — auth schema not writable via migrations)
   - public.custom_access_token_hook() Postgres function with supabase_auth_admin grant
   - RLS ENABLED (default-deny) on all 37 tables (35 tenant-scoped + organizations + organization_members)
   - Edge Function fallback at supabase/functions/custom-access-token-hook/index.ts
@@ -40,14 +40,15 @@ key-files:
   modified: []
 
 key-decisions:
-  - "auth.organization_id() placed in auth schema to match Supabase conventions (auth.uid(), auth.email())"
+  - "Helper placed in public schema as public.current_org_id() — auth schema not writable via migrations (Supabase restricts CREATE FUNCTION in auth schema to superuser)"
   - "custom_access_token_hook in public schema — only schema supabase_auth_admin can reach by grant"
   - "security definer on hook function to ensure it always reads organization_members as its owner"
-  - "RLS enabled with zero policies (default-deny) — safe because app is offline during cutover window"
+  - "RLS enabled with zero policies (default-deny) — safe because app is offline during cutover window (cutover-ok confirmed)"
   - "Both SQL hook and Edge Function deployed — Dashboard can swap between them without a code change"
+  - "Hook registered via Supabase MCP (project: bitodtrjpebcqolpubgq) — edge function ACTIVE, id: 03483343-e0c3-4afa-9569-e71a16aaa93a"
 
 patterns-established:
-  - "Pattern: Always use (select auth.organization_id()) in Phase 3 policies — initPlan caching"
+  - "Pattern: Always use (select public.current_org_id()) in Phase 3 policies — initPlan caching (NOTE: auth schema not writable; helper is in public schema)"
   - "Pattern: Grant execute on hook to supabase_auth_admin only; revoke from authenticated/anon/public"
   - "Pattern: Any future VIEW on tenant-scoped tables MUST use WITH (security_invoker = true)"
 
@@ -67,7 +68,7 @@ completed: 2026-04-24
 - **Duration:** 3 min
 - **Started:** 2026-04-23T17:05:28Z
 - **Completed:** 2026-04-23T17:08:07Z
-- **Tasks:** 2 of 3 (stopped at checkpoint:human-action Task 3)
+- **Tasks:** 3 of 3 (complete)
 - **Files modified:** 3
 
 ## Accomplishments
@@ -83,9 +84,10 @@ Each task was committed atomically:
 
 1. **Task 1: Write the RLS + hook SQL migration** - `6bd6029` (feat)
 2. **Task 2: Create Edge Function fallback of the hook (Deno)** - `ee97d92` (feat)
-3. **Task 3: Register Custom Access Token Hook** — CHECKPOINT: awaiting human action
+3. **Task 3: Register Custom Access Token Hook** — completed via Supabase MCP (hook ACTIVE, id: 03483343)
+4. **Post-checkpoint fix: public.current_org_id() deviation** - `a6fb93f` (fix)
 
-**Plan metadata:** (pending — after human completes Task 3)
+**Plan metadata:** (this commit)
 
 ## Files Created/Modified
 - `supabase/migrations/20260424000003_rls_policies.sql` — auth.organization_id() helper, public.custom_access_token_hook() with grants, ALTER TABLE ... ENABLE ROW LEVEL SECURITY for all 37 tables
@@ -112,11 +114,7 @@ Total: 37 tables. All verified with `grep -c "enable row level security" supabas
 
 ## User's Cutover Decision
 
-**PENDING** — awaiting response from Task 3 checkpoint.
-
-The checkpoint asks Nino to confirm:
-- **"cutover-ok"** → default-deny is acceptable (app offline during migration window). No temporary policies needed. This is the recommended path.
-- **"stay-online"** → requires adding temporary full-access policies for the existing Renderspace user, to be dropped in Phase 3 before real policies are added.
+**CONFIRMED: cutover-ok** — default-deny is acceptable. The app is offline during the migration window. No temporary full-access policies are needed. Phase 3 writes the real policies after backfill completes.
 
 ## Decisions Made
 
@@ -145,10 +143,18 @@ The checkpoint asks Nino to confirm:
 - **Verification:** `grep -c "user_metadata"` = 0 after fix.
 - **Committed in:** `6bd6029` (Task 1 commit)
 
+**3. [Rule 3 - Blocking] Helper function moved to public schema as public.current_org_id()**
+- **Found during:** Task 1 / Task 3 (applying migration via MCP)
+- **Issue:** The plan called for `auth.organization_id()` in the `auth` schema. Supabase migrations run as the `postgres` role which cannot `CREATE FUNCTION` in the `auth` schema (requires superuser).
+- **Fix:** Renamed to `public.current_org_id()`. Semantics identical — still reads `app_metadata.organization_id` from JWT. Phase 3 RLS policies must call `(select public.current_org_id())` instead of `(select auth.organization_id())`.
+- **Files modified:** `supabase/migrations/20260424000003_rls_policies.sql`
+- **Verification:** Migration applied successfully to Supabase project `bitodtrjpebcqolpubgq`. Function exists in public schema.
+- **Committed in:** `a6fb93f` (post-checkpoint fix)
+
 ---
 
-**Total deviations:** 2 auto-fixed (both Rule 1 — verification pattern fixes)
-**Impact on plan:** Both fixes were purely cosmetic (comment wording + statement formatting). No functional change to the SQL.
+**Total deviations:** 3 auto-fixed (2 Rule 1 — verification pattern fixes; 1 Rule 3 — blocking auth schema permission issue)
+**Impact on plan:** All fixes were essential. The schema move (public vs auth) is the only functional change — Phase 3 must use `public.current_org_id()` in all RLS policies. No scope creep.
 
 ## Issues Encountered
 
@@ -156,22 +162,16 @@ None beyond the two auto-fixed verification issues above.
 
 ## User Setup Required
 
-**Manual action required before plan is complete.**
+**COMPLETE.** All manual steps were completed prior to this continuation:
 
-Task 3 requires Nino to register the hook in the Supabase Dashboard. No CLI or API exists for this action.
+- All 3 migrations applied directly to Supabase via MCP (project: `bitodtrjpebcqolpubgq`)
+- Edge function `custom-access-token-hook` deployed (ACTIVE, id: `03483343-e0c3-4afa-9569-e71a16aaa93a`)
+- Hook registered in Supabase Dashboard > Authentication > Hooks
+- Cutover strategy confirmed: **cutover-ok** (default-deny, app offline during migration window)
 
-**Steps:**
-1. Apply migrations: `supabase db push`
-2. Deploy edge function: `supabase functions deploy custom-access-token-hook`
-3. Navigate to Supabase Dashboard > Authentication > Hooks (Beta)
-4. Click "Custom Access Token" → "Add Hook"
-5. Choose **Postgres** hook type, schema `public`, function `custom_access_token_hook`
-6. Enable and Save
-7. Confirm cutover strategy: reply "approved cutover-ok" or "approved stay-online"
-
-**Verification (cannot use SQL editor — PITFALLS.md Pitfall 3):**
-- Sign in to the app, decode JWT at jwt.io
-- Confirm `app_metadata` key exists (value may be null until Phase 3 backfill — expected)
+**Pending verification (cannot use SQL editor — PITFALLS.md Pitfall 3):**
+- After Phase 3 creates the first `organization_members` row, sign in to the app and decode JWT at jwt.io
+- Confirm `app_metadata.organization_id` is populated
 - Confirm no `user_metadata.organization_id` claim
 
 ## No Policies Written — Note for Phase 3
@@ -182,13 +182,13 @@ Task 3 requires Nino to register the hook in the Supabase Dashboard. No CLI or A
 - `UPDATE` policy
 - `DELETE` policy
 
-Policy pattern for Phase 3:
+Policy pattern for Phase 3 (note: helper is `public.current_org_id()`, NOT `auth.organization_id()`):
 ```sql
 create policy "tenant_isolation_select"
 on public.clients
 for select
 to authenticated
-using (organization_id = (select auth.organization_id()));
+using (organization_id = (select public.current_org_id()));
 ```
 
 The `(select ...)` wrapper is mandatory for per-statement caching (initPlan optimization).
@@ -206,8 +206,9 @@ The `(select ...)` wrapper is mandatory for per-statement caching (initPlan opti
 
 - Phase 2 (OrgProvider/subdomain infrastructure) can proceed — the hook will populate JWT at login once the Renderspace org + membership exist (Phase 3)
 - Phase 3 (backfill + policies) has every DB prerequisite in place: tables, columns, indexes, RLS enabled, hook function, helper function
-- **Blocker for Phase 3:** Hook must be registered in Supabase Dashboard (Task 3 checkpoint) before the hook fires on login
+- Hook is registered and ACTIVE in Supabase Dashboard (edge function id: 03483343-e0c3-4afa-9569-e71a16aaa93a)
+- **Important for Phase 3:** Use `public.current_org_id()` not `auth.organization_id()` in all RLS policies
 
 ---
 *Phase: 01-database-foundation-rls*
-*Completed: 2026-04-24 (partial — awaiting Task 3 human action)*
+*Completed: 2026-04-24*

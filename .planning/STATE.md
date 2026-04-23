@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: SaaS Conversion
 status: unknown
-stopped_at: "Stopped at checkpoint:human-action in 01-database-foundation-rls-03-PLAN.md (Task 3: Register Custom Access Token Hook)"
-last_updated: "2026-04-23T17:09:41.103Z"
+stopped_at: Completed 01-database-foundation-rls-03-PLAN.md — Phase 1 complete
+last_updated: "2026-04-23T17:25:55.502Z"
 progress:
   total_phases: 4
   completed_phases: 1
@@ -48,6 +48,7 @@ Plan: 3 of 3
 | Phase 01-database-foundation-rls P01 | 2min | 1 tasks | 1 files |
 | Phase 01-database-foundation-rls P02 | 15 | 2 tasks | 1 files |
 | Phase 01-database-foundation-rls P03 | 3 | 2 tasks | 3 files |
+| Phase 01-database-foundation-rls P03 | 85 | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -68,6 +69,9 @@ Recent decisions affecting current work:
 - [Phase 01-database-foundation-rls]: og_project_types and og_content_library included — over-scoping is reversible, under-scoping leaks data (PITFALLS.md Pitfall 1)
 - [Phase 01-database-foundation-rls]: custom_access_token_hook in public schema with security definer; auth.organization_id() in auth schema; both hooks deployed (SQL primary, Edge Function fallback)
 - [Phase 01-database-foundation-rls]: RLS enabled on 37 tables (default-deny, zero policies) in Phase 1; policies deferred to Phase 3 after backfill per PITFALLS.md Pitfall 5
+- [Phase 01-database-foundation-rls]: Helper function moved to public schema as public.current_org_id() — auth schema not writable via migrations (postgres role restricted from CREATE FUNCTION in auth)
+- [Phase 01-database-foundation-rls]: Cutover-ok confirmed — RLS enabled default-deny, no temporary policies needed, app offline during migration window
+- [Phase 01-database-foundation-rls]: All 3 migrations applied via Supabase MCP, edge function deployed ACTIVE (id: 03483343-e0c3-4afa-9569-e71a16aaa93a), hook registered in Dashboard
 
 ### Pending Todos
 
@@ -81,6 +85,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-23T17:09:34.742Z
-Stopped at: Stopped at checkpoint:human-action in 01-database-foundation-rls-03-PLAN.md (Task 3: Register Custom Access Token Hook)
+Last session: 2026-04-23T17:25:55.501Z
+Stopped at: Completed 01-database-foundation-rls-03-PLAN.md — Phase 1 complete
 Resume file: None

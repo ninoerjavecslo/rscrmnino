@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: SaaS Conversion
 status: unknown
-stopped_at: Completed 01-database-foundation-rls-01-PLAN.md
-last_updated: "2026-04-23T16:59:59.429Z"
+stopped_at: Completed 01-database-foundation-rls-02-PLAN.md
+last_updated: "2026-04-23T17:04:32.650Z"
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-24)
 ## Current Position
 
 Phase: 1 (Database Foundation + RLS) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 
 ## Performance Metrics
 
@@ -46,6 +46,7 @@ Plan: 2 of 3
 - Trend: —
 
 | Phase 01-database-foundation-rls P01 | 2min | 1 tasks | 1 files |
+| Phase 01-database-foundation-rls P02 | 15 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -61,6 +62,9 @@ Recent decisions affecting current work:
 - [Phase 01-database-foundation-rls]: No RLS in 01-01 migration — deferred to 01-03 to avoid blocking queries before backfill
 - [Phase 01-database-foundation-rls]: No data inserts in 01-01 — Renderspace org row created in Phase 3 MIG-01 backfill
 - [Phase 01-database-foundation-rls]: organization_id everywhere (never org_id) — enforced in all migrations from 01-01 onward
+- [Phase 01-database-foundation-rls]: 35 tenant-scoped tables confirmed and altered — includes Studio-created tables confirmed via store usage + ALTER TABLE IF EXISTS evidence
+- [Phase 01-database-foundation-rls]: resource_plan and resource_projects excluded — tenant scope inherited via project_id FK; deferred to Phase 3 review due to naming ambiguity
+- [Phase 01-database-foundation-rls]: og_project_types and og_content_library included — over-scoping is reversible, under-scoping leaks data (PITFALLS.md Pitfall 1)
 
 ### Pending Todos
 
@@ -74,6 +78,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-23T16:59:59.427Z
-Stopped at: Completed 01-database-foundation-rls-01-PLAN.md
+Last session: 2026-04-23T17:04:32.649Z
+Stopped at: Completed 01-database-foundation-rls-02-PLAN.md
 Resume file: None

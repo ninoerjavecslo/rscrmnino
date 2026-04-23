@@ -41,7 +41,7 @@ Full-featured agency management tool for single-tenant use by Renderspace. Deliv
 
 Plans:
 - [x] 01-database-foundation-rls/01-PLAN.md — Create organizations + organization_members tables (migration 20260424000001)
-- [ ] 01-database-foundation-rls/02-PLAN.md — Add nullable organization_id FK + index to every tenant-scoped table (migration 20260424000002)
+- [x] 01-database-foundation-rls/02-PLAN.md — Add nullable organization_id FK + index to every tenant-scoped table (migration 20260424000002)
 - [ ] 01-database-foundation-rls/03-PLAN.md — RLS helper + Custom Access Token Hook + enable RLS on all tables (migration 20260424000003 + edge function)
 
 ### Phase 2: Subdomain Routing + Auth
@@ -101,7 +101,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 1. Database Foundation + RLS | v2.0 | 1/3 | In Progress|  |
+| 1. Database Foundation + RLS | v2.0 | 2/3 | In Progress|  |
 | 2. Subdomain Routing + Auth | v2.0 | 0/3 | Not started | - |
 | 3. Data Migration | v2.0 | 0/2 | Not started | - |
 | 4. Admin Console | v2.0 | 0/4 | Not started | - |

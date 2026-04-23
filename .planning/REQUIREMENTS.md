@@ -10,7 +10,7 @@ Requirements for the SaaS conversion milestone. Each maps to roadmap phases.
 ### Multi-tenancy
 
 - [x] **MT-01**: Each agency has an organization record with a unique slug, name, plan, and status
-- [ ] **MT-02**: All data tables have an `organization_id` foreign key linking rows to their organization
+- [x] **MT-02**: All data tables have an `organization_id` foreign key linking rows to their organization
 - [ ] **MT-03**: Supabase RLS policies restrict all table access to the authenticated user's organization
 - [x] **MT-04**: Users are linked to organizations via an `organization_members` table with a role field
 
@@ -71,7 +71,7 @@ Requirements for the SaaS conversion milestone. Each maps to roadmap phases.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | MT-01 | Phase 1 | Complete |
-| MT-02 | Phase 1 | Pending |
+| MT-02 | Phase 1 | Complete |
 | MT-03 | Phase 1 | Pending |
 | MT-04 | Phase 1 | Complete |
 | AUTH-02 | Phase 1 | Pending |

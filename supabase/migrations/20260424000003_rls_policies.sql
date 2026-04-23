@@ -30,7 +30,9 @@
 -- READS FROM: app_metadata — server-controlled claim only.
 -- (PITFALLS.md Pitfall 2 — app_metadata is the correct location)
 
-create or replace function auth.organization_id()
+-- NOTE: helper lives in public schema (auth schema not writable via migrations).
+-- Phase 3 RLS policies use (select public.current_org_id()) — same perf caching applies.
+create or replace function public.current_org_id()
 returns uuid
 language sql
 stable
@@ -43,8 +45,8 @@ as $$
   )::uuid
 $$;
 
-comment on function auth.organization_id() is
-  'Extracts organization_id uuid from JWT app_metadata. Returns NULL if not set. Used by Phase 3 RLS policies. Always call as (select auth.organization_id()) to enable per-statement caching.';
+comment on function public.current_org_id() is
+  'Extracts organization_id uuid from JWT app_metadata. Returns NULL if not set. Used by Phase 3 RLS policies. Always call as (select public.current_org_id()) to enable per-statement caching.';
 
 -- ─── 2. Custom Access Token Hook ──────────────────────────────
 -- Runs on every token issuance (login + hourly refresh).

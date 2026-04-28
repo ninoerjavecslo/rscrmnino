@@ -26,10 +26,11 @@ import { SettingsView } from './views/SettingsView'
 import { AutomationsView } from './views/AutomationsView'
 import { AutomationFormView } from './views/AutomationFormView'
 import { PixelView } from './views/PixelView'
-import { OfferGeneratorView } from './views/OfferGeneratorView'
-import { OfferNewView } from './views/OfferNewView'
-import { OfferEditorView } from './views/OfferEditorView'
-import { OfferTemplatesView } from './views/OfferTemplatesView'
+// Offer generator disabled (Insighty SaaS rebrand)
+// import { OfferGeneratorView } from './views/OfferGeneratorView'
+// import { OfferNewView } from './views/OfferNewView'
+// import { OfferEditorView } from './views/OfferEditorView'
+// import { OfferTemplatesView } from './views/OfferTemplatesView'
 import { ResourcePlanningView } from './views/ResourcePlanningView'
 import { ResourceReportsView } from './views/ResourceReportsView'
 import { ResourceYearlyView } from './views/ResourceYearlyView'
@@ -50,7 +51,14 @@ import { CapacityForecastView } from './views/reports/CapacityForecastView'
 import { Toaster } from './components/Toaster'
 import { Topbar } from './components/layout/Topbar'
 import { ProtectedRoute } from './components/ProtectedRoute'
+import { AdminRoute } from './components/AdminRoute'
+import { ImpersonationBanner } from './components/ImpersonationBanner'
+import { AdminLayout } from './views/admin/AdminLayout'
+import { AdminOverview } from './views/admin/AdminOverview'
+import { AdminOrgsView } from './views/admin/AdminOrgsView'
+import { AdminUsersView } from './views/admin/AdminUsersView'
 import { usePermissionsStore } from './stores/permissions'
+import { OrgProvider } from './components/OrgProvider'
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -62,7 +70,11 @@ function App() {
       setSession(!!data.session)
       if (data.session) fetchPermissions()
     })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+      // Only react to real sign-in / sign-out, not token refreshes that fire on tab focus.
+      // TOKEN_REFRESHED / USER_UPDATED must not retrigger fetchPermissions — it flips the
+      // permissions store's loading flag, which makes ProtectedRoute unmount the active view.
+      if (event !== 'SIGNED_IN' && event !== 'SIGNED_OUT' && event !== 'INITIAL_SESSION') return
       setSession(!!s)
       if (s) fetchPermissions()
     })
@@ -71,15 +83,24 @@ function App() {
 
   if (session === null) return null // loading — no flash
 
-  if (!session) return <LoginView onLogin={() => setSession(true)} />
+  if (!session) return <OrgProvider><LoginView onLogin={() => setSession(true)} /></OrgProvider>
 
   return (
+    <OrgProvider>
     <BrowserRouter>
       <Routes>
 
         {/* ── Standalone routes (no sidebar) ── */}
         <Route path="/my-week/:token" element={<MyWeekView />} />
         <Route path="/member-dashboard/:token" element={<MemberDashboardView />} />
+
+        {/* ── Admin console (own layout, no main sidebar) ── */}
+        <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
+          <Route index element={<Navigate to="/admin/overview" replace />} />
+          <Route path="overview" element={<AdminOverview />} />
+          <Route path="organizations" element={<AdminOrgsView />} />
+          <Route path="users" element={<AdminUsersView />} />
+        </Route>
 
         {/* ── Main app layout ── */}
         <Route path="*" element={
@@ -111,6 +132,7 @@ function App() {
                 </span>
               </div>
 
+              <ImpersonationBanner />
               <Topbar />
               <Toaster />
               <Routes>
@@ -135,15 +157,14 @@ function App() {
                 <Route path="/domains"         element={<ProtectedRoute page="domains"><DomainsView /></ProtectedRoute>} />
                 <Route path="/tools"           element={<ProtectedRoute page="tools"><ToolsView /></ProtectedRoute>} />
                 <Route path="/tools/timesheet" element={<ProtectedRoute page="tools"><TimesheetView /></ProtectedRoute>} />
-                {/* Offers section */}
-                <Route path="/offers" element={<ProtectedRoute page="offers"><OfferGeneratorView /></ProtectedRoute>} />
-                <Route path="/offers/new" element={<ProtectedRoute page="offers"><OfferNewView /></ProtectedRoute>} />
-                <Route path="/offers/templates" element={<ProtectedRoute page="offers"><OfferTemplatesView /></ProtectedRoute>} />
-                <Route path="/offers/:id" element={<ProtectedRoute page="offers"><OfferEditorView /></ProtectedRoute>} />
-                {/* Legacy redirects */}
-                <Route path="/tools/offer-generator" element={<Navigate to="/offers" replace />} />
-                <Route path="/tools/offer-generator/new" element={<Navigate to="/offers/new" replace />} />
-                <Route path="/tools/offer-generator/:id" element={<ProtectedRoute page="offers"><OfferEditorView /></ProtectedRoute>} />
+                {/* Offers section — disabled for Insighty SaaS rebrand */}
+                {/* <Route path="/offers" element={<ProtectedRoute page="offers"><OfferGeneratorView /></ProtectedRoute>} /> */}
+                {/* <Route path="/offers/new" element={<ProtectedRoute page="offers"><OfferNewView /></ProtectedRoute>} /> */}
+                {/* <Route path="/offers/templates" element={<ProtectedRoute page="offers"><OfferTemplatesView /></ProtectedRoute>} /> */}
+                {/* <Route path="/offers/:id" element={<ProtectedRoute page="offers"><OfferEditorView /></ProtectedRoute>} /> */}
+                {/* <Route path="/tools/offer-generator" element={<Navigate to="/offers" replace />} /> */}
+                {/* <Route path="/tools/offer-generator/new" element={<Navigate to="/offers/new" replace />} /> */}
+                {/* <Route path="/tools/offer-generator/:id" element={<ProtectedRoute page="offers"><OfferEditorView /></ProtectedRoute>} /> */}
                 <Route path="/resource-planning" element={<ProtectedRoute page="resource-planning"><ResourcePlanningView /></ProtectedRoute>} />
                 <Route path="/resource-reports" element={<ProtectedRoute page="resource-planning"><ResourceReportsView /></ProtectedRoute>} />
                 <Route path="/reports" element={<ProtectedRoute page="reports"><ReportsView /></ProtectedRoute>} />
@@ -169,6 +190,7 @@ function App() {
         } />
       </Routes>
     </BrowserRouter>
+    </OrgProvider>
   )
 }
 

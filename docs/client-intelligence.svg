@@ -1,0 +1,333 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 1000" width="1440" height="1000" font-family="Manrope, Inter, system-ui, sans-serif">
+  <defs>
+    <filter id="shadow-hero" x="-20%" y="-15%" width="150%" height="155%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="22" result="blur"/>
+      <feOffset dx="0" dy="26" in="blur" result="offsetBlur"/>
+      <feFlood flood-color="#0f172a" flood-opacity="0.28" result="color"/>
+      <feComposite in="color" in2="offsetBlur" operator="in" result="shadow"/>
+      <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="shadow-md" x="-20%" y="-20%" width="150%" height="160%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="14" result="blur"/>
+      <feOffset dx="0" dy="16" in="blur" result="offsetBlur"/>
+      <feFlood flood-color="#0f172a" flood-opacity="0.20" result="color"/>
+      <feComposite in="color" in2="offsetBlur" operator="in" result="shadow"/>
+      <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="si-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#6366f1" stop-opacity="0.07"/>
+      <stop offset="100%" stop-color="#6366f1" stop-opacity="0.02"/>
+    </linearGradient>
+    <clipPath id="clip-detail"><rect width="720" height="510" rx="10"/></clipPath>
+    <clipPath id="clip-list"><rect width="540" height="292" rx="10"/></clipPath>
+    <clipPath id="clip-domains"><rect width="620" height="190" rx="10"/></clipPath>
+  </defs>
+
+  <!-- Section background -->
+  <rect width="1440" height="1000" fill="#f8f7fa"/>
+  <line x1="0" y1="0" x2="1440" y2="0" stroke="#e8e3ea" stroke-width="1"/>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- LAYER 1 — Clients list table (back, rotate -2°)           -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <g transform="translate(30,120) rotate(-2,270,146)" opacity="0.96" filter="url(#shadow-md)">
+    <rect width="540" height="292" rx="10" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+    <g clip-path="url(#clip-list)">
+      <!-- thead bg -->
+      <rect width="540" height="31" fill="#fafaf9"/>
+      <line x1="0" y1="31" x2="540" y2="31" stroke="#e8e3ea" stroke-width="1"/>
+      <!-- thead labels -->
+      <text x="10" y="20" font-size="7.5" font-weight="700" fill="#94a3b8" letter-spacing="0.7">CLIENT NAME</text>
+      <text x="192" y="20" font-size="7.5" font-weight="700" fill="#94a3b8" letter-spacing="0.7" text-anchor="middle">PROJECTS</text>
+      <text x="240" y="20" font-size="7.5" font-weight="700" fill="#94a3b8" letter-spacing="0.7" text-anchor="middle">PIPELINE</text>
+      <text x="288" y="20" font-size="7.5" font-weight="700" fill="#94a3b8" letter-spacing="0.7" text-anchor="middle">HOSTING</text>
+      <text x="336" y="20" font-size="7.5" font-weight="700" fill="#94a3b8" letter-spacing="0.7" text-anchor="middle">DOMAINS</text>
+      <text x="396" y="20" font-size="7.5" font-weight="700" fill="#94a3b8" letter-spacing="0.7" text-anchor="middle">MAINTENANCE</text>
+      <text x="530" y="20" font-size="7.5" font-weight="700" fill="#94a3b8" letter-spacing="0.7" text-anchor="end">INVOICED YTD</text>
+
+      <!-- Row 1: Acme Studio (highlighted) -->
+      <rect y="31" width="540" height="32" fill="rgba(99,102,241,0.05)"/>
+      <text x="10" y="51" font-size="10.5" font-weight="700" fill="#6366f1">Acme Studio</text>
+      <text x="192" y="51" font-size="10.5" fill="#334155" text-anchor="middle">1</text>
+      <text x="240" y="51" font-size="10.5" fill="#94a3b8" text-anchor="middle">—</text>
+      <circle cx="288" cy="47" r="8" fill="#d1fae5"/><text x="288" y="51" font-size="9" font-weight="800" fill="#059669" text-anchor="middle">✓</text>
+      <circle cx="336" cy="47" r="8" fill="#f4f3f6"/><text x="336" y="52" font-size="11" fill="#94a3b8" text-anchor="middle">−</text>
+      <circle cx="396" cy="47" r="8" fill="#d1fae5"/><text x="396" y="51" font-size="9" font-weight="800" fill="#059669" text-anchor="middle">✓</text>
+      <text x="530" y="51" font-size="10.5" font-weight="700" fill="#047857" text-anchor="end">13,600 €</text>
+      <line x1="0" y1="63" x2="540" y2="63" stroke="#e8e3ea" stroke-width="0.5"/>
+
+      <!-- Row 2: Bites & Beyond -->
+      <text x="10" y="83" font-size="10.5" font-weight="600" fill="#1e293b">Bites &amp; Beyond</text>
+      <text x="192" y="83" font-size="10.5" fill="#334155" text-anchor="middle">1</text>
+      <text x="240" y="83" font-size="10.5" fill="#94a3b8" text-anchor="middle">—</text>
+      <circle cx="288" cy="79" r="8" fill="#f4f3f6"/><text x="288" y="84" font-size="11" fill="#94a3b8" text-anchor="middle">−</text>
+      <circle cx="336" cy="79" r="8" fill="#f4f3f6"/><text x="336" y="84" font-size="11" fill="#94a3b8" text-anchor="middle">−</text>
+      <circle cx="396" cy="79" r="8" fill="#f4f3f6"/><text x="396" y="84" font-size="11" fill="#94a3b8" text-anchor="middle">−</text>
+      <text x="530" y="83" font-size="10.5" fill="#94a3b8" text-anchor="end">—</text>
+      <line x1="0" y1="95" x2="540" y2="95" stroke="#e8e3ea" stroke-width="0.5"/>
+
+      <!-- Row 3: Celtra -->
+      <text x="10" y="115" font-size="10.5" font-weight="600" fill="#1e293b">Celtra</text>
+      <text x="192" y="115" font-size="10.5" fill="#94a3b8" text-anchor="middle">—</text>
+      <text x="240" y="115" font-size="10.5" fill="#94a3b8" text-anchor="middle">—</text>
+      <circle cx="288" cy="111" r="8" fill="#d1fae5"/><text x="288" y="115" font-size="9" font-weight="800" fill="#059669" text-anchor="middle">✓</text>
+      <circle cx="336" cy="111" r="8" fill="#f4f3f6"/><text x="336" y="116" font-size="11" fill="#94a3b8" text-anchor="middle">−</text>
+      <circle cx="396" cy="111" r="8" fill="#f4f3f6"/><text x="396" y="116" font-size="11" fill="#94a3b8" text-anchor="middle">−</text>
+      <text x="530" y="115" font-size="10.5" font-weight="700" fill="#047857" text-anchor="end">100 €</text>
+      <line x1="0" y1="127" x2="540" y2="127" stroke="#e8e3ea" stroke-width="0.5"/>
+
+      <!-- Row 4: Dagency -->
+      <text x="10" y="147" font-size="10.5" font-weight="600" fill="#1e293b">Dagency</text>
+      <text x="192" y="147" font-size="10.5" fill="#94a3b8" text-anchor="middle">—</text>
+      <text x="240" y="147" font-size="10.5" fill="#94a3b8" text-anchor="middle">—</text>
+      <circle cx="288" cy="143" r="8" fill="#d1fae5"/><text x="288" y="147" font-size="9" font-weight="800" fill="#059669" text-anchor="middle">✓</text>
+      <circle cx="336" cy="143" r="8" fill="#f4f3f6"/><text x="336" y="148" font-size="11" fill="#94a3b8" text-anchor="middle">−</text>
+      <circle cx="396" cy="143" r="8" fill="#f4f3f6"/><text x="396" y="148" font-size="11" fill="#94a3b8" text-anchor="middle">−</text>
+      <text x="530" y="147" font-size="10.5" font-weight="700" fill="#047857" text-anchor="end">150 €</text>
+      <line x1="0" y1="159" x2="540" y2="159" stroke="#e8e3ea" stroke-width="0.5"/>
+
+      <!-- Row 5: dm -->
+      <text x="10" y="179" font-size="10.5" font-weight="600" fill="#1e293b">dm</text>
+      <text x="192" y="179" font-size="10.5" fill="#334155" text-anchor="middle">1</text>
+      <text x="240" y="179" font-size="10.5" fill="#94a3b8" text-anchor="middle">—</text>
+      <circle cx="288" cy="175" r="8" fill="#d1fae5"/><text x="288" y="179" font-size="9" font-weight="800" fill="#059669" text-anchor="middle">✓</text>
+      <circle cx="336" cy="175" r="8" fill="#f4f3f6"/><text x="336" y="180" font-size="11" fill="#94a3b8" text-anchor="middle">−</text>
+      <circle cx="396" cy="175" r="8" fill="#d1fae5"/><text x="396" y="179" font-size="9" font-weight="800" fill="#059669" text-anchor="middle">✓</text>
+      <text x="530" y="179" font-size="10.5" font-weight="700" fill="#047857" text-anchor="end">1,900 €</text>
+      <line x1="0" y1="191" x2="540" y2="191" stroke="#e8e3ea" stroke-width="0.5"/>
+
+      <!-- Row 6: ECM Partners -->
+      <text x="10" y="211" font-size="10.5" font-weight="600" fill="#1e293b">ECM Partners</text>
+      <text x="192" y="211" font-size="10.5" fill="#334155" text-anchor="middle">1</text>
+      <text x="240" y="211" font-size="10.5" fill="#94a3b8" text-anchor="middle">—</text>
+      <circle cx="288" cy="207" r="8" fill="#f4f3f6"/><text x="288" y="212" font-size="11" fill="#94a3b8" text-anchor="middle">−</text>
+      <circle cx="336" cy="207" r="8" fill="#f4f3f6"/><text x="336" y="212" font-size="11" fill="#94a3b8" text-anchor="middle">−</text>
+      <circle cx="396" cy="207" r="8" fill="#f4f3f6"/><text x="396" y="212" font-size="11" fill="#94a3b8" text-anchor="middle">−</text>
+      <text x="530" y="211" font-size="10.5" fill="#94a3b8" text-anchor="end">—</text>
+      <line x1="0" y1="223" x2="540" y2="223" stroke="#e8e3ea" stroke-width="0.5"/>
+
+      <!-- Row 7: Northwind -->
+      <text x="10" y="243" font-size="10.5" font-weight="600" fill="#1e293b">Northwind</text>
+      <text x="192" y="243" font-size="10.5" fill="#334155" text-anchor="middle">1</text>
+      <text x="240" y="243" font-size="10.5" fill="#94a3b8" text-anchor="middle">—</text>
+      <circle cx="288" cy="239" r="8" fill="#d1fae5"/><text x="288" y="243" font-size="9" font-weight="800" fill="#059669" text-anchor="middle">✓</text>
+      <circle cx="336" cy="239" r="8" fill="#f4f3f6"/><text x="336" y="244" font-size="11" fill="#94a3b8" text-anchor="middle">−</text>
+      <circle cx="396" cy="239" r="8" fill="#d1fae5"/><text x="396" y="243" font-size="9" font-weight="800" fill="#059669" text-anchor="middle">✓</text>
+      <text x="530" y="243" font-size="10.5" font-weight="700" fill="#047857" text-anchor="end">13,600 €</text>
+      <line x1="0" y1="255" x2="540" y2="255" stroke="#e8e3ea" stroke-width="0.5"/>
+
+      <!-- Row 8: eVino -->
+      <text x="10" y="275" font-size="10.5" font-weight="600" fill="#1e293b">eVino</text>
+      <text x="192" y="275" font-size="10.5" fill="#94a3b8" text-anchor="middle">—</text>
+      <text x="240" y="275" font-size="10.5" fill="#94a3b8" text-anchor="middle">—</text>
+      <circle cx="288" cy="271" r="8" fill="#d1fae5"/><text x="288" y="275" font-size="9" font-weight="800" fill="#059669" text-anchor="middle">✓</text>
+      <circle cx="336" cy="271" r="8" fill="#f4f3f6"/><text x="336" y="276" font-size="11" fill="#94a3b8" text-anchor="middle">−</text>
+      <circle cx="396" cy="271" r="8" fill="#d1fae5"/><text x="396" y="275" font-size="9" font-weight="800" fill="#059669" text-anchor="middle">✓</text>
+      <text x="530" y="275" font-size="10.5" font-weight="700" fill="#047857" text-anchor="end">1,970 €</text>
+    </g>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- LAYER 2 — Domains & Hosting panel (mid, rotate 1.5°)      -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <g transform="translate(220,690) rotate(1.5,310,95)" filter="url(#shadow-md)">
+    <rect width="620" height="190" rx="10" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+    <g clip-path="url(#clip-domains)">
+      <!-- Header -->
+      <text x="16" y="33" font-size="13" font-weight="800" fill="#0f172a">Domains &amp; Hosting</text>
+      <rect x="408" y="13" width="88" height="22" rx="4" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+      <text x="452" y="28" font-size="8" font-weight="700" fill="#1e293b" letter-spacing="0.3" text-anchor="middle">GO TO HOSTING</text>
+      <rect x="504" y="13" width="86" height="22" rx="4" fill="white" stroke="#cbd5e1" stroke-width="1"/>
+      <text x="547" y="28" font-size="8" font-weight="700" fill="#1e293b" letter-spacing="0.3" text-anchor="middle">GO TO DOMAINS</text>
+      <line x1="0" y1="48" x2="620" y2="48" stroke="#e8e3ea" stroke-width="1"/>
+
+      <!-- thead -->
+      <rect y="48" width="620" height="27" fill="#fafaf9"/>
+      <text x="10" y="65" font-size="7.5" font-weight="700" fill="#94a3b8" letter-spacing="0.6">TYPE</text>
+      <text x="74" y="65" font-size="7.5" font-weight="700" fill="#94a3b8" letter-spacing="0.6">PROJECT #</text>
+      <text x="170" y="65" font-size="7.5" font-weight="700" fill="#94a3b8" letter-spacing="0.6">DESCRIPTION</text>
+      <text x="388" y="65" font-size="7.5" font-weight="700" fill="#94a3b8" letter-spacing="0.6" text-anchor="end">AMOUNT</text>
+      <text x="452" y="65" font-size="7.5" font-weight="700" fill="#94a3b8" letter-spacing="0.6" text-anchor="end">TOTAL</text>
+      <text x="464" y="65" font-size="7.5" font-weight="700" fill="#94a3b8" letter-spacing="0.6">EXPIRY</text>
+      <text x="610" y="65" font-size="7.5" font-weight="700" fill="#94a3b8" letter-spacing="0.6" text-anchor="end">STATUS</text>
+      <line x1="0" y1="75" x2="620" y2="75" stroke="#e8e3ea" stroke-width="0.5"/>
+
+      <!-- Row 1 -->
+      <rect x="10" y="82" width="48" height="17" rx="3" fill="rgba(99,102,241,0.08)" stroke="rgba(99,102,241,0.20)" stroke-width="1"/>
+      <text x="34" y="94" font-size="7.5" font-weight="700" fill="#6366f1" letter-spacing="0.4" text-anchor="middle">HOSTING</text>
+      <rect x="74" y="82" width="44" height="17" rx="3" fill="#f4f3f6" stroke="#e2e8f0" stroke-width="0.5"/>
+      <text x="96" y="94" font-size="8.5" fill="#334155" text-anchor="middle" font-family="monospace">6820</text>
+      <text x="170" y="94" font-size="10" fill="#334155">Web hosting on legacy server</text>
+      <text x="388" y="94" font-size="10" font-weight="700" fill="#1e293b" text-anchor="end">42 €</text>
+      <text x="452" y="94" font-size="10" font-weight="700" fill="#1e293b" text-anchor="end">210 €</text>
+      <text x="464" y="94" font-size="10" font-weight="700" fill="#dc2626">01/05/2026</text>
+      <rect x="558" y="82" width="48" height="17" rx="3" fill="#d1fae5" stroke="#a7f3d0" stroke-width="1"/>
+      <text x="582" y="94" font-size="7.5" font-weight="700" fill="#047857" text-anchor="middle">ACTIVE</text>
+      <line x1="0" y1="113" x2="620" y2="113" stroke="#e8e3ea" stroke-width="0.5"/>
+
+      <!-- Row 2 -->
+      <rect x="10" y="120" width="48" height="17" rx="3" fill="rgba(99,102,241,0.08)" stroke="rgba(99,102,241,0.20)" stroke-width="1"/>
+      <text x="34" y="132" font-size="7.5" font-weight="700" fill="#6366f1" letter-spacing="0.4" text-anchor="middle">HOSTING</text>
+      <rect x="74" y="120" width="60" height="17" rx="3" fill="#f4f3f6" stroke="#e2e8f0" stroke-width="0.5"/>
+      <text x="104" y="132" font-size="7.5" fill="#334155" text-anchor="middle" font-family="monospace">232323232</text>
+      <text x="170" y="132" font-size="10" fill="#334155">UNICHEM — web hosting</text>
+      <text x="388" y="132" font-size="10" font-weight="700" fill="#1e293b" text-anchor="end">150 €</text>
+      <text x="452" y="132" font-size="10" font-weight="700" fill="#1e293b" text-anchor="end">1,650 €</text>
+      <text x="464" y="132" font-size="10" fill="#64748b">No expiration</text>
+      <rect x="558" y="120" width="48" height="17" rx="3" fill="#d1fae5" stroke="#a7f3d0" stroke-width="1"/>
+      <text x="582" y="132" font-size="7.5" font-weight="700" fill="#047857" text-anchor="middle">ACTIVE</text>
+      <line x1="0" y1="151" x2="620" y2="151" stroke="#e8e3ea" stroke-width="0.5"/>
+
+      <!-- Total row -->
+      <rect y="151" width="620" height="39" fill="#fafaf9"/>
+      <text x="10" y="175" font-size="8.5" font-weight="700" fill="#94a3b8" letter-spacing="0.7">TOTAL VALUE / YEAR</text>
+      <text x="452" y="175" font-size="12" font-weight="800" fill="#0f172a" text-anchor="end">1,860 €</text>
+    </g>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- LAYER 3 — Client detail (front hero)                      -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <g transform="translate(180,200)" filter="url(#shadow-hero)">
+    <rect width="720" height="510" rx="10" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+    <g clip-path="url(#clip-detail)">
+
+      <!-- ── HEADER ── -->
+      <!-- Name row -->
+      <text x="22" y="42" font-size="22" font-weight="800" fill="#0f172a" letter-spacing="-0.5">Acme Studio</text>
+      <rect x="173" y="26" width="52" height="20" rx="999" fill="#d1fae5" stroke="#a7f3d0" stroke-width="1"/>
+      <text x="199" y="40" font-size="9" font-weight="700" fill="#047857" letter-spacing="0.5" text-anchor="middle">ACTIVE</text>
+      <!-- Email -->
+      <text x="22" y="60" font-size="10.5" fill="#94a3b8">&#9993; sam@acme-studio.com</text>
+      <!-- Tabs -->
+      <text x="22"  y="83" font-size="10.5" font-weight="600" fill="#0f172a">Overview</text>
+      <line x1="22" y1="92" x2="77" y2="92" stroke="#0f172a" stroke-width="2"/>
+      <text x="93"  y="83" font-size="10.5" font-weight="500" fill="#94a3b8">Projects (1)</text>
+      <text x="178" y="83" font-size="10.5" font-weight="500" fill="#94a3b8">Domains &amp; Hosting</text>
+      <text x="315" y="83" font-size="10.5" font-weight="500" fill="#94a3b8">Maintenances (1)</text>
+      <text x="430" y="83" font-size="10.5" font-weight="500" fill="#94a3b8">Other Income</text>
+      <text x="524" y="83" font-size="10.5" font-weight="500" fill="#94a3b8">Invoices</text>
+      <text x="580" y="83" font-size="10.5" font-weight="500" fill="#94a3b8">Pipeline</text>
+      <text x="637" y="83" font-size="10.5" font-weight="500" fill="#94a3b8">Tools</text>
+      <!-- Header border -->
+      <line x1="0" y1="100" x2="720" y2="100" stroke="#e8e3ea" stroke-width="1"/>
+
+      <!-- ── KPI CARDS ── (y=116, height=82) -->
+      <!-- Card 1: Active Projects -->
+      <rect x="16"  y="116" width="161" height="82" rx="8" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+      <text x="28"  y="133" font-size="8"  font-weight="700" fill="#94a3b8" letter-spacing="0.7">ACTIVE PROJECTS</text>
+      <rect x="143" y="122" width="22"  height="22" rx="6" fill="rgba(168,85,247,0.12)"/>
+      <text x="154" y="137" font-size="12" text-anchor="middle">&#128640;</text>
+      <text x="28"  y="164" font-size="19" font-weight="800" fill="#0f172a">1</text>
+      <text x="28"  y="178" font-size="8"  font-weight="600" fill="#94a3b8" letter-spacing="0.5">IN DELIVERY</text>
+
+      <!-- Card 2: Total Value -->
+      <rect x="187" y="116" width="161" height="82" rx="8" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+      <text x="199" y="133" font-size="8"  font-weight="700" fill="#94a3b8" letter-spacing="0.7">TOTAL VALUE</text>
+      <rect x="314" y="122" width="22"  height="22" rx="6" fill="rgba(16,185,129,0.12)"/>
+      <text x="325" y="138" font-size="14" text-anchor="middle" fill="#10b981">&#9607;</text>
+      <text x="199" y="162" font-size="17" font-weight="800" fill="#0f172a">&#8364; 15,700</text>
+      <text x="199" y="178" font-size="8"  font-weight="600" fill="#94a3b8" letter-spacing="0.5">LIFETIME</text>
+
+      <!-- Card 3: Invoiced YTD (green) -->
+      <rect x="358" y="116" width="161" height="82" rx="8" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+      <text x="370" y="133" font-size="8"  font-weight="700" fill="#94a3b8" letter-spacing="0.7">INVOICED YTD</text>
+      <rect x="485" y="122" width="22"  height="22" rx="6" fill="rgba(99,102,241,0.12)"/>
+      <text x="496" y="138" font-size="14" text-anchor="middle" fill="#6366f1">&#9618;</text>
+      <text x="370" y="162" font-size="17" font-weight="800" fill="#047857">&#8364; 6,950</text>
+      <text x="370" y="178" font-size="8"  font-weight="600" fill="#94a3b8" letter-spacing="0.5">COLLECTED</text>
+
+      <!-- Card 4: Pipeline -->
+      <rect x="529" y="116" width="175" height="82" rx="8" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+      <text x="541" y="133" font-size="8"  font-weight="700" fill="#94a3b8" letter-spacing="0.7">PIPELINE</text>
+      <rect x="680" y="122" width="22"  height="22" rx="6" fill="rgba(245,158,11,0.15)"/>
+      <polygon points="691,126 700,142 682,142" fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-linejoin="round"/>
+      <text x="541" y="164" font-size="19" font-weight="800" fill="#0f172a">&#8212;</text>
+      <text x="541" y="178" font-size="8"  font-weight="600" fill="#94a3b8" letter-spacing="0.5">PENDING</text>
+
+      <!-- ── STRATEGIC INTELLIGENCE ── (y=212, height=132) -->
+      <rect x="16" y="212" width="688" height="132" rx="8" fill="url(#si-grad)" stroke="rgba(99,102,241,0.18)" stroke-width="1"/>
+      <!-- Header row -->
+      <text x="30" y="232" font-size="13" fill="#6366f1">&#10022;</text>
+      <text x="46" y="232" font-size="12" font-weight="800" fill="#0f172a">Strategic Intelligence</text>
+      <!-- AI Engine Online badge -->
+      <rect x="200" y="220" width="112" height="16" rx="999" fill="rgba(99,102,241,0.10)"/>
+      <circle cx="211" cy="228" r="3.5" fill="#6366f1"/>
+      <text x="218" y="232" font-size="8" font-weight="700" fill="#6366f1" letter-spacing="0.3">AI ENGINE ONLINE</text>
+      <!-- Inner white card -->
+      <rect x="28" y="242" width="664" height="90" rx="6" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+      <text x="40" y="259" font-size="8" font-weight="700" fill="#94a3b8" letter-spacing="0.8">&#10022; AI ACCOUNT SUMMARY</text>
+      <!-- Summary text line 1 -->
+      <text x="40" y="278" font-size="10.5" fill="#475569">Acme is in good standing &#8212; </text>
+      <text x="201" y="278" font-size="10.5" font-weight="700" fill="#0f172a">YTD revenue &#8364; 6,950</text>
+      <text x="340" y="278" font-size="10.5" fill="#475569"> against </text>
+      <text x="386" y="278" font-size="10.5" font-weight="700" fill="#0f172a">&#8364; 15,700 lifetime</text>
+      <text x="498" y="278" font-size="10.5" fill="#475569">. Mytour project on track for</text>
+      <!-- Summary text line 2 -->
+      <text x="40" y="297" font-size="10.5" fill="#475569">May handover. Hosting renews May 2026 &#8212; flag for proactive outreach in March.</text>
+      <!-- Regenerate link -->
+      <text x="40" y="320" font-size="10" fill="#94a3b8">&#8617; Regenerate</text>
+
+      <!-- ── GROWTH METRICS ── (y=358, height=136) -->
+      <rect x="16" y="358" width="688" height="136" rx="8" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+      <!-- Title -->
+      <text x="28" y="379" font-size="11.5" font-weight="700" fill="#0f172a">&#8599; Growth Metrics</text>
+      <!-- Row 1: Revenue YoY -->
+      <text x="28"  y="401" font-size="11" fill="#94a3b8">Revenue YoY</text>
+      <text x="692" y="401" font-size="11" font-weight="600" fill="#047857" text-anchor="end">+5% vs 2025</text>
+      <!-- Row 2: Invoice consistency -->
+      <text x="28"  y="421" font-size="11" fill="#94a3b8">Invoice consistency</text>
+      <text x="692" y="421" font-size="11" font-weight="600" fill="#d97706" text-anchor="end">75% of months billed</text>
+      <!-- Row 3: Active services -->
+      <text x="28"  y="441" font-size="11" fill="#94a3b8">Active services</text>
+      <text x="692" y="441" font-size="11" font-weight="600" fill="#1e293b" text-anchor="end">1 project &#183; 1 maintenance &#183; 1 hosting</text>
+      <!-- Row 4: Domains -->
+      <text x="28"  y="461" font-size="11" fill="#94a3b8">Domains</text>
+      <text x="692" y="461" font-size="11" font-weight="600" fill="#1e293b" text-anchor="end">1</text>
+      <!-- dividers -->
+      <line x1="28" y1="410" x2="692" y2="410" stroke="#f0eef2" stroke-width="0.5"/>
+      <line x1="28" y1="430" x2="692" y2="430" stroke="#f0eef2" stroke-width="0.5"/>
+      <line x1="28" y1="450" x2="692" y2="450" stroke="#f0eef2" stroke-width="0.5"/>
+
+    </g>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- RIGHT COLUMN — Copy                                        -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+
+  <!-- Label -->
+  <line x1="855" y1="238" x2="873" y2="238" stroke="#6366f1" stroke-width="1.5"/>
+  <text x="881" y="243" font-size="10" font-weight="700" fill="#94a3b8" letter-spacing="1.2">CLIENT INTELLIGENCE</text>
+
+  <!-- H2 -->
+  <text x="855" y="302" font-size="50" font-weight="800" fill="#0f172a" letter-spacing="-1.5">One client.</text>
+  <text x="855" y="360" font-size="50" font-weight="800" fill="#0f172a" letter-spacing="-1.5">The full picture.</text>
+
+  <!-- Paragraph -->
+  <text x="855" y="400" font-size="15.5" fill="#475569">Your client isn&#8217;t a row in a spreadsheet.</text>
+  <text x="855" y="423" font-size="15.5" fill="#475569">Open their page and see every active project,</text>
+  <text x="855" y="446" font-size="15.5" fill="#475569">every invoice, every domain &#8212; each section</text>
+  <text x="855" y="469" font-size="15.5" fill="#475569">has its own tab, no switching between tools.</text>
+
+  <!-- Bullet 1 -->
+  <circle cx="864" cy="505" r="9" fill="#0f172a"/>
+  <text x="864" y="509" font-size="9.5" font-weight="800" fill="white" text-anchor="middle">&#10003;</text>
+  <text x="883" y="510" font-size="13.5" fill="#475569">Projects with total value, amount invoiced, and current status</text>
+
+  <!-- Bullet 2 -->
+  <circle cx="864" cy="539" r="9" fill="#0f172a"/>
+  <text x="864" y="543" font-size="9.5" font-weight="800" fill="white" text-anchor="middle">&#10003;</text>
+  <text x="883" y="544" font-size="13.5" fill="#475569">Full invoice history across projects and maintenance contracts</text>
+
+  <!-- Bullet 3 -->
+  <circle cx="864" cy="573" r="9" fill="#0f172a"/>
+  <text x="864" y="577" font-size="9.5" font-weight="800" fill="white" text-anchor="middle">&#10003;</text>
+  <text x="883" y="578" font-size="13.5" fill="#475569">Hosting costs, domain expiry dates, and contract end dates</text>
+
+  <!-- Bullet 4 -->
+  <circle cx="864" cy="607" r="9" fill="#0f172a"/>
+  <text x="864" y="611" font-size="9.5" font-weight="800" fill="white" text-anchor="middle">&#10003;</text>
+  <text x="883" y="612" font-size="13.5" fill="#475569">Pipeline and open proposals linked to the same client</text>
+
+</svg>

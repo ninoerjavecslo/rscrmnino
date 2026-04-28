@@ -118,3 +118,46 @@ TypeScript strict mode — TS6133 (unused variables) breaks the build. Never dec
 
 ## Owner
 Nino — admin, PM role defaults to "Nino" in project forms.
+
+## gstack (REQUIRED — global install)
+
+**Before doing ANY work, verify gstack is installed:**
+
+```bash
+test -d ~/.claude/skills/gstack/bin && echo "GSTACK_OK" || echo "GSTACK_MISSING"
+```
+
+If GSTACK_MISSING: STOP. Do not proceed. Tell the user:
+
+> gstack is required for all AI-assisted work in this repo.
+> Install it:
+> ```bash
+> git clone --depth 1 https://github.com/garrytan/gstack.git ~/.claude/skills/gstack
+> cd ~/.claude/skills/gstack && ./setup --team
+> ```
+> Then restart your AI coding tool.
+
+Do not skip skills, ignore gstack errors, or work around missing gstack.
+
+**Using gstack skills.** After install, the following slash commands are available:
+
+- `/office-hours` — CEO-style check-in
+- `/plan-ceo-review`, `/plan-eng-review`, `/plan-design-review`, `/plan-devex-review` — plan reviews from different roles
+- `/design-consultation`, `/design-shotgun`, `/design-html`, `/design-review` — design tooling
+- `/review` — code review
+- `/ship`, `/land-and-deploy`, `/canary` — release flow
+- `/benchmark` — performance benchmarking
+- `/browse`, `/connect-chrome`, `/setup-browser-cookies` — browsing (ALWAYS use `/browse` for web browsing — never `mcp__claude-in-chrome__*` tools)
+- `/qa`, `/qa-only` — QA flows
+- `/setup-deploy` — deploy setup
+- `/retro` — retrospective
+- `/investigate` — systematic investigation
+- `/document-release` — release notes
+- `/codex`, `/cso` — codex / CSO workflows
+- `/autoplan` — automatic planning
+- `/devex-review` — developer experience review
+- `/careful`, `/freeze`, `/guard`, `/unfreeze` — safety gates
+- `/gstack-upgrade` — update gstack
+- `/learn` — capture learnings
+
+Use `~/.claude/skills/gstack/...` for gstack file paths (the global path).

@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { useSettingsStore } from '../../stores/settings'
 import { useCurrentUser } from '../../lib/useCurrentUser'
 import { usePagePermission } from '../../lib/usePagePermission'
+import { useOrg } from '../../lib/useOrg'
 
 function IconHome()      { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> }
 function IconInvoice()   { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg> }
@@ -30,6 +31,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
   const navigate = useNavigate()
   const { agencyName, agencyLogo, fetch: fetchSettings } = useSettingsStore()
   const user = useCurrentUser()
+  const org = useOrg()
   useEffect(() => { fetchSettings() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const p = {
@@ -51,7 +53,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
     reports:         usePagePermission('reports'),
     resourceYearly:  usePagePermission('resource-yearly'),
     tools:           usePagePermission('tools'),
-    offers:          usePagePermission('offers'),
+    // offers:          usePagePermission('offers'), // disabled for Insighty SaaS rebrand
     automations:     usePagePermission('automations'),
     pixel:           usePagePermission('pixel'),
   }
@@ -69,7 +71,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
               <IconLayers />
             </div>
             <div>
-              <div style={{ fontSize: 14, fontWeight: 800, fontFamily: 'Manrope, sans-serif', color: 'var(--c0)', lineHeight: 1.2 }}>{agencyName || 'Agency OS'}</div>
+              <div style={{ fontSize: 14, fontWeight: 800, fontFamily: 'Manrope, sans-serif', color: 'var(--c0)', lineHeight: 1.2 }}>{agencyName || org?.name || 'Agency OS'}</div>
               <div style={{ fontSize: 9, fontWeight: 600, fontFamily: 'Manrope, sans-serif', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', lineHeight: 1.2 }}>Intelligence Platform</div>
             </div>
           </div>
@@ -134,13 +136,14 @@ export function Sidebar({ open, onClose }: SidebarProps) {
 
         <div className="sidebar-divider" />
 
-        {p.offers.canView && <div className="sidebar-group-label">Offers</div>}
+        {/* Offers section — disabled for Insighty SaaS rebrand */}
+        {/* {p.offers.canView && <div className="sidebar-group-label">Offers</div>}
         {p.offers.canView && <NavLink to="/offers" end className={nav}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
           Offers
         </NavLink>}
         {p.offers.canView && <NavLink to="/offers/new" className={nav}><IconSparkle /> AI Generator</NavLink>}
-        {p.offers.canView && <NavLink to="/offers/templates" className={nav}><IconLayers /> Template Library</NavLink>}
+        {p.offers.canView && <NavLink to="/offers/templates" className={nav}><IconLayers /> Template Library</NavLink>} */}
 
         <div className="sidebar-divider" />
 
@@ -148,6 +151,13 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         {p.automations.canView && <NavLink to="/automations" className={nav}><IconZap /> Automations</NavLink>}
 
         <div className="sidebar-divider" />
+
+        {user?.email === 'nino.erjavec@renderspace.si' && (
+          <NavLink to="/admin" className={nav}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/><path d="M18 14l2 2 4-4"/></svg>
+            Admin
+          </NavLink>
+        )}
 
         <NavLink to="/settings" className={nav}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>

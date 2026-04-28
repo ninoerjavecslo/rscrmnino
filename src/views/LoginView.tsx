@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
+import { useOrg } from '../lib/useOrg'
 
 interface AgencyBranding {
   name: string
@@ -17,6 +18,7 @@ const USPS = [
 ]
 
 export function LoginView({ onLogin }: { onLogin: () => void }) {
+  const org = useOrg()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPw, setShowPw] = useState(false)
@@ -41,13 +43,27 @@ export function LoginView({ onLogin }: { onLogin: () => void }) {
     if (!password) { setError('Please enter your password.'); return }
     setLoading(true)
     setError('')
-    const { error: err } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
+    const { data: signInData, error: err } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
     if (err) {
       setError('Invalid email or password. Please try again.')
       setLoading(false)
-    } else {
-      onLogin()
+      return
     }
+    if (org && signInData.user) {
+      const { data: member } = await supabase
+        .from('organization_members')
+        .select('id')
+        .eq('user_id', signInData.user.id)
+        .eq('organization_id', org.orgId)
+        .maybeSingle()
+      if (!member) {
+        await supabase.auth.signOut()
+        setError("Your account doesn't have access to this workspace.")
+        setLoading(false)
+        return
+      }
+    }
+    onLogin()
   }
 
   return (

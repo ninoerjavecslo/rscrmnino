@@ -1,0 +1,344 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1300" height="700" viewBox="0 0 1300 700" font-family="Manrope, Inter, system-ui, sans-serif">
+
+  <!-- Background -->
+  <rect width="1300" height="700" fill="#ffffff"/>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- HEADER  y=0–70 -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <text x="24" y="40" font-size="28" font-weight="800" fill="#0f172a">Sales Pipeline</text>
+  <text x="24" y="58" font-size="13" fill="#64748b">Track pitches and proposals for revenue forecasting</text>
+
+  <!-- ADD DEAL button -->
+  <rect x="1180" y="18" width="108" height="36" rx="6" fill="#0f172a"/>
+  <text x="1234" y="41" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle" letter-spacing="0.5">+ ADD DEAL</text>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- KPI CARDS  y=78–168 -->
+  <!-- Card width = 309, gaps = 10, start x=16 -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <!-- Card 1: ACTIVE DEALS  x=16 -->
+  <rect x="16" y="78" width="309" height="90" rx="8" fill="#ffffff" stroke="#e8e3ea" stroke-width="1"/>
+  <text x="28" y="98" font-size="10" font-weight="700" fill="#94a3b8" letter-spacing="0.7">ACTIVE DEALS</text>
+  <text x="28" y="135" font-size="28" font-weight="800" fill="#0f172a">7</text>
+  <text x="28" y="155" font-size="11" fill="#64748b">310,250 € face value</text>
+
+  <!-- Card 2: LIKELY SCENARIO  x=335 -->
+  <rect x="335" y="78" width="309" height="90" rx="8" fill="#ffffff" stroke="#e8e3ea" stroke-width="1"/>
+  <text x="347" y="98" font-size="10" font-weight="700" fill="#94a3b8" letter-spacing="0.7">LIKELY SCENARIO</text>
+  <text x="347" y="133" font-size="22" font-weight="800" fill="#0f172a">310,250 €</text>
+  <text x="347" y="155" font-size="11" fill="#64748b">7 deals at ≥50% probability</text>
+
+  <!-- Card 3: HOPEFULLY SCENARIO  x=654 -->
+  <rect x="654" y="78" width="309" height="90" rx="8" fill="#ffffff" stroke="#e8e3ea" stroke-width="1"/>
+  <text x="666" y="98" font-size="10" font-weight="700" fill="#94a3b8" letter-spacing="0.7">HOPEFULLY SCENARIO</text>
+  <text x="666" y="133" font-size="22" font-weight="800" fill="#6366f1">310,250 €</text>
+  <text x="666" y="155" font-size="11" fill="#64748b">7 deals at ≥25% probability</text>
+
+  <!-- Card 4: WON  x=973 -->
+  <rect x="973" y="78" width="309" height="90" rx="8" fill="#ffffff" stroke="#e8e3ea" stroke-width="1"/>
+  <text x="985" y="98" font-size="10" font-weight="700" fill="#94a3b8" letter-spacing="0.7">WON</text>
+  <text x="985" y="133" font-size="22" font-weight="800" fill="#16a34a">10,310 €</text>
+  <text x="985" y="155" font-size="11" fill="#64748b">7 deals closed</text>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- FILTER TABS  y=178–208 -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <!-- Active (filled) -->
+  <rect x="16" y="180" width="60" height="30" rx="6" fill="#0f172a"/>
+  <text x="46" y="199" font-size="12" font-weight="600" fill="#ffffff" text-anchor="middle">Active</text>
+
+  <!-- All -->
+  <rect x="84" y="180" width="36" height="30" rx="6" fill="#ffffff" stroke="#e8e3ea" stroke-width="1"/>
+  <text x="102" y="199" font-size="12" fill="#0f172a" text-anchor="middle">All</text>
+
+  <!-- Won -->
+  <rect x="128" y="180" width="38" height="30" rx="6" fill="#ffffff" stroke="#e8e3ea" stroke-width="1"/>
+  <text x="147" y="199" font-size="12" fill="#0f172a" text-anchor="middle">Won</text>
+
+  <!-- Lost -->
+  <rect x="174" y="180" width="38" height="30" rx="6" fill="#ffffff" stroke="#e8e3ea" stroke-width="1"/>
+  <text x="193" y="199" font-size="12" fill="#0f172a" text-anchor="middle">Lost</text>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- TABLE HEADER  y=220–248 -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <text x="16"   y="240" font-size="10" font-weight="700" fill="#94a3b8" letter-spacing="0.7">STATUS</text>
+  <text x="110"  y="240" font-size="10" font-weight="700" fill="#94a3b8" letter-spacing="0.7">COMPANY</text>
+  <text x="270"  y="240" font-size="10" font-weight="700" fill="#94a3b8" letter-spacing="0.7">TITLE</text>
+  <text x="520"  y="240" font-size="10" font-weight="700" fill="#94a3b8" letter-spacing="0.7">TYPE</text>
+  <text x="700"  y="240" font-size="10" font-weight="700" fill="#94a3b8" letter-spacing="0.7" text-anchor="end">AMOUNT</text>
+  <text x="720"  y="240" font-size="10" font-weight="700" fill="#94a3b8" letter-spacing="0.7">PROB</text>
+  <text x="790"  y="240" font-size="10" font-weight="700" fill="#94a3b8" letter-spacing="0.7">SCENARIO</text>
+  <text x="880"  y="240" font-size="10" font-weight="700" fill="#94a3b8" letter-spacing="0.7">PERIOD</text>
+
+  <!-- Header separator -->
+  <line x1="0" y1="248" x2="1300" y2="248" stroke="#f4f2f6" stroke-width="1"/>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ROW 1  y=248  (Narodni muzej Slovenije) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <!-- Status badge: Proposal (amber) -->
+  <rect x="16" y="261" width="52" height="18" rx="4" fill="#fef9c3" stroke="#fde047" stroke-width="1"/>
+  <text x="42" y="273" font-size="9" font-weight="700" fill="#854d0e" text-anchor="middle">Proposal</text>
+
+  <!-- Company -->
+  <text x="110" y="270" font-size="12" font-weight="700" fill="#0f172a">Initech Corp</text>
+  <text x="110" y="284" font-size="10" fill="#94a3b8">Enterprise Solutions</text>
+
+  <!-- Title -->
+  <text x="270" y="268" font-size="12" fill="#0f172a">Website Overhaul &amp;</text>
+  <text x="270" y="282" font-size="12" fill="#0f172a">Rebranding</text>
+
+  <!-- Type badge: ONE-TIME -->
+  <rect x="520" y="261" width="56" height="18" rx="4" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="548" y="273" font-size="9" font-weight="700" fill="#475569" text-anchor="middle">ONE-TIME</text>
+
+  <!-- Amount -->
+  <text x="700" y="272" font-size="12" font-weight="700" fill="#0f172a" text-anchor="end">40,000 €</text>
+
+  <!-- Probability -->
+  <text x="720" y="272" font-size="12" font-weight="600" fill="#64748b">50%</text>
+
+  <!-- Scenario badge: LIKELY -->
+  <rect x="790" y="261" width="46" height="18" rx="4" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="813" y="273" font-size="9" font-weight="700" fill="#475569" text-anchor="middle">LIKELY</text>
+
+  <!-- Period -->
+  <text x="880" y="268" font-size="11" fill="#64748b">Dec</text>
+  <text x="880" y="282" font-size="11" fill="#64748b">2026</text>
+
+  <!-- Action buttons: WON | LOST | EDIT | × -->
+  <rect x="960" y="260" width="58" height="22" rx="4" fill="#dcfce7" stroke="#86efac" stroke-width="1"/>
+  <text x="989" y="275" font-size="10" font-weight="700" fill="#15803d" text-anchor="middle">WON ✓</text>
+
+  <rect x="1024" y="260" width="58" height="22" rx="4" fill="#fee2e2" stroke="#fca5a5" stroke-width="1"/>
+  <text x="1053" y="275" font-size="10" font-weight="700" fill="#dc2626" text-anchor="middle">LOST ✗</text>
+
+  <rect x="1088" y="260" width="40" height="22" rx="4" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="1108" y="275" font-size="10" fill="#475569" text-anchor="middle">EDIT</text>
+
+  <rect x="1134" y="260" width="26" height="22" rx="4" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="1147" y="275" font-size="11" fill="#94a3b8" text-anchor="middle">×</text>
+
+  <!-- Row 1 separator -->
+  <line x1="0" y1="308" x2="1300" y2="308" stroke="#f4f2f6" stroke-width="1"/>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ROW 2  y=308  (KZS) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <rect x="16" y="321" width="52" height="18" rx="4" fill="#fef9c3" stroke="#fde047" stroke-width="1"/>
+  <text x="42" y="333" font-size="9" font-weight="700" fill="#854d0e" text-anchor="middle">Proposal</text>
+
+  <text x="110" y="330" font-size="12" font-weight="700" fill="#0f172a">Globex Industries</text>
+  <text x="110" y="344" font-size="10" fill="#94a3b8">Tech &amp; Commerce</text>
+
+  <text x="270" y="325" font-size="12" fill="#0f172a">E-commerce Platform</text>
+  <text x="270" y="339" font-size="12" fill="#0f172a">Redesign</text>
+
+  <rect x="520" y="321" width="56" height="18" rx="4" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="548" y="333" font-size="9" font-weight="700" fill="#475569" text-anchor="middle">ONE-TIME</text>
+
+  <text x="700" y="332" font-size="12" font-weight="700" fill="#0f172a" text-anchor="end">40,000 €</text>
+  <text x="720" y="332" font-size="12" font-weight="600" fill="#64748b">50%</text>
+
+  <rect x="790" y="321" width="46" height="18" rx="4" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="813" y="333" font-size="9" font-weight="700" fill="#475569" text-anchor="middle">LIKELY</text>
+
+  <text x="880" y="328" font-size="11" fill="#64748b">Jul</text>
+  <text x="880" y="342" font-size="11" fill="#64748b">2026</text>
+
+  <rect x="960" y="320" width="58" height="22" rx="4" fill="#dcfce7" stroke="#86efac" stroke-width="1"/>
+  <text x="989" y="335" font-size="10" font-weight="700" fill="#15803d" text-anchor="middle">WON ✓</text>
+  <rect x="1024" y="320" width="58" height="22" rx="4" fill="#fee2e2" stroke="#fca5a5" stroke-width="1"/>
+  <text x="1053" y="335" font-size="10" font-weight="700" fill="#dc2626" text-anchor="middle">LOST ✗</text>
+  <rect x="1088" y="320" width="40" height="22" rx="4" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="1108" y="335" font-size="10" fill="#475569" text-anchor="middle">EDIT</text>
+  <rect x="1134" y="320" width="26" height="22" rx="4" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="1147" y="335" font-size="11" fill="#94a3b8" text-anchor="middle">×</text>
+
+  <line x1="0" y1="368" x2="1300" y2="368" stroke="#f4f2f6" stroke-width="1"/>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ROW 3  y=368  (POŠTA) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <rect x="16" y="381" width="52" height="18" rx="4" fill="#fef9c3" stroke="#fde047" stroke-width="1"/>
+  <text x="42" y="393" font-size="9" font-weight="700" fill="#854d0e" text-anchor="middle">Proposal</text>
+
+  <text x="110" y="390" font-size="12" font-weight="700" fill="#0f172a">Acme Holdings</text>
+  <text x="110" y="404" font-size="10" fill="#94a3b8">Media &amp; Branding</text>
+
+  <text x="270" y="385" font-size="12" fill="#0f172a">Brand &amp; Web</text>
+  <text x="270" y="399" font-size="12" fill="#0f172a">Redesign</text>
+
+  <rect x="520" y="381" width="56" height="18" rx="4" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="548" y="393" font-size="9" font-weight="700" fill="#475569" text-anchor="middle">ONE-TIME</text>
+
+  <text x="700" y="392" font-size="12" font-weight="700" fill="#0f172a" text-anchor="end">180,000 €</text>
+  <text x="720" y="392" font-size="12" font-weight="600" fill="#16a34a">75%</text>
+
+  <rect x="790" y="381" width="46" height="18" rx="4" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="813" y="393" font-size="9" font-weight="700" fill="#475569" text-anchor="middle">LIKELY</text>
+
+  <text x="880" y="388" font-size="11" fill="#64748b">Dec</text>
+  <text x="880" y="402" font-size="11" fill="#64748b">2026</text>
+
+  <rect x="960" y="380" width="58" height="22" rx="4" fill="#dcfce7" stroke="#86efac" stroke-width="1"/>
+  <text x="989" y="395" font-size="10" font-weight="700" fill="#15803d" text-anchor="middle">WON ✓</text>
+  <rect x="1024" y="380" width="58" height="22" rx="4" fill="#fee2e2" stroke="#fca5a5" stroke-width="1"/>
+  <text x="1053" y="395" font-size="10" font-weight="700" fill="#dc2626" text-anchor="middle">LOST ✗</text>
+  <rect x="1088" y="380" width="40" height="22" rx="4" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="1108" y="395" font-size="10" fill="#475569" text-anchor="middle">EDIT</text>
+  <rect x="1134" y="380" width="26" height="22" rx="4" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="1147" y="395" font-size="11" fill="#94a3b8" text-anchor="middle">×</text>
+
+  <line x1="0" y1="428" x2="1300" y2="428" stroke="#f4f2f6" stroke-width="1"/>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ROW 4  y=428  (Olimpijski komite — Certifikati) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <rect x="16" y="441" width="52" height="18" rx="4" fill="#fef9c3" stroke="#fde047" stroke-width="1"/>
+  <text x="42" y="453" font-size="9" font-weight="700" fill="#854d0e" text-anchor="middle">Proposal</text>
+
+  <text x="110" y="450" font-size="12" font-weight="700" fill="#0f172a">Northwind Group</text>
+  <text x="110" y="464" font-size="10" fill="#94a3b8">Compliance &amp; Legal</text>
+
+  <text x="270" y="452" font-size="12" fill="#0f172a">Digital Certification</text>
+
+  <!-- FIXED badge (blue) -->
+  <rect x="520" y="441" width="40" height="18" rx="4" fill="#dbeafe" stroke="#bfdbfe" stroke-width="1"/>
+  <text x="540" y="453" font-size="9" font-weight="700" fill="#1d4ed8" text-anchor="middle">FIXED</text>
+
+  <text x="700" y="452" font-size="12" font-weight="700" fill="#0f172a" text-anchor="end">20,700 €</text>
+  <text x="720" y="452" font-size="12" font-weight="600" fill="#16a34a">90%</text>
+
+  <rect x="790" y="441" width="46" height="18" rx="4" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="813" y="453" font-size="9" font-weight="700" fill="#475569" text-anchor="middle">LIKELY</text>
+
+  <text x="880" y="448" font-size="11" fill="#64748b">2</text>
+  <text x="880" y="462" font-size="11" fill="#64748b">payments</text>
+
+  <rect x="960" y="440" width="58" height="22" rx="4" fill="#dcfce7" stroke="#86efac" stroke-width="1"/>
+  <text x="989" y="455" font-size="10" font-weight="700" fill="#15803d" text-anchor="middle">WON ✓</text>
+  <rect x="1024" y="440" width="58" height="22" rx="4" fill="#fee2e2" stroke="#fca5a5" stroke-width="1"/>
+  <text x="1053" y="455" font-size="10" font-weight="700" fill="#dc2626" text-anchor="middle">LOST ✗</text>
+  <rect x="1088" y="440" width="40" height="22" rx="4" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="1108" y="455" font-size="10" fill="#475569" text-anchor="middle">EDIT</text>
+  <rect x="1134" y="440" width="26" height="22" rx="4" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="1147" y="455" font-size="11" fill="#94a3b8" text-anchor="middle">×</text>
+
+  <line x1="0" y1="488" x2="1300" y2="488" stroke="#f4f2f6" stroke-width="1"/>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ROW 5  y=488  (Olimpijski komite — Podari del dohodnine) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <rect x="16" y="501" width="52" height="18" rx="4" fill="#fef9c3" stroke="#fde047" stroke-width="1"/>
+  <text x="42" y="513" font-size="9" font-weight="700" fill="#854d0e" text-anchor="middle">Proposal</text>
+
+  <text x="110" y="510" font-size="12" font-weight="700" fill="#0f172a">Northwind Group</text>
+  <text x="110" y="524" font-size="10" fill="#94a3b8">Compliance &amp; Legal</text>
+
+  <text x="270" y="512" font-size="12" fill="#0f172a">Donation Campaign</text>
+
+  <rect x="520" y="501" width="56" height="18" rx="4" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="548" y="513" font-size="9" font-weight="700" fill="#475569" text-anchor="middle">ONE-TIME</text>
+
+  <text x="700" y="512" font-size="12" font-weight="700" fill="#0f172a" text-anchor="end">9,570 €</text>
+  <text x="720" y="512" font-size="12" font-weight="600" fill="#16a34a">90%</text>
+
+  <rect x="790" y="501" width="46" height="18" rx="4" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="813" y="513" font-size="9" font-weight="700" fill="#475569" text-anchor="middle">LIKELY</text>
+
+  <text x="880" y="508" font-size="11" fill="#64748b">Jun</text>
+  <text x="880" y="522" font-size="11" fill="#64748b">2026</text>
+
+  <rect x="960" y="500" width="58" height="22" rx="4" fill="#dcfce7" stroke="#86efac" stroke-width="1"/>
+  <text x="989" y="515" font-size="10" font-weight="700" fill="#15803d" text-anchor="middle">WON ✓</text>
+  <rect x="1024" y="500" width="58" height="22" rx="4" fill="#fee2e2" stroke="#fca5a5" stroke-width="1"/>
+  <text x="1053" y="515" font-size="10" font-weight="700" fill="#dc2626" text-anchor="middle">LOST ✗</text>
+  <rect x="1088" y="500" width="40" height="22" rx="4" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="1108" y="515" font-size="10" fill="#475569" text-anchor="middle">EDIT</text>
+  <rect x="1134" y="500" width="26" height="22" rx="4" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="1147" y="515" font-size="11" fill="#94a3b8" text-anchor="middle">×</text>
+
+  <line x1="0" y1="548" x2="1300" y2="548" stroke="#f4f2f6" stroke-width="1"/>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ROW 6  y=548  (UNICHEM) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <rect x="16" y="561" width="52" height="18" rx="4" fill="#fef9c3" stroke="#fde047" stroke-width="1"/>
+  <text x="42" y="573" font-size="9" font-weight="700" fill="#854d0e" text-anchor="middle">Proposal</text>
+
+  <text x="110" y="570" font-size="12" font-weight="700" fill="#0f172a">Umbrella Ltd</text>
+  <text x="110" y="584" font-size="10" fill="#94a3b8">Pharma &amp; Sciences</text>
+
+  <text x="270" y="572" font-size="12" fill="#0f172a">Additional Features</text>
+
+  <rect x="520" y="561" width="56" height="18" rx="4" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="548" y="573" font-size="9" font-weight="700" fill="#475569" text-anchor="middle">ONE-TIME</text>
+
+  <text x="700" y="572" font-size="12" font-weight="700" fill="#0f172a" text-anchor="end">3,780 €</text>
+  <text x="720" y="572" font-size="12" font-weight="600" fill="#64748b">50%</text>
+
+  <rect x="790" y="561" width="46" height="18" rx="4" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="813" y="573" font-size="9" font-weight="700" fill="#475569" text-anchor="middle">LIKELY</text>
+
+  <text x="880" y="568" font-size="11" fill="#64748b">Apr</text>
+  <text x="880" y="582" font-size="11" fill="#64748b">2026</text>
+
+  <rect x="960" y="560" width="58" height="22" rx="4" fill="#dcfce7" stroke="#86efac" stroke-width="1"/>
+  <text x="989" y="575" font-size="10" font-weight="700" fill="#15803d" text-anchor="middle">WON ✓</text>
+  <rect x="1024" y="560" width="58" height="22" rx="4" fill="#fee2e2" stroke="#fca5a5" stroke-width="1"/>
+  <text x="1053" y="575" font-size="10" font-weight="700" fill="#dc2626" text-anchor="middle">LOST ✗</text>
+  <rect x="1088" y="560" width="40" height="22" rx="4" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="1108" y="575" font-size="10" fill="#475569" text-anchor="middle">EDIT</text>
+  <rect x="1134" y="560" width="26" height="22" rx="4" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="1147" y="575" font-size="11" fill="#94a3b8" text-anchor="middle">×</text>
+
+  <line x1="0" y1="608" x2="1300" y2="608" stroke="#f4f2f6" stroke-width="1"/>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ROW 7  y=608  (MOPE) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <rect x="16" y="621" width="52" height="18" rx="4" fill="#fef9c3" stroke="#fde047" stroke-width="1"/>
+  <text x="42" y="633" font-size="9" font-weight="700" fill="#854d0e" text-anchor="middle">Proposal</text>
+
+  <text x="110" y="630" font-size="12" font-weight="700" fill="#0f172a">Massive Dynamics</text>
+  <text x="110" y="644" font-size="10" fill="#94a3b8">Infrastructure &amp; Cloud</text>
+
+  <text x="270" y="628" font-size="12" fill="#0f172a">Site Migration</text>
+  <text x="270" y="642" font-size="12" fill="#0f172a">&amp; Optimisation</text>
+
+  <rect x="520" y="621" width="56" height="18" rx="4" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="548" y="633" font-size="9" font-weight="700" fill="#475569" text-anchor="middle">ONE-TIME</text>
+
+  <text x="700" y="632" font-size="12" font-weight="700" fill="#0f172a" text-anchor="end">16,200 €</text>
+  <text x="720" y="632" font-size="12" font-weight="600" fill="#64748b">50%</text>
+
+  <rect x="790" y="621" width="46" height="18" rx="4" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="813" y="633" font-size="9" font-weight="700" fill="#475569" text-anchor="middle">LIKELY</text>
+
+  <text x="880" y="628" font-size="11" fill="#64748b">Oct</text>
+  <text x="880" y="642" font-size="11" fill="#64748b">2026</text>
+
+  <rect x="960" y="620" width="58" height="22" rx="4" fill="#dcfce7" stroke="#86efac" stroke-width="1"/>
+  <text x="989" y="635" font-size="10" font-weight="700" fill="#15803d" text-anchor="middle">WON ✓</text>
+  <rect x="1024" y="620" width="58" height="22" rx="4" fill="#fee2e2" stroke="#fca5a5" stroke-width="1"/>
+  <text x="1053" y="635" font-size="10" font-weight="700" fill="#dc2626" text-anchor="middle">LOST ✗</text>
+  <rect x="1088" y="620" width="40" height="22" rx="4" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="1108" y="635" font-size="10" fill="#475569" text-anchor="middle">EDIT</text>
+  <rect x="1134" y="620" width="26" height="22" rx="4" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="1147" y="635" font-size="11" fill="#94a3b8" text-anchor="middle">×</text>
+
+  <line x1="0" y1="668" x2="1300" y2="668" stroke="#f4f2f6" stroke-width="1"/>
+
+</svg>

@@ -10,6 +10,9 @@ import { Modal } from '../components/Modal'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { PageHeader } from '../components/PageHeader'
 import { Select } from '../components/Select'
+import * as XLSX from 'xlsx'
+import { buildLogoHtml, openHtmlAsPdf } from '../lib/pdfExport'
+import { useSettingsStore } from '../stores/settings'
 
 const CATEGORIES = [
   'Design', 'Development', 'Communication', 'Project Management',
@@ -53,6 +56,7 @@ export function AgencyToolsView() {
   const store = useAgencyToolsStore()
   const { clients, fetchAll: fetchClients } = useClientsStore()
   const { projects, fetchAll: fetchProjects } = useProjectsStore()
+  const settingsStore = useSettingsStore()
   const [showModal, setShowModal]       = useState(false)
   const [editTarget, setEditTarget]     = useState<AgencyTool | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<AgencyTool | null>(null)
@@ -182,9 +186,161 @@ export function AgencyToolsView() {
     return n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
   }
 
+  function exportRows() {
+    return store.tools.map(t => ({
+      tool:         t.name,
+      category:     t.category,
+      billing:      t.billing_cycle,
+      cost_mo:      t.billing_cycle === 'one-time' ? 0 : (t.billing_cycle === 'yearly' ? t.cost / 12 : t.cost),
+      cost_yr:      yearlyEquivalent(t),
+      billable:     t.billable ? 'Yes' : 'No',
+      client:       clients.find(c => c.id === t.client_id)?.name ?? '—',
+      project:      projects.find(p => p.id === t.project_id)?.name ?? '—',
+      paying_from:  fmtMonth(t.paying_from),
+      billing_from: fmtMonth(t.billing_from),
+      status:       t.status,
+      notes:        t.notes ?? '',
+    }))
+  }
+
+  function exportPDF() {
+    const { agencyLogo, agencyName } = settingsStore
+    const logoHtml = buildLogoHtml(agencyLogo, agencyName)
+    const today = new Date().toLocaleDateString('en-GB')
+    const activeTools = store.tools.filter(t => t.status === 'active')
+    const totalMo = activeTools.reduce((s, t) => s + monthlyEquivalent(t), 0)
+    const totalYr = activeTools.reduce((s, t) => s + yearlyEquivalent(t), 0)
+    const fmt = (n: number) => n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
+
+    const rows = exportRows().map(r => `
+      <tr>
+        <td class="tool-name">${r.tool}</td>
+        <td>${r.category}</td>
+        <td><span class="badge badge-${r.billing}">${r.billing}</span></td>
+        <td class="num">${r.cost_mo > 0 ? fmt(r.cost_mo) : '—'}</td>
+        <td class="num">${fmt(r.cost_yr)}</td>
+        <td><span class="badge badge-${r.billable === 'Yes' ? 'yes' : 'no'}">${r.billable}</span></td>
+        <td>${r.client}</td>
+        <td>${r.project}</td>
+        <td class="mono">${r.paying_from}</td>
+        <td class="mono">${r.billing_from}</td>
+        <td><span class="badge badge-${r.status}">${r.status}</span></td>
+        <td class="notes">${r.notes}</td>
+      </tr>`).join('')
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Figtree',sans-serif;background:#e8e8e5;color:#1a1a1a;font-size:10px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .page{width:297mm;min-height:210mm;margin:20px auto;padding:10mm 14mm;background:#fff;box-shadow:0 4px 40px rgba(0,0,0,.12)}
+  @media print{body{background:#fff}.page{margin:0;box-shadow:none;width:297mm;min-height:unset}}
+  @page{size:A4 landscape;margin:0}
+  .doc-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6mm;border-bottom:2px solid #E85C1A;padding-bottom:5mm}
+  .doc-title{font-size:13px;font-weight:700;color:#1a1a1a;margin-top:3px}
+  .meta{text-align:right;font-size:9px;color:#6b7280;line-height:1.7}
+  .summary{display:flex;gap:10px;margin-bottom:6mm}
+  .sstat{background:#fafaf9;border:1px solid #e0e0dd;border-radius:6px;padding:5px 10px;flex:1;text-align:center}
+  .sstat-val{font-size:14px;font-weight:800;color:#1a1a1a}
+  .sstat-val.red{color:#dc2626}
+  .sstat-lbl{font-size:7.5px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-top:1px}
+  table{width:100%;border-collapse:collapse;font-size:9px}
+  thead tr{background:#0f172a;color:#fff}
+  thead th{padding:5px 7px;text-align:left;font-weight:700;font-size:8px;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
+  thead th.num{text-align:right}
+  tbody tr:nth-child(even){background:#f8fafc}
+  tbody tr:hover{background:#f1f5f9}
+  td{padding:5px 7px;border-bottom:1px solid #f0f0ee;vertical-align:middle}
+  td.tool-name{font-weight:700;color:#1a1a1a}
+  td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+  td.mono{color:#6b7280;font-variant-numeric:tabular-nums}
+  td.notes{color:#6b7280;font-style:italic;max-width:120px}
+  .badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:7.5px;font-weight:700;text-transform:capitalize}
+  .badge-monthly{background:#dbeafe;color:#1d4ed8}
+  .badge-yearly{background:#fef3c7;color:#92400e}
+  .badge-one-time{background:#f3f4f6;color:#374151}
+  .badge-yes{background:#dcfce7;color:#16a34a}
+  .badge-no{background:#f3f4f6;color:#6b7280}
+  .badge-active{background:#dcfce7;color:#16a34a}
+  .badge-inactive{background:#f3f4f6;color:#6b7280}
+  .footer{margin-top:6mm;border-top:1px solid #e0e0dd;padding-top:3mm;display:flex;justify-content:space-between;font-size:8px;color:#94a3b8}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="doc-header">
+    <div>
+      ${logoHtml}
+      <div class="doc-title">Software &amp; Tools</div>
+    </div>
+    <div class="meta">
+      <div>Exported ${today}</div>
+      <div>${store.tools.length} tools total · ${activeTools.length} active</div>
+    </div>
+  </div>
+  <div class="summary">
+    <div class="sstat"><div class="sstat-val">${activeTools.length}</div><div class="sstat-lbl">Active Tools</div></div>
+    <div class="sstat"><div class="sstat-val red">${fmt(totalMo)}</div><div class="sstat-lbl">Monthly Cost</div></div>
+    <div class="sstat"><div class="sstat-val red">${fmt(totalYr)}</div><div class="sstat-lbl">Yearly Cost</div></div>
+    <div class="sstat"><div class="sstat-val">${store.tools.filter(t => t.billable).length}</div><div class="sstat-lbl">Billable</div></div>
+    <div class="sstat"><div class="sstat-val">${[...new Set(store.tools.map(t => t.category))].length}</div><div class="sstat-lbl">Categories</div></div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Tool</th><th>Category</th><th>Billing</th>
+        <th class="num">Cost /mo</th><th class="num">Cost /yr</th>
+        <th>Billable</th><th>Client</th><th>Project</th>
+        <th>Paying From</th><th>Billing From</th><th>Status</th><th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="footer">
+    <div>${agencyName || 'Renderspace'}</div>
+    <div>${today}</div>
+  </div>
+</div>
+<script>window.onload=function(){window.print()}</script>
+</body>
+</html>`
+
+    openHtmlAsPdf(html)
+  }
+
+  function exportExcel() {
+    const rows = exportRows()
+    const ws = XLSX.utils.json_to_sheet(rows.map(r => ({
+      'Tool':         r.tool,
+      'Category':     r.category,
+      'Billing':      r.billing,
+      'Cost /mo (€)': r.cost_mo,
+      'Cost /yr (€)': r.cost_yr,
+      'Billable':     r.billable,
+      'Client':       r.client,
+      'Project':      r.project,
+      'Paying From':  r.paying_from,
+      'Billing From': r.billing_from,
+      'Status':       r.status,
+      'Notes':        r.notes,
+    })))
+    // Column widths
+    ws['!cols'] = [22,16,10,14,14,10,20,20,12,12,10,30].map(w => ({ wch: w }))
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Tools')
+    XLSX.writeFile(wb, 'tools.xlsx')
+  }
+
   return (
     <div className="flex flex-col h-full">
       <PageHeader title="Software & Tools" subtitle="Agency subscriptions and SaaS costs">
+        <Button variant="outline" size="sm" onClick={exportExcel}>↓ Excel</Button>
+        <Button variant="outline" size="sm" onClick={exportPDF}>↓ PDF</Button>
         <Button onClick={openAdd}>+ Add Tool</Button>
       </PageHeader>
 

@@ -1,0 +1,172 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 700" width="1280" height="700" font-family="Manrope, Inter, system-ui, sans-serif">
+
+  <rect width="1280" height="700" fill="white"/>
+
+  <!-- ── HEADER ── -->
+  <text x="24" y="42" font-size="28" font-weight="800" fill="#0f172a" letter-spacing="-0.5">April 2026 &#8212; Invoices</text>
+  <text x="24" y="62" font-size="13" fill="#64748b">Confirm or defer planned invoices</text>
+
+  <!-- Nav controls -->
+  <rect x="760" y="18" width="32" height="32" rx="6" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+  <text x="776" y="38" font-size="14" fill="#0f172a" text-anchor="middle">&#8249;</text>
+  <text x="834" y="38" font-size="13" font-weight="600" fill="#0f172a" text-anchor="middle">April 2026</text>
+  <rect x="878" y="18" width="32" height="32" rx="6" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+  <text x="894" y="38" font-size="14" fill="#0f172a" text-anchor="middle">&#8250;</text>
+
+  <rect x="920" y="18" width="80" height="32" rx="6" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+  <text x="960" y="38" font-size="11" font-weight="700" fill="#0f172a" letter-spacing="0.3" text-anchor="middle">REFRESH</text>
+
+  <rect x="1010" y="18" width="96" height="32" rx="6" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+  <text x="1058" y="38" font-size="11" font-weight="700" fill="#0f172a" letter-spacing="0.3" text-anchor="middle">+ ADD COST</text>
+
+  <rect x="1116" y="18" width="120" height="32" rx="6" fill="#0f172a"/>
+  <text x="1176" y="38" font-size="11" font-weight="700" fill="white" letter-spacing="0.3" text-anchor="middle">+ ADD INVOICE</text>
+
+  <!-- ── KPI CARDS ── -->
+  <!-- Card 1: Planned This Month -->
+  <rect x="16" y="82" width="299" height="88" rx="8" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+  <text x="28" y="101" font-size="9" font-weight="700" fill="#94a3b8" letter-spacing="0.8">PLANNED THIS MONTH</text>
+  <text x="28" y="140" font-size="26" font-weight="800" fill="#0f172a">50,361 &#8364;</text>
+  <text x="28" y="158" font-size="11" fill="#64748b">30 invoices planned</text>
+
+  <!-- Card 2: Issued -->
+  <rect x="325" y="82" width="299" height="88" rx="8" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+  <text x="337" y="101" font-size="9" font-weight="700" fill="#94a3b8" letter-spacing="0.8">ISSUED</text>
+  <text x="337" y="140" font-size="26" font-weight="800" fill="#0f172a">650 &#8364;</text>
+  <text x="337" y="158" font-size="11" fill="#64748b">1 invoice</text>
+
+  <!-- Card 3: Not Yet Issued -->
+  <rect x="634" y="82" width="299" height="88" rx="8" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+  <text x="646" y="101" font-size="9" font-weight="700" fill="#94a3b8" letter-spacing="0.8">NOT YET ISSUED</text>
+  <text x="646" y="140" font-size="26" font-weight="800" fill="#d97706">47,491 &#8364;</text>
+  <text x="646" y="158" font-size="11" fill="#64748b">23 pending</text>
+
+  <!-- Card 4: Delta Plan vs Actual -->
+  <rect x="943" y="82" width="321" height="88" rx="8" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+  <text x="955" y="101" font-size="9" font-weight="700" fill="#94a3b8" letter-spacing="0.8">DELTA PLAN VS ACTUAL</text>
+  <text x="955" y="140" font-size="26" font-weight="800" fill="#dc2626">-49,711 &#8364;</text>
+  <text x="955" y="158" font-size="11" fill="#64748b">issued minus planned</text>
+
+  <!-- ── TABLE TITLE ── -->
+  <text x="16" y="202" font-size="16" font-weight="700" fill="#0f172a">Planned invoices &#8212; April 2026</text>
+
+  <!-- ── TABLE HEADER ── -->
+  <line x1="0" y1="214" x2="1280" y2="214" stroke="#f0eef2" stroke-width="1"/>
+  <text x="16"   y="230" font-size="9.5" font-weight="700" fill="#94a3b8" letter-spacing="0.6">PROJECT</text>
+  <text x="300"  y="230" font-size="9.5" font-weight="700" fill="#94a3b8" letter-spacing="0.6">DESCRIPTION</text>
+  <text x="530"  y="230" font-size="9.5" font-weight="700" fill="#94a3b8" letter-spacing="0.6" text-anchor="end">PLANNED</text>
+  <text x="648"  y="230" font-size="9.5" font-weight="700" fill="#94a3b8" letter-spacing="0.6" text-anchor="end">ACTUAL AMOUNT</text>
+  <text x="770"  y="230" font-size="9.5" font-weight="700" fill="#94a3b8" letter-spacing="0.6">STATUS</text>
+  <text x="900"  y="230" font-size="9.5" font-weight="700" fill="#94a3b8" letter-spacing="0.6">PROBABILITY</text>
+  <text x="1010" y="230" font-size="9.5" font-weight="700" fill="#94a3b8" letter-spacing="0.6">ACTIONS</text>
+  <line x1="0" y1="238" x2="1280" y2="238" stroke="#f0eef2" stroke-width="1"/>
+
+  <!-- ── ROW HELPER MACRO ── -->
+  <!-- Row 1: Acme Studio -->
+  <text x="16"  y="256" font-size="12" font-weight="700" fill="#0f172a">Acme Studio - Website Redesign</text>
+  <text x="16"  y="271" font-size="10" fill="#94a3b8">Acme Studio</text>
+  <text x="300" y="260" font-size="11.5" fill="#475569">Website Redesign</text>
+  <text x="530" y="260" font-size="12" font-weight="600" fill="#0f172a" text-anchor="end">3,000 &#8364;</text>
+  <text x="648" y="260" font-size="12" font-weight="600" fill="#dc2626" text-anchor="end">0 &#8364;</text>
+  <rect x="660" y="247" width="80" height="20" rx="3" fill="white" stroke="#f59e0b" stroke-width="1"/>
+  <text x="700" y="261" font-size="8.5" font-weight="700" fill="#b45309" letter-spacing="0.4" text-anchor="middle">NOT ISSUED</text>
+  <text x="900" y="260" font-size="11.5" fill="#94a3b8">&#8212;</text>
+  <rect x="1010" y="244" width="76" height="26" rx="5" fill="#0f172a"/>
+  <text x="1048" y="261" font-size="10" font-weight="700" fill="white" letter-spacing="0.3" text-anchor="middle">CONFIRM</text>
+  <rect x="1094" y="244" width="96" height="26" rx="5" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+  <text x="1142" y="261" font-size="10" font-weight="600" fill="#64748b" text-anchor="middle">NOT INVOICED</text>
+  <line x1="0" y1="288" x2="1280" y2="288" stroke="#f4f2f6" stroke-width="1"/>
+
+  <!-- Row 2: Northwind -->
+  <text x="16"  y="306" font-size="12" font-weight="700" fill="#0f172a">Northwind Co. - Monthly Retainer</text>
+  <text x="16"  y="321" font-size="10" fill="#94a3b8">Northwind Co.</text>
+  <text x="300" y="310" font-size="11.5" fill="#94a3b8">&#8212;</text>
+  <text x="530" y="310" font-size="12" font-weight="600" fill="#0f172a" text-anchor="end">2,400 &#8364;</text>
+  <text x="648" y="310" font-size="12" font-weight="600" fill="#dc2626" text-anchor="end">0 &#8364;</text>
+  <rect x="660" y="297" width="80" height="20" rx="3" fill="white" stroke="#f59e0b" stroke-width="1"/>
+  <text x="700" y="311" font-size="8.5" font-weight="700" fill="#b45309" letter-spacing="0.4" text-anchor="middle">NOT ISSUED</text>
+  <text x="900" y="310" font-size="11.5" fill="#94a3b8">&#8212;</text>
+  <rect x="1010" y="294" width="76" height="26" rx="5" fill="#0f172a"/>
+  <text x="1048" y="311" font-size="10" font-weight="700" fill="white" letter-spacing="0.3" text-anchor="middle">CONFIRM</text>
+  <rect x="1094" y="294" width="96" height="26" rx="5" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+  <text x="1142" y="311" font-size="10" font-weight="600" fill="#64748b" text-anchor="middle">NOT INVOICED</text>
+  <line x1="0" y1="338" x2="1280" y2="338" stroke="#f4f2f6" stroke-width="1"/>
+
+  <!-- Row 3: Globex -->
+  <text x="16"  y="355" font-size="12" font-weight="700" fill="#0f172a">Globex Corp - Domain Migration</text>
+  <text x="16"  y="370" font-size="10" fill="#94a3b8">Globex Corp</text>
+  <text x="300" y="359" font-size="10.5" fill="#475569">Domain Migration</text>
+  <text x="530" y="359" font-size="12" font-weight="600" fill="#0f172a" text-anchor="end">1,300 &#8364;</text>
+  <text x="648" y="359" font-size="12" font-weight="600" fill="#dc2626" text-anchor="end">0 &#8364;</text>
+  <rect x="660" y="346" width="80" height="20" rx="3" fill="white" stroke="#f59e0b" stroke-width="1"/>
+  <text x="700" y="360" font-size="8.5" font-weight="700" fill="#b45309" letter-spacing="0.4" text-anchor="middle">NOT ISSUED</text>
+  <text x="900" y="359" font-size="11.5" fill="#94a3b8">&#8212;</text>
+  <rect x="1010" y="344" width="76" height="26" rx="5" fill="#0f172a"/>
+  <text x="1048" y="361" font-size="10" font-weight="700" fill="white" letter-spacing="0.3" text-anchor="middle">CONFIRM</text>
+  <rect x="1094" y="344" width="96" height="26" rx="5" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+  <text x="1142" y="361" font-size="10" font-weight="600" fill="#64748b" text-anchor="middle">NOT INVOICED</text>
+  <line x1="0" y1="388" x2="1280" y2="388" stroke="#f4f2f6" stroke-width="1"/>
+
+  <!-- Row 4: Initech -->
+  <text x="16"  y="405" font-size="12" font-weight="700" fill="#0f172a">Initech - UX/UI Audit</text>
+  <text x="16"  y="420" font-size="10" fill="#94a3b8">Initech</text>
+  <text x="300" y="409" font-size="11.5" fill="#475569">Initech - UX/UI Audit</text>
+  <text x="530" y="409" font-size="12" font-weight="600" fill="#0f172a" text-anchor="end">10,920 &#8364;</text>
+  <text x="648" y="409" font-size="12" font-weight="600" fill="#dc2626" text-anchor="end">0 &#8364;</text>
+  <rect x="660" y="396" width="80" height="20" rx="3" fill="white" stroke="#f59e0b" stroke-width="1"/>
+  <text x="700" y="410" font-size="8.5" font-weight="700" fill="#b45309" letter-spacing="0.4" text-anchor="middle">NOT ISSUED</text>
+  <text x="900" y="409" font-size="11.5" fill="#94a3b8">&#8212;</text>
+  <rect x="1010" y="394" width="76" height="26" rx="5" fill="#0f172a"/>
+  <text x="1048" y="411" font-size="10" font-weight="700" fill="white" letter-spacing="0.3" text-anchor="middle">CONFIRM</text>
+  <rect x="1094" y="394" width="96" height="26" rx="5" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+  <text x="1142" y="411" font-size="10" font-weight="600" fill="#64748b" text-anchor="middle">NOT INVOICED</text>
+  <line x1="0" y1="438" x2="1280" y2="438" stroke="#f4f2f6" stroke-width="1"/>
+
+  <!-- Row 5: Umbrella -->
+  <text x="16"  y="455" font-size="12" font-weight="700" fill="#0f172a">Umbrella Ltd - Campaign 2026</text>
+  <text x="16"  y="470" font-size="10" fill="#94a3b8">Umbrella Ltd</text>
+  <text x="300" y="459" font-size="11.5" fill="#475569">Campaign 2026</text>
+  <text x="530" y="459" font-size="12" font-weight="600" fill="#0f172a" text-anchor="end">2,200 &#8364;</text>
+  <text x="648" y="459" font-size="12" font-weight="600" fill="#dc2626" text-anchor="end">0 &#8364;</text>
+  <rect x="660" y="446" width="80" height="20" rx="3" fill="white" stroke="#f59e0b" stroke-width="1"/>
+  <text x="700" y="460" font-size="8.5" font-weight="700" fill="#b45309" letter-spacing="0.4" text-anchor="middle">NOT ISSUED</text>
+  <text x="900" y="459" font-size="11.5" fill="#94a3b8">&#8212;</text>
+  <rect x="1010" y="444" width="76" height="26" rx="5" fill="#0f172a"/>
+  <text x="1048" y="461" font-size="10" font-weight="700" fill="white" letter-spacing="0.3" text-anchor="middle">CONFIRM</text>
+  <rect x="1094" y="444" width="96" height="26" rx="5" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+  <text x="1142" y="461" font-size="10" font-weight="600" fill="#64748b" text-anchor="middle">NOT INVOICED</text>
+  <line x1="0" y1="488" x2="1280" y2="488" stroke="#f4f2f6" stroke-width="1"/>
+
+  <!-- Row 6: Massive Dynamics -->
+  <text x="16"  y="505" font-size="12" font-weight="700" fill="#0f172a">Massive Dynamics - Tech Maintenance</text>
+  <text x="16"  y="520" font-size="10" fill="#94a3b8">Massive Dynamics</text>
+  <text x="300" y="509" font-size="11.5" fill="#94a3b8">&#8212;</text>
+  <text x="530" y="509" font-size="12" font-weight="600" fill="#0f172a" text-anchor="end">3,000 &#8364;</text>
+  <text x="648" y="509" font-size="12" font-weight="600" fill="#dc2626" text-anchor="end">0 &#8364;</text>
+  <rect x="660" y="496" width="80" height="20" rx="3" fill="white" stroke="#f59e0b" stroke-width="1"/>
+  <text x="700" y="510" font-size="8.5" font-weight="700" fill="#b45309" letter-spacing="0.4" text-anchor="middle">NOT ISSUED</text>
+  <text x="900" y="509" font-size="11.5" fill="#94a3b8">&#8212;</text>
+  <rect x="1010" y="494" width="76" height="26" rx="5" fill="#0f172a"/>
+  <text x="1048" y="511" font-size="10" font-weight="700" fill="white" letter-spacing="0.3" text-anchor="middle">CONFIRM</text>
+  <rect x="1094" y="494" width="96" height="26" rx="5" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+  <text x="1142" y="511" font-size="10" font-weight="600" fill="#64748b" text-anchor="middle">NOT INVOICED</text>
+  <line x1="0" y1="538" x2="1280" y2="538" stroke="#f4f2f6" stroke-width="1"/>
+
+  <!-- Row 7: Waystar -->
+  <text x="16"  y="555" font-size="12" font-weight="700" fill="#0f172a">Waystar Royco - Maintenance &amp; Dev</text>
+  <text x="16"  y="570" font-size="10" fill="#94a3b8">Waystar Royco</text>
+  <text x="300" y="559" font-size="11.5" fill="#94a3b8">&#8212;</text>
+  <text x="530" y="559" font-size="12" font-weight="600" fill="#0f172a" text-anchor="end">1,000 &#8364;</text>
+  <text x="648" y="559" font-size="12" font-weight="600" fill="#dc2626" text-anchor="end">0 &#8364;</text>
+  <rect x="660" y="546" width="80" height="20" rx="3" fill="white" stroke="#f59e0b" stroke-width="1"/>
+  <text x="700" y="560" font-size="8.5" font-weight="700" fill="#b45309" letter-spacing="0.4" text-anchor="middle">NOT ISSUED</text>
+  <!-- 25% · Unlikely badge -->
+  <rect x="860" y="546" width="96" height="20" rx="999" fill="#fee2e2" stroke="#fca5a5" stroke-width="1"/>
+  <text x="908" y="560" font-size="9" font-weight="700" fill="#dc2626" text-anchor="middle">25% &#183; Unlikely</text>
+  <rect x="1010" y="544" width="76" height="26" rx="5" fill="#0f172a"/>
+  <text x="1048" y="561" font-size="10" font-weight="700" fill="white" letter-spacing="0.3" text-anchor="middle">CONFIRM</text>
+  <rect x="1094" y="544" width="96" height="26" rx="5" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+  <text x="1142" y="561" font-size="10" font-weight="600" fill="#64748b" text-anchor="middle">NOT INVOICED</text>
+  <line x1="0" y1="588" x2="1280" y2="588" stroke="#f4f2f6" stroke-width="1"/>
+
+</svg>

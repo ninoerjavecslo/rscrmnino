@@ -11,3 +11,4 @@ RS OS/
 RS_SALES/
 AGENCY-OS-SPEC.md
 .DS_Store
+.gstack/

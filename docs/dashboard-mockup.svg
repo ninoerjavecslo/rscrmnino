@@ -1,0 +1,446 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" width="1440" height="900" font-family="Manrope, Inter, sans-serif">
+  <defs>
+    <clipPath id="sidebar-clip"><rect width="220" height="900"/></clipPath>
+    <clipPath id="content-clip"><rect x="220" width="1220" height="900"/></clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1440" height="900" fill="#f4f2f6"/>
+
+  <!-- ── SIDEBAR ─────────────────────────────────────────────────────────── -->
+  <rect width="220" height="900" fill="#ffffff" stroke="#e8e3ea" stroke-width="1"/>
+
+  <!-- Logo area -->
+  <rect x="0" y="0" width="220" height="64" fill="#ffffff"/>
+  <!-- Logo icon -->
+  <rect x="18" y="16" width="30" height="30" rx="6" fill="#0f172a"/>
+  <!-- Layers icon in logo -->
+  <polygon points="33,21 23,26 33,31 43,26" fill="none" stroke="white" stroke-width="1.5" stroke-linejoin="round"/>
+  <polyline points="23,31 33,36 43,31" fill="none" stroke="white" stroke-width="1.5" stroke-linejoin="round"/>
+  <polyline points="23,36 33,41 43,36" fill="none" stroke="white" stroke-width="1.5" stroke-linejoin="round"/>
+  <!-- Agency name -->
+  <text x="56" y="30" font-size="14" font-weight="800" fill="#0f172a">renderspace</text>
+  <text x="56" y="42" font-size="8" font-weight="600" fill="#64748b" letter-spacing="0.8">INTELLIGENCE PLATFORM</text>
+
+  <!-- Divider -->
+  <line x1="12" y1="68" x2="208" y2="68" stroke="#f0eef2" stroke-width="1"/>
+
+  <!-- Nav items -->
+  <!-- Dashboard (active) -->
+  <rect x="8" y="74" width="204" height="32" rx="6" fill="#f4f2f6"/>
+  <svg x="16" y="82" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0f172a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+    <polyline points="9 22 9 12 15 12 15 22"/>
+  </svg>
+  <text x="38" y="94" font-size="13" font-weight="600" fill="#0f172a">Dashboard</text>
+
+  <!-- Pixel AI -->
+  <svg x="16" y="114" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5z"/>
+    <path d="M19 3l.75 2.25L22 6l-2.25.75L19 9l-.75-2.25L16 6l2.25-.75z"/>
+  </svg>
+  <text x="38" y="126" font-size="13" font-weight="500" fill="#64748b">Pixel AI</text>
+
+  <line x1="12" y1="142" x2="208" y2="142" stroke="#f0eef2" stroke-width="1"/>
+  <text x="16" y="158" font-size="9.5" font-weight="700" fill="#94a3b8" letter-spacing="0.7">INVOICING</text>
+
+  <!-- This Month -->
+  <svg x="16" y="164" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+    <polyline points="14 2 14 8 20 8"/>
+    <line x1="16" y1="13" x2="8" y2="13"/>
+    <line x1="16" y1="17" x2="8" y2="17"/>
+  </svg>
+  <text x="38" y="176" font-size="13" font-weight="500" fill="#64748b">This Month</text>
+
+  <!-- Statistics -->
+  <svg x="16" y="190" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="18" y1="20" x2="18" y2="10"/>
+    <line x1="12" y1="20" x2="12" y2="4"/>
+    <line x1="6" y1="20" x2="6" y2="14"/>
+  </svg>
+  <text x="38" y="202" font-size="13" font-weight="500" fill="#64748b">Statistics</text>
+
+  <line x1="12" y1="212" x2="208" y2="212" stroke="#f0eef2" stroke-width="1"/>
+  <text x="16" y="228" font-size="9.5" font-weight="700" fill="#94a3b8" letter-spacing="0.7">CLIENTS &amp; PROJECTS</text>
+
+  <!-- Clients -->
+  <svg x="16" y="234" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+    <circle cx="9" cy="7" r="4"/>
+    <path d="M23 21v-2a4 4 0 00-3-3.87"/>
+    <path d="M16 3.13a4 4 0 010 7.75"/>
+  </svg>
+  <text x="38" y="246" font-size="13" font-weight="500" fill="#64748b">Clients</text>
+
+  <!-- Projects -->
+  <svg x="16" y="256" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="2" y="7" width="20" height="14" rx="2"/>
+    <path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/>
+  </svg>
+  <text x="38" y="268" font-size="13" font-weight="500" fill="#64748b">Projects</text>
+
+  <!-- Maintenances -->
+  <svg x="16" y="278" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>
+  </svg>
+  <text x="38" y="290" font-size="13" font-weight="500" fill="#64748b">Maintenances</text>
+
+  <!-- Sales -->
+  <svg x="16" y="300" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <circle cx="12" cy="12" r="6"/>
+    <circle cx="12" cy="12" r="2"/>
+  </svg>
+  <text x="38" y="312" font-size="13" font-weight="500" fill="#64748b">Sales</text>
+
+  <line x1="12" y1="322" x2="208" y2="322" stroke="#f0eef2" stroke-width="1"/>
+  <text x="16" y="338" font-size="9.5" font-weight="700" fill="#94a3b8" letter-spacing="0.7">DOMAINS &amp; HOSTING</text>
+
+  <!-- Hosting -->
+  <svg x="16" y="344" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="2" y="2" width="20" height="8" rx="2"/>
+    <rect x="2" y="14" width="20" height="8" rx="2"/>
+  </svg>
+  <text x="38" y="356" font-size="13" font-weight="500" fill="#64748b">Hosting</text>
+
+  <!-- Domains -->
+  <svg x="16" y="366" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="2" y1="12" x2="22" y2="12"/>
+    <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
+  </svg>
+  <text x="38" y="378" font-size="13" font-weight="500" fill="#64748b">Domains</text>
+
+  <line x1="12" y1="388" x2="208" y2="388" stroke="#f0eef2" stroke-width="1"/>
+  <text x="16" y="404" font-size="9.5" font-weight="700" fill="#94a3b8" letter-spacing="0.7">FINANCE</text>
+
+  <!-- Invoice Plan -->
+  <svg x="16" y="410" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="4" width="18" height="18" rx="2"/>
+    <line x1="16" y1="2" x2="16" y2="6"/>
+    <line x1="8" y1="2" x2="8" y2="6"/>
+    <line x1="3" y1="10" x2="21" y2="10"/>
+  </svg>
+  <text x="38" y="422" font-size="13" font-weight="500" fill="#64748b">Invoice Plan</text>
+
+  <!-- Forecast -->
+  <svg x="16" y="432" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+    <polyline points="16 7 22 7 22 13"/>
+  </svg>
+  <text x="38" y="444" font-size="13" font-weight="500" fill="#64748b">Forecast</text>
+
+  <line x1="12" y1="454" x2="208" y2="454" stroke="#f0eef2" stroke-width="1"/>
+
+  <!-- Tools -->
+  <svg x="16" y="460" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>
+  </svg>
+  <text x="38" y="472" font-size="13" font-weight="500" fill="#64748b">Tools</text>
+
+  <!-- Automations -->
+  <svg x="16" y="482" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+  </svg>
+  <text x="38" y="494" font-size="13" font-weight="500" fill="#64748b">Automations</text>
+
+  <line x1="12" y1="504" x2="208" y2="504" stroke="#f0eef2" stroke-width="1"/>
+
+  <!-- Settings -->
+  <svg x="16" y="510" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="3"/>
+    <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+  </svg>
+  <text x="38" y="522" font-size="13" font-weight="500" fill="#64748b">Settings</text>
+
+  <!-- User footer -->
+  <rect x="0" y="840" width="220" height="60" fill="#ffffff"/>
+  <line x1="0" y1="840" x2="220" y2="840" stroke="#f0eef2" stroke-width="1"/>
+  <!-- Avatar -->
+  <circle cx="34" cy="862" r="16" fill="#0f172a"/>
+  <text x="34" y="867" font-size="12" font-weight="700" fill="white" text-anchor="middle">N</text>
+  <text x="58" y="857" font-size="13" font-weight="600" fill="#0f172a">Nino Erjavec</text>
+  <text x="58" y="871" font-size="11" fill="#64748b">Admin</text>
+
+  <!-- + New Project button -->
+  <rect x="10" y="878" width="200" height="14" rx="4" fill="#0f172a"/>
+  <text x="110" y="889" font-size="10" font-weight="700" fill="white" text-anchor="middle">+ New Project</text>
+
+
+  <!-- ── MAIN CONTENT ────────────────────────────────────────────────────── -->
+
+  <!-- Greeting -->
+  <text x="248" y="56" font-size="30" font-weight="800" fill="#0f172a">Good afternoon, Nino</text>
+  <text x="248" y="78" font-size="13" fill="#64748b">Here's what's happening with your projects today.</text>
+
+  <!-- ── KPI CARDS (4 cards, gap=12) ── -->
+  <!-- Card width: (960-36)/4 = 231 each, start x=248 -->
+
+  <!-- Card 1: Monthly Revenue -->
+  <rect x="248" y="100" width="231" height="92" rx="10" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+  <text x="270" y="120" font-size="9.5" font-weight="700" fill="#64748b" letter-spacing="0.8">MONTHLY REVENUE</text>
+  <text x="270" y="152" font-size="28" font-weight="800" fill="#0f172a">24,500 €</text>
+  <svg x="268" y="162" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+    <polyline points="17 6 23 6 23 12"/>
+  </svg>
+  <text x="285" y="173" font-size="11" fill="#16a34a">+12% vs Mar 2026</text>
+
+  <!-- Card 2: Clients -->
+  <rect x="491" y="100" width="231" height="92" rx="10" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+  <text x="513" y="120" font-size="9.5" font-weight="700" fill="#64748b" letter-spacing="0.8">CLIENTS</text>
+  <text x="513" y="152" font-size="28" font-weight="800" fill="#0f172a">14</text>
+  <svg x="511" y="162" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+    <circle cx="9" cy="7" r="4"/>
+    <path d="M23 21v-2a4 4 0 00-3-3.87"/>
+    <path d="M16 3.13a4 4 0 010 7.75"/>
+  </svg>
+  <text x="528" y="173" font-size="11" fill="#64748b">Total active</text>
+
+  <!-- Card 3: Active Projects -->
+  <rect x="734" y="100" width="231" height="92" rx="10" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+  <text x="756" y="120" font-size="9.5" font-weight="700" fill="#64748b" letter-spacing="0.8">ACTIVE PROJECTS</text>
+  <text x="756" y="152" font-size="28" font-weight="800" fill="#0f172a">9</text>
+  <rect x="756" y="158" width="190" height="4" rx="2" fill="#ede8ef"/>
+  <rect x="756" y="158" width="152" height="4" rx="2" fill="#0f172a"/>
+  <svg x="754" y="166" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0f172a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <polyline points="12 6 12 12 16 14"/>
+  </svg>
+  <text x="771" y="177" font-size="11" fill="#0f172a">12 total</text>
+
+  <!-- Card 4: Maintenances -->
+  <rect x="977" y="100" width="231" height="92" rx="10" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+  <text x="999" y="120" font-size="9.5" font-weight="700" fill="#64748b" letter-spacing="0.8">MAINTENANCES</text>
+  <text x="999" y="152" font-size="28" font-weight="800" fill="#0f172a">7</text>
+  <svg x="997" y="162" width="13" height="13" viewBox="0 0 24 24" fill="#dc2626" stroke="none">
+    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+    <line x1="12" y1="9" x2="12" y2="13" stroke="white" stroke-width="2" stroke-linecap="round"/>
+    <line x1="12" y1="17" x2="12" y2="17" stroke="white" stroke-width="2" stroke-linecap="round"/>
+  </svg>
+  <text x="1014" y="173" font-size="11" fill="#dc2626">2 expiring soon</text>
+
+  <!-- ── TWO COLUMN layout: left (960px) + right (360px), gap=20 ── -->
+
+  <!-- ── REVENUE PROGRESS CARD ── -->
+  <rect x="248" y="208" width="960" height="130" rx="10" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+  <text x="276" y="234" font-size="9.5" font-weight="700" fill="#64748b" letter-spacing="0.9">REVENUE PROGRESS</text>
+  <text x="276" y="256" font-size="18" font-weight="800" fill="#0f172a">April 2026 Target: 45,000 €</text>
+  <!-- Percentage -->
+  <text x="1168" y="260" font-size="36" font-weight="800" fill="#0f172a" text-anchor="end">54%</text>
+  <text x="1168" y="275" font-size="8.5" font-weight="700" fill="#64748b" letter-spacing="0.8" text-anchor="end">ACHIEVED</text>
+
+  <!-- Progress bar -->
+  <rect x="276" y="272" width="870" height="13" rx="3" fill="#ede8ef"/>
+  <rect x="276" y="272" width="470" height="13" rx="3" fill="#0f172a"/>
+  <rect x="746" y="272" width="243" height="13" fill="#64748b" opacity="0.45"/>
+
+  <!-- Legend -->
+  <rect x="276" y="298" width="11" height="11" rx="2" fill="#0f172a"/>
+  <text x="292" y="308" font-size="9" font-weight="700" fill="#64748b" letter-spacing="0.6">ISSUED</text>
+  <text x="292" y="321" font-size="13" font-weight="800" fill="#0f172a">24,500 €</text>
+
+  <rect x="376" y="298" width="11" height="11" rx="2" fill="#64748b" opacity="0.5"/>
+  <text x="392" y="308" font-size="9" font-weight="700" fill="#64748b" letter-spacing="0.6">PENDING</text>
+  <text x="392" y="321" font-size="13" font-weight="800" fill="#0f172a">12,800 €</text>
+
+  <text x="1110" y="308" font-size="9" font-weight="700" fill="#64748b" letter-spacing="0.6" text-anchor="end">REMAINING GAP</text>
+  <text x="1110" y="321" font-size="13" font-weight="800" fill="#6b7280" text-anchor="end">7,700 €</text>
+
+
+  <!-- ── INVOICES TO ISSUE CARD ── -->
+  <rect x="248" y="354" width="960" height="430" rx="10" fill="white" stroke="#e8e3ea" stroke-width="1"/>
+
+  <!-- Card header -->
+  <text x="276" y="382" font-size="15" font-weight="800" fill="#0f172a">Invoices to Issue</text>
+  <text x="1176" y="382" font-size="9.5" font-weight="700" fill="#64748b" letter-spacing="0.7" text-anchor="end">VIEW ALL →</text>
+  <line x1="248" y1="394" x2="1208" y2="394" stroke="#f0eef2" stroke-width="1"/>
+
+  <!-- Table header -->
+  <text x="276" y="418" font-size="10.5" font-weight="700" fill="#94a3b8" letter-spacing="0.5">CLIENT</text>
+  <text x="490" y="418" font-size="10.5" font-weight="700" fill="#94a3b8" letter-spacing="0.5">PROJECT</text>
+  <text x="820" y="418" font-size="10.5" font-weight="700" fill="#94a3b8" letter-spacing="0.5" text-anchor="end">VALUE</text>
+  <text x="980" y="418" font-size="10.5" font-weight="700" fill="#94a3b8" letter-spacing="0.5" text-anchor="end">LIKELIHOOD</text>
+  <text x="1060" y="418" font-size="10.5" font-weight="700" fill="#94a3b8" letter-spacing="0.5">STATUS</text>
+  <line x1="248" y1="426" x2="1208" y2="426" stroke="#f4f2f6" stroke-width="1"/>
+
+  <!-- Row 1 -->
+  <text x="276" y="452" font-size="13" font-weight="600" fill="#0f172a">Acme Studio</text>
+  <text x="490" y="452" font-size="13" fill="#374151">Website Redesign</text>
+  <text x="820" y="452" font-size="13" font-weight="700" fill="#0f172a" text-anchor="end">8,400 €</text>
+  <!-- Badge 100% green -->
+  <rect x="910" y="438" width="58" height="20" rx="4" fill="#dcfce7" stroke="#86efac" stroke-width="1"/>
+  <text x="939" y="452" font-size="10.5" font-weight="700" fill="#15803d" text-anchor="middle">100%</text>
+  <!-- Badge Planned amber -->
+  <rect x="1060" y="438" width="54" height="20" rx="4" fill="#fef3c7" stroke="#fde68a" stroke-width="1"/>
+  <text x="1087" y="452" font-size="10.5" font-weight="700" fill="#92400e" text-anchor="middle">Planned</text>
+  <line x1="248" y1="464" x2="1208" y2="464" stroke="#f4f2f6" stroke-width="1"/>
+
+  <!-- Row 2 -->
+  <text x="276" y="490" font-size="13" font-weight="600" fill="#0f172a">Northwind Co.</text>
+  <text x="490" y="490" font-size="13" fill="#374151">Q2 Retainer</text>
+  <text x="820" y="490" font-size="13" font-weight="700" fill="#0f172a" text-anchor="end">3,200 €</text>
+  <!-- Badge 100% green -->
+  <rect x="910" y="476" width="58" height="20" rx="4" fill="#dcfce7" stroke="#86efac" stroke-width="1"/>
+  <text x="939" y="490" font-size="10.5" font-weight="700" fill="#15803d" text-anchor="middle">100%</text>
+  <!-- Badge Retainer navy -->
+  <rect x="1060" y="476" width="54" height="20" rx="4" fill="#e0f2fe" stroke="#bae6fd" stroke-width="1"/>
+  <text x="1087" y="490" font-size="10.5" font-weight="700" fill="#0369a1" text-anchor="middle">Retainer</text>
+  <line x1="248" y1="502" x2="1208" y2="502" stroke="#f4f2f6" stroke-width="1"/>
+
+  <!-- Row 3 -->
+  <text x="276" y="528" font-size="13" font-weight="600" fill="#0f172a">Globex</text>
+  <text x="490" y="528" font-size="13" fill="#374151">Platform Launch</text>
+  <text x="820" y="528" font-size="13" font-weight="700" fill="#0f172a" text-anchor="end">12,000 €</text>
+  <!-- Badge 75% navy -->
+  <rect x="910" y="514" width="58" height="20" rx="4" fill="#dbeafe" stroke="#bfdbfe" stroke-width="1"/>
+  <text x="939" y="528" font-size="10.5" font-weight="700" fill="#1d4ed8" text-anchor="middle">75%</text>
+  <!-- Badge Planned amber -->
+  <rect x="1060" y="514" width="54" height="20" rx="4" fill="#fef3c7" stroke="#fde68a" stroke-width="1"/>
+  <text x="1087" y="528" font-size="10.5" font-weight="700" fill="#92400e" text-anchor="middle">Planned</text>
+  <line x1="248" y1="540" x2="1208" y2="540" stroke="#f4f2f6" stroke-width="1"/>
+
+  <!-- Row 4 -->
+  <text x="276" y="566" font-size="13" font-weight="600" fill="#0f172a">Umbrella</text>
+  <text x="490" y="566" font-size="13" fill="#374151">Brand Refresh</text>
+  <text x="820" y="566" font-size="13" font-weight="700" fill="#0f172a" text-anchor="end">5,500 €</text>
+  <!-- Badge 50% amber -->
+  <rect x="910" y="552" width="58" height="20" rx="4" fill="#fef3c7" stroke="#fde68a" stroke-width="1"/>
+  <text x="939" y="566" font-size="10.5" font-weight="700" fill="#92400e" text-anchor="middle">50%</text>
+  <!-- Badge Planned amber -->
+  <rect x="1060" y="552" width="54" height="20" rx="4" fill="#fef3c7" stroke="#fde68a" stroke-width="1"/>
+  <text x="1087" y="566" font-size="10.5" font-weight="700" fill="#92400e" text-anchor="middle">Planned</text>
+  <line x1="248" y1="578" x2="1208" y2="578" stroke="#f4f2f6" stroke-width="1"/>
+
+  <!-- Row 5 -->
+  <text x="276" y="604" font-size="13" font-weight="600" fill="#0f172a">KDD</text>
+  <text x="490" y="604" font-size="13" fill="#374151">Tehničino vzdrževanje</text>
+  <text x="820" y="604" font-size="13" font-weight="700" fill="#0f172a" text-anchor="end">180 €</text>
+  <rect x="910" y="590" width="58" height="20" rx="4" fill="#dcfce7" stroke="#86efac" stroke-width="1"/>
+  <text x="939" y="604" font-size="10.5" font-weight="700" fill="#15803d" text-anchor="middle">100%</text>
+  <rect x="1060" y="590" width="54" height="20" rx="4" fill="#e0f2fe" stroke="#bae6fd" stroke-width="1"/>
+  <text x="1087" y="604" font-size="10.5" font-weight="700" fill="#0369a1" text-anchor="middle">Retainer</text>
+  <line x1="248" y1="616" x2="1208" y2="616" stroke="#f4f2f6" stroke-width="1"/>
+
+  <!-- Row 6 -->
+  <text x="276" y="642" font-size="13" font-weight="600" fill="#0f172a">Pristop</text>
+  <text x="490" y="642" font-size="13" fill="#374151">SEO Audit</text>
+  <text x="820" y="642" font-size="13" font-weight="700" fill="#0f172a" text-anchor="end">2,800 €</text>
+  <rect x="910" y="628" width="58" height="20" rx="4" fill="#dbeafe" stroke="#bfdbfe" stroke-width="1"/>
+  <text x="939" y="642" font-size="10.5" font-weight="700" fill="#1d4ed8" text-anchor="middle">75%</text>
+  <rect x="1060" y="628" width="54" height="20" rx="4" fill="#fef3c7" stroke="#fde68a" stroke-width="1"/>
+  <text x="1087" y="642" font-size="10.5" font-weight="700" fill="#92400e" text-anchor="middle">Planned</text>
+  <line x1="248" y1="654" x2="1208" y2="654" stroke="#f4f2f6" stroke-width="1"/>
+
+  <!-- Row 7 -->
+  <text x="276" y="680" font-size="13" font-weight="600" fill="#0f172a">Renderspace</text>
+  <text x="490" y="680" font-size="13" fill="#374151">Internal — Pixel AI</text>
+  <text x="820" y="680" font-size="13" font-weight="700" fill="#0f172a" text-anchor="end">—</text>
+  <rect x="910" y="666" width="58" height="20" rx="4" fill="#dcfce7" stroke="#86efac" stroke-width="1"/>
+  <text x="939" y="680" font-size="10.5" font-weight="700" fill="#15803d" text-anchor="middle">100%</text>
+  <rect x="1060" y="666" width="54" height="20" rx="4" fill="#fef3c7" stroke="#fde68a" stroke-width="1"/>
+  <text x="1087" y="680" font-size="10.5" font-weight="700" fill="#92400e" text-anchor="middle">Planned</text>
+  <line x1="248" y1="692" x2="1208" y2="692" stroke="#f4f2f6" stroke-width="1"/>
+
+  <!-- Row 8 -->
+  <text x="276" y="718" font-size="13" font-weight="600" fill="#0f172a">Meblo</text>
+  <text x="490" y="718" font-size="13" fill="#374151">E-commerce redesign</text>
+  <text x="820" y="718" font-size="13" font-weight="700" fill="#0f172a" text-anchor="end">6,200 €</text>
+  <rect x="910" y="704" width="58" height="20" rx="4" fill="#dbeafe" stroke="#bfdbfe" stroke-width="1"/>
+  <text x="939" y="718" font-size="10.5" font-weight="700" fill="#1d4ed8" text-anchor="middle">75%</text>
+  <rect x="1060" y="704" width="54" height="20" rx="4" fill="#fef3c7" stroke="#fde68a" stroke-width="1"/>
+  <text x="1087" y="718" font-size="10.5" font-weight="700" fill="#92400e" text-anchor="middle">Planned</text>
+
+
+  <!-- ── RIGHT COLUMN ── -->
+
+  <!-- Pixel Assistant dark card -->
+  <rect x="1228" y="100" width="192" height="196" rx="10" fill="#0f172a"/>
+  <!-- Sparkle icon -->
+  <svg x="1240" y="112" width="20" height="20" viewBox="0 0 24 24" fill="#89ceff" stroke="none">
+    <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5z"/>
+    <path d="M19 3l.75 2.25L22 6l-2.25.75L19 9l-.75-2.25L16 6l2.25-.75z"/>
+  </svg>
+  <text x="1264" y="127" font-size="13" font-weight="700" fill="white">Pixel Assistant</text>
+  <text x="1240" y="152" font-size="11.5" fill="white" opacity="0.6">8 invoices ready to</text>
+  <text x="1240" y="167" font-size="11.5" fill="white" opacity="0.6">issue · 2 stalled deals</text>
+  <text x="1240" y="182" font-size="11.5" fill="white" opacity="0.6">need follow-up.</text>
+
+  <!-- Open Pixel AI button -->
+  <rect x="1240" y="198" width="168" height="34" rx="6" fill="white" fill-opacity="0.08"/>
+  <svg x="1252" y="207" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+    <circle cx="12" cy="12" r="3"/>
+  </svg>
+  <text x="1270" y="219" font-size="10" font-weight="700" fill="white" letter-spacing="0.6">OPEN PIXEL AI</text>
+
+  <!-- Review Invoices button -->
+  <rect x="1240" y="242" width="168" height="34" rx="6" fill="white"/>
+  <svg x="1252" y="251" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0f172a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+    <polyline points="14 2 14 8 20 8"/>
+  </svg>
+  <text x="1270" y="263" font-size="10" font-weight="700" fill="#0f172a" letter-spacing="0.6">REVIEW INVOICES</text>
+
+  <!-- Expiring Soon card -->
+  <rect x="1228" y="312" width="192" height="224" rx="10" fill="#fff5f5" stroke="#fecaca" stroke-width="1.5"/>
+  <!-- Warning icon -->
+  <svg x="1240" y="322" width="17" height="17" viewBox="0 0 24 24" fill="#dc2626" stroke="none">
+    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+    <line x1="12" y1="9" x2="12" y2="13" stroke="white" stroke-width="2" stroke-linecap="round"/>
+    <line x1="12" y1="17" x2="12.01" y2="17" stroke="white" stroke-width="2" stroke-linecap="round"/>
+  </svg>
+  <text x="1261" y="336" font-size="10.5" font-weight="800" fill="#dc2626" letter-spacing="0.6">EXPIRING SOON</text>
+
+  <!-- Item 1: pristop.eu -->
+  <text x="1240" y="362" font-size="12.5" font-weight="700" fill="#0f172a">pristop.eu</text>
+  <svg x="1240" y="368" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <polyline points="12 6 12 12 16 14"/>
+  </svg>
+  <text x="1254" y="377" font-size="10.5" font-weight="600" fill="#dc2626">Expires in 6 days</text>
+  <!-- Arrow button -->
+  <rect x="1376" y="352" width="28" height="28" rx="5" fill="white" stroke="#fecaca" stroke-width="1.5"/>
+  <svg x="1382" y="358" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+    <polyline points="15 3 21 3 21 9"/>
+    <line x1="10" y1="14" x2="21" y2="3"/>
+  </svg>
+  <line x1="1228" y1="392" x2="1420" y2="392" stroke="#fecaca" stroke-width="1"/>
+
+  <!-- Item 2: KDD — tehničino vzdrž. -->
+  <text x="1240" y="416" font-size="12.5" font-weight="700" fill="#0f172a">KDD — tehničino vzdrž.</text>
+  <svg x="1240" y="422" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#92400e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <polyline points="12 6 12 12 16 14"/>
+  </svg>
+  <text x="1254" y="431" font-size="10.5" font-weight="600" fill="#92400e">Expires in 7 days</text>
+  <rect x="1376" y="406" width="28" height="28" rx="5" fill="white" stroke="#fecaca" stroke-width="1.5"/>
+  <svg x="1382" y="412" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+    <polyline points="15 3 21 3 21 9"/>
+    <line x1="10" y1="14" x2="21" y2="3"/>
+  </svg>
+  <line x1="1228" y1="446" x2="1420" y2="446" stroke="#fecaca" stroke-width="1"/>
+
+  <!-- Item 3: renderspace.si -->
+  <text x="1240" y="470" font-size="12.5" font-weight="700" fill="#0f172a">renderspace.si</text>
+  <svg x="1240" y="476" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#92400e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <polyline points="12 6 12 12 16 14"/>
+  </svg>
+  <text x="1254" y="485" font-size="10.5" font-weight="600" fill="#92400e">Expires in 12 days</text>
+  <rect x="1376" y="460" width="28" height="28" rx="5" fill="white" stroke="#fecaca" stroke-width="1.5"/>
+  <svg x="1382" y="466" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+    <polyline points="15 3 21 3 21 9"/>
+    <line x1="10" y1="14" x2="21" y2="3"/>
+  </svg>
+  <!-- Pagination -->
+  <text x="1240" y="518" font-size="10.5" font-weight="600" fill="#dc2626">1 / 2</text>
+  <rect x="1370" y="505" width="22" height="22" rx="4" fill="white" stroke="#fecaca" stroke-width="1.5"/>
+  <text x="1381" y="520" font-size="12" fill="#dc2626" text-anchor="middle">›</text>
+
+</svg>

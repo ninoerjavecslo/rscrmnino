@@ -32,10 +32,25 @@
       "Bash(find /Users/nino/Documents/GitHub/rscrmnino/src/stores -type f -name *.ts -o -name *.js)",
       "Bash(find /Users/nino/Documents/GitHub/rscrmnino/src/lib -type f -name *.ts -o -name *.js)",
       "Bash(find /Users/nino/Documents/GitHub/rscrmnino/src/views -type f -name *.ts -o -name *.js)",
-      "Bash(find /Users/nino/Documents/GitHub/rscrmnino/supabase -name *.sql)"
+      "Bash(find /Users/nino/Documents/GitHub/rscrmnino/supabase -name *.sql)",
+      "Bash(node -e \"const pm = require\\(''/Users/nino/Documents/GitHub/rscrmnino/node_modules/pdfmake/build/pdfmake''\\); console.log\\(Object.keys\\(pm\\).slice\\(0,10\\)\\); console.log\\(typeof pm.createPdf\\); console.log\\(typeof pm.default\\);\")",
+      "Bash(open /Users/nino/Downloads/agency-report.html)"
     ],
     "additionalDirectories": [
       "/private/tmp"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/check-gstack.sh\""
+          }
+        ]
+      }
     ]
   }
 }
